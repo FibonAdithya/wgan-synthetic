@@ -1,0 +1,34 @@
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+
+# Local caches
+.cache/
+.pytest_cache/
+.mypy_cache/
+
+# Build/distribution artifacts
+build/
+dist/
+*.egg-info/
+
+# Notebook checkpoints
+.ipynb_checkpoints/
+
+# OS/editor artifacts
+.DS_Store
+.idea/
+.vscode/
+
+# Project data artifacts (keep docs/scripts, ignore large raw data)
+data/*.fvecs
+data/*.npy
+
+# Generated outputs from experiments
+runs/

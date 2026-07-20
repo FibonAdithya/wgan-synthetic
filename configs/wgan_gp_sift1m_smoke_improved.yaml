@@ -1,0 +1,48 @@
+# Improved smoke config: exercises the training-loop upgrades
+#   #1 dataloader parallelism (num_workers) + less-frequent eval
+#   #2 distance regulariser enabled (pairwise-distance mean matching)
+#   #3 generator EMA of parameters
+#   #6 in-loop mode-collapse monitoring (collapse_stats logged at eval)
+# Otherwise identical to wgan_gp_sift1m_smoke.yaml for a fair baseline compare.
+seed: 42
+device: auto
+output_dir: runs/wgan_sift1m_smoke_improved
+
+data:
+  real_path: null
+  format: auto
+  descriptor_dim: 128
+  holdout_fraction: 0.05
+  synthetic_if_missing: true
+  synthetic_num_vectors: 50000
+  preprocess:
+    center: false
+    whiten: false
+    l2_normalize: true
+
+model:
+  latent_dim: 64
+  generator_hidden_dims: [256, 512, 1024]
+  critic_hidden_dims: [1024, 512, 256]
+  negative_slope: 0.2
+
+training:
+  batch_size: 256
+  num_gen_steps: 200
+  n_critic: 5
+  lr_g: 1.0e-4
+  lr_d: 1.0e-4
+  betas: [0.0, 0.9]
+  lambda_gp: 10.0
+  amp: false
+  # --- #1: dataloader parallelism (0 = main process, as before) ---
+  num_workers: 4
+  # --- #3: generator EMA (0 disables; 0.999 is a common stable value) ---
+  ema_decay: 0.999
+  # --- #2: pairwise-distance mean matching regulariser (was 0.0 = disabled) ---
+  distance_reg_alpha: 0.1
+  distance_reg_max_points: 256
+  log_every: 20
+  # eval less often so sampling cost doesn't dominate short CPU runs
+  eval_every: 200
+  save_every: 200

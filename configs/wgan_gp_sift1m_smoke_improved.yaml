@@ -35,8 +35,11 @@ training:
   betas: [0.0, 0.9]
   lambda_gp: 10.0
   amp: false
-  # --- #1: dataloader parallelism (0 = main process, as before) ---
-  num_workers: 4
+  # --- #1: dataloader parallelism ---
+  # 0 is correct for this dataset: NumpyTensorDataset is fully in-memory, so
+  # worker processes only add IPC overhead. Raise this only if the dataset
+  # ever becomes disk-backed (persistent_workers is wired up for that case).
+  num_workers: 0
   # --- #3: generator EMA (0 disables; 0.999 is a common stable value) ---
   ema_decay: 0.999
   # --- #2: pairwise-distance mean matching regulariser (was 0.0 = disabled) ---

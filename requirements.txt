@@ -3,4 +3,3 @@ torch
 pyyaml
 tqdm
 scikit-learn
-scipy

@@ -107,9 +107,7 @@ def collapse_stats(fake: np.ndarray, max_points: int = 512) -> Dict[str, float]:
         fake = fake[idx]
     std = float(fake.std(axis=0).mean())
     if fake.shape[0] >= 2:
-        import scipy.spatial.distance as _scidist  # local import; optional dep
-
-        d = _scidist.pdist(fake, metric="euclidean")
+        d = torch.pdist(torch.from_numpy(np.ascontiguousarray(fake)), p=2)
         min_pd = float(d.min())
         mean_pd = float(d.mean())
     else:
@@ -227,12 +225,16 @@ def train(config: Dict) -> Tuple[Path, Dict]:
     optim_d = torch.optim.Adam(critic.parameters(), lr=lr_d, betas=betas)
 
     dataset = NumpyTensorDataset(x_train)
+    num_workers = int(train_cfg.get("num_workers", 0))
     loader = DataLoader(
         dataset,
         batch_size=int(train_cfg["batch_size"]),
         shuffle=True,
         drop_last=True,
-        num_workers=int(train_cfg.get("num_workers", 0)),
+        num_workers=num_workers,
+        # Keep workers alive across epochs: the loop re-creates the iterator on
+        # StopIteration, which would otherwise respawn the pool every epoch.
+        persistent_workers=num_workers > 0,
         pin_memory=(device.type == "cuda"),
     )
     data_iter = iter(loader)
@@ -355,6 +357,7 @@ def train(config: Dict) -> Tuple[Path, Dict]:
             print(json.dumps(msg))
 
         if step % eval_every == 0 or step == num_gen_steps:
+            live_backup: Dict[str, Tensor] = {}
             if use_ema:
                 # Evaluate / sample from EMA weights for a stabilised view.
                 # Save live weights, swap in EMA, then restore so training
@@ -365,29 +368,31 @@ def train(config: Dict) -> Tuple[Path, Dict]:
                     if name in ema_params
                 }
                 load_ema_into_model(ema_params, generator)
-            fake_holdout = sample_generator(
-                generator=generator,
-                num_samples=x_holdout.shape[0],
-                latent_dim=latent_dim,
-                batch_size=int(train_cfg["batch_size"]),
-                device=device,
-            )
-            stats = tensor_stats(x_holdout, fake_holdout)
-            stats.update(collapse_stats(fake_holdout))
-            stats["step"] = step
-            run_meta.setdefault("eval", []).append(stats)
-            print(json.dumps({"eval": stats}))
-            if stats["cov_fro"] < best_cov:
-                best_cov = stats["cov_fro"]
-                save_checkpoint(generator, critic, optim_g, optim_d, out_dir, step, best=True)
-            if use_ema:
+            try:
+                fake_holdout = sample_generator(
+                    generator=generator,
+                    num_samples=x_holdout.shape[0],
+                    latent_dim=latent_dim,
+                    batch_size=int(train_cfg["batch_size"]),
+                    device=device,
+                )
+                stats = tensor_stats(x_holdout, fake_holdout)
+                stats.update(collapse_stats(fake_holdout))
+                stats["step"] = step
+                run_meta.setdefault("eval", []).append(stats)
+                print(json.dumps({"eval": stats}))
+                if stats["cov_fro"] < best_cov:
+                    best_cov = stats["cov_fro"]
+                    save_checkpoint(generator, critic, optim_g, optim_d, out_dir, step, best=True)
+            finally:
                 # Restore live weights so the next training step is on the
                 # optimised parameters (EMA is only for eval/sampling/checkpoint).
+                # In a finally block so a failed eval can never strand the
+                # generator on EMA weights.
                 with torch.no_grad():
                     for name, p in generator.named_parameters():
                         if name in live_backup:
                             p.data.copy_(live_backup[name])
-
 
         if step % save_every == 0:
             save_checkpoint(generator, critic, optim_g, optim_d, out_dir, step, best=False)

@@ -200,6 +200,35 @@ Memory-safe note:
   - `src/eval/plot_embedding_clusters.py`
   - t-SNE (or UMAP if installed) for real and synthetic subsets.
 
+- Distributional EDA report:
+  - `src/eval/eda_report.py`
+  - One self-contained interactive HTML file (plotly bundled inline, opens
+    offline) plus a `summary.json` and best-effort PNGs.
+  - Panels: pooled value distribution, per-dimension marginals with a dropdown
+    over all 128 dims, per-dim mean/std/zero-rate profiles, pairwise distances,
+    within-set kNN distances, PCA spectrum, correlation heatmaps, and a
+    Wasserstein-1 ranking of the worst-matching dimensions.
+  - `--synthetic-path` is optional; without it the report is pure dataset EDA.
+    With it, every panel overlays the two so mismatch is visible by eye.
+  - `--preprocess l2` (default) matches the training contract, since generator
+    output is unit-norm. Use `--preprocess none` to inspect raw integer SIFT.
+  - Purpose: reject a generator by eye when the critic cannot separate the
+    sets. A weak critic yields flattering Wasserstein estimates over samples
+    whose marginals are plainly wrong -- most visibly SIFT's heavy exact-zero
+    mass, which smooth generators do not reproduce.
+
+```bash
+.venv/bin/python -m src.eval.eda_report \
+  --real-path data/sift_base.npy \
+  --synthetic-path runs/bench_improved/synthetic_1m.npy \
+  --output-dir runs/bench_improved/eda
+```
+
+PNG export uses kaleido, which drives a headless Chrome. Without a Chrome
+install the HTML report is still written and the export is skipped with a
+message; run `plotly_get_chrome` once if the static images are wanted, or pass
+`--no-png` to skip it outright.
+
 ---
 
 ## Run artifact structure

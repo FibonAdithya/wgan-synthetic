@@ -229,6 +229,17 @@ install the HTML report is still written and the export is skipped with a
 message; run `plotly_get_chrome` once if the static images are wanted, or pass
 `--no-png` to skip it outright.
 
+`--plotlyjs` controls how plotly.js ships, which matters when pulling reports
+off a remote training box:
+
+- `inline` (default) -- self-contained, opens offline, ~4.5MB overhead.
+- `cdn` -- roughly 4x smaller, needs internet to view. Use over a slow link.
+- `directory` -- writes `plotly.min.js` once beside the report; several
+  reports in one output directory then share a single copy.
+
+When running on a remote box, generating with `--plotlyjs cdn` and gzipping
+before transfer took the three-report set from 5.7MB to 1.5MB.
+
 ---
 
 ## Run artifact structure

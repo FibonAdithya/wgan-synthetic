@@ -87,6 +87,19 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Skip static PNG export (kaleido needs a Chrome install).",
     )
+    parser.add_argument(
+        "--plotlyjs",
+        type=str,
+        default="inline",
+        choices=["inline", "cdn", "directory"],
+        help=(
+            "How to ship plotly.js. 'inline' (default) bundles it so the report "
+            "opens offline, costing ~4.5MB on top of the figure data. 'cdn' drops "
+            "that but needs internet to view -- roughly 4x smaller, which matters "
+            "over a slow link. 'directory' writes plotly.min.js once beside the "
+            "report, so several reports in one directory share a single copy."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -473,13 +486,30 @@ thead th { background: #f7fafc; } tbody th { text-align: left; }
 """
 
 
+CDN_SRC = "https://cdn.plot.ly/plotly-3.7.0.min.js"
+
+
+def plotlyjs_head(mode: str, out_dir: Path) -> str:
+    """Return the <script> tag(s) that make Plotly available to the page."""
+    import plotly.offline as pyo
+
+    if mode == "cdn":
+        return f'<script charset="utf-8" src="{CDN_SRC}"></script>'
+    if mode == "directory":
+        asset = out_dir / "plotly.min.js"
+        if not asset.exists():
+            asset.write_text(pyo.get_plotlyjs(), encoding="utf-8")
+        return '<script charset="utf-8" src="plotly.min.js"></script>'
+    return f"<script>{pyo.get_plotlyjs()}</script>"
+
+
 def build_report(
     sections: List[Tuple[str, str, go.Figure]],
     meta_html: str,
-    plotlyjs: str,
+    head_script: str,
 ) -> str:
     body = []
-    for idx, (title, note, fig) in enumerate(sections):
+    for title, note, fig in sections:
         body.append(f"<h2>{title}</h2>")
         if note:
             body.append(f'<div class="note">{note}</div>')
@@ -488,7 +518,7 @@ def build_report(
         "<!doctype html><html><head><meta charset='utf-8'>"
         "<title>SIFT descriptor EDA</title>"
         f"<style>{REPORT_CSS}</style>"
-        f"<script>{plotlyjs}</script>"
+        f"{head_script}"
         "</head><body>"
         "<h1>SIFT descriptor EDA</h1>"
         f"{meta_html}"
@@ -657,10 +687,7 @@ def main() -> None:
         + stats_table_html(stats)
     )
 
-    import plotly.offline as pyo
-
-    plotlyjs = pyo.get_plotlyjs()
-    html = build_report(sections, meta_html, plotlyjs)
+    html = build_report(sections, meta_html, plotlyjs_head(args.plotlyjs, out_dir))
     report_path = out_dir / "eda_report.html"
     report_path.write_text(html, encoding="utf-8")
 

@@ -128,3 +128,39 @@ def test_relative_contrast_returns_one_value_per_row():
     x = rng.normal(size=(500, 8)).astype(np.float32)
     dist, _, _ = knn(x, k=10)
     assert relative_contrast(x, dist, seed=0).shape == (500,)
+
+
+from src.eval.ann_difficulty import hubness_skew, k_occurrence
+
+
+def test_k_occurrence_conserves_total_count():
+    # Every one of the n queries contributes exactly k_hub list entries, so
+    # the counts must total n * k_hub. This catches off-by-one slips in the
+    # index bookkeeping.
+    rng = np.random.default_rng(6)
+    x = rng.normal(size=(400, 8)).astype(np.float32)
+    _, idx, _ = knn(x, k=20)
+    counts = k_occurrence(idx, n=400, k_hub=10)
+    assert counts.sum() == 400 * 10
+    assert counts.shape == (400,)
+
+
+def test_hubness_skew_is_higher_when_a_hub_is_planted():
+    rng = np.random.default_rng(7)
+    shell = rng.normal(size=(1500, 6)).astype(np.float32)
+    shell /= np.linalg.norm(shell, axis=1, keepdims=True)
+    # A single point at the centre of a dense cluster is close to many points
+    # and lands in a disproportionate share of neighbour lists.
+    cluster_center = shell[:100].mean(axis=0)
+    cluster_center = (cluster_center / np.linalg.norm(cluster_center)).astype(np.float32)
+    planted = np.vstack([shell, cluster_center[np.newaxis, :]])
+
+    _, idx_plain, _ = knn(shell, k=20)
+    _, idx_planted, _ = knn(planted, k=20)
+    skew_plain = hubness_skew(k_occurrence(idx_plain, shell.shape[0], 10))
+    skew_planted = hubness_skew(k_occurrence(idx_planted, planted.shape[0], 10))
+    assert skew_planted > skew_plain
+
+
+def test_hubness_skew_is_zero_for_a_flat_count_distribution():
+    assert hubness_skew(np.array([4, 4, 4, 4])) == 0.0

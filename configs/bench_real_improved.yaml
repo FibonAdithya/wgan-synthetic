@@ -1,0 +1,45 @@
+# Improved benchmark on real SIFT1M -- A/B partner to bench_real_baseline.yaml.
+# Every field is identical to the baseline except the improvement knobs below,
+# so the delta is attributable to the branch's changes and nothing else.
+#   - ema_decay: generator EMA for eval/sampling/checkpointing
+#   - distance_reg_alpha: pairwise-distance mean matching
+#   - num_workers: left at 0 deliberately (in-memory dataset; workers only add
+#     IPC overhead -- see the note in wgan_gp_sift1m_smoke_improved.yaml)
+seed: 42
+device: auto
+output_dir: runs/bench_improved
+
+data:
+  real_path: data/sift_base.npy
+  format: npy
+  descriptor_dim: 128
+  holdout_fraction: 0.05
+  synthetic_if_missing: false
+  synthetic_num_vectors: 100000
+  preprocess:
+    center: false
+    whiten: false
+    l2_normalize: true
+
+model:
+  latent_dim: 128
+  generator_hidden_dims: [512, 1024, 1024]
+  critic_hidden_dims: [1024, 512, 256]
+  negative_slope: 0.2
+
+training:
+  batch_size: 512
+  num_gen_steps: 3000
+  n_critic: 3
+  lr_g: 1.0e-4
+  lr_d: 1.0e-4
+  betas: [0.0, 0.9]
+  lambda_gp: 5.0
+  num_workers: 0
+  ema_decay: 0.999
+  distance_reg_alpha: 0.1
+  distance_reg_max_points: 256
+  amp: false
+  log_every: 50
+  eval_every: 250
+  save_every: 250

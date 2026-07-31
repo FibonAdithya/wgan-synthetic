@@ -1,0 +1,43 @@
+# Baseline benchmark on real SIFT1M.
+# Identical to wgan_gp_sift1m_real.yaml except:
+#   - real_path/format point at the .npy produced by data/hdf5_to_npy.py
+#   - output_dir is bench-specific
+# The improvement knobs (num_workers, ema_decay, distance_reg_alpha) are left
+# unset on purpose so this measures the PRE-improvement loop -- the baseline
+# that configs/bench_real_improved.yaml is compared against.
+seed: 42
+device: auto
+output_dir: runs/bench_baseline
+
+data:
+  real_path: data/sift_base.npy
+  format: npy
+  descriptor_dim: 128
+  holdout_fraction: 0.05
+  synthetic_if_missing: false
+  synthetic_num_vectors: 100000
+  preprocess:
+    center: false
+    whiten: false
+    l2_normalize: true
+
+model:
+  latent_dim: 128
+  generator_hidden_dims: [512, 1024, 1024]
+  critic_hidden_dims: [1024, 512, 256]
+  negative_slope: 0.2
+
+training:
+  batch_size: 512
+  num_gen_steps: 3000
+  n_critic: 3
+  lr_g: 1.0e-4
+  lr_d: 1.0e-4
+  betas: [0.0, 0.9]
+  lambda_gp: 5.0
+  distance_reg_alpha: 0.0
+  distance_reg_max_points: 128
+  amp: false
+  log_every: 50
+  eval_every: 250
+  save_every: 250

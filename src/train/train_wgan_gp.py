@@ -279,6 +279,9 @@ def train(config: Dict) -> Tuple[Path, Dict]:
         d_loss_val = 0.0
         gp_val = 0.0
         wasserstein_val = 0.0
+        d_real_val = 0.0
+        d_fake_val = 0.0
+        critic_acc_val = 0.0
 
         for _ in range(n_critic):
             try:
@@ -306,10 +309,21 @@ def train(config: Dict) -> Tuple[Path, Dict]:
             d_loss_val += float(d_loss.item())
             gp_val += float(gp.item())
             wasserstein_val += float((d_real.mean() - d_fake.mean()).item())
+            d_real_val += float(d_real.mean().item())
+            d_fake_val += float(d_fake.mean().item())
+            # Ranking accuracy: fraction of (real, fake) pairs the critic orders
+            # correctly. The critic has no sigmoid, so it emits an unbounded
+            # score rather than a probability -- this is the 0.5-referenced
+            # readout: 1.0 = critic separates perfectly, 0.5 = the generator's
+            # samples are indistinguishable from real under the critic.
+            critic_acc_val += float((d_real > d_fake).float().mean().item())
 
         d_loss_val /= n_critic
         gp_val /= n_critic
         wasserstein_val /= n_critic
+        d_real_val /= n_critic
+        d_fake_val /= n_critic
+        critic_acc_val /= n_critic
 
         try:
             real_batch = next(data_iter)
@@ -350,6 +364,9 @@ def train(config: Dict) -> Tuple[Path, Dict]:
                 "d_loss": d_loss_val,
                 "gp": gp_val,
                 "wasserstein": wasserstein_val,
+                "d_real": d_real_val,
+                "d_fake": d_fake_val,
+                "critic_acc": critic_acc_val,
                 "adv_loss": float(adv_loss.item()),
                 "distance_reg": float(distance_reg.item()),
             }

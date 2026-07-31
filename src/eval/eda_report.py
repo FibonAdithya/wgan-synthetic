@@ -1,4 +1,4 @@
-"""Exploratory data analysis for SIFT1M descriptors, with optional synthetic overlay.
+"""Exploratory data analysis for SIFT1M descriptors, with optional synthetic overlays.
 
 Complements the metric-driven scripts in this package (evaluate_distribution,
 plot_distance_cdf, plot_embedding_clusters) by showing raw distributional shape
@@ -7,21 +7,27 @@ eye even when the critic cannot separate the two sets -- a weak critic produces
 good-looking Wasserstein estimates over samples whose marginals are obviously
 wrong.
 
+Any number of synthetic sets can be overlaid on the real data at once, so a
+baseline and one or more improved variants can be read against SIFT and against
+each other in a single figure.
+
 Emits one self-contained HTML report plus per-figure PNGs and a summary.json.
 
 Example:
     python -m src.eval.eda_report \
         --real-path data/sift_base.npy \
-        --synthetic-path runs/bench_improved/samples.npy \
-        --output-dir runs/bench_improved/eda
+        --synthetic-path baseline=runs/long_baseline/samples.npy \
+        --synthetic-path improved=runs/long_improved/samples.npy \
+        --output-dir runs/eda_compare
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import plotly.graph_objects as go
@@ -31,10 +37,31 @@ from sklearn.neighbors import NearestNeighbors
 
 from src.data.sift1m_dataset import load_descriptors
 
-REAL_COLOR = "#2b6cb0"
-SYNTH_COLOR = "#dd6b20"
 REAL_NAME = "real"
-SYNTH_NAME = "synthetic"
+REAL_COLOR = "#2b6cb0"
+# Colors for synthetic sets, in order. Deliberately distinct from REAL_COLOR so
+# the reference curve stays identifiable when several overlays are present.
+SYNTH_PALETTE = [
+    "#dd6b20",
+    "#38a169",
+    "#805ad5",
+    "#d53f8c",
+    "#00897b",
+    "#a0522d",
+]
+
+
+@dataclass
+class Series:
+    """One dataset to plot, already subsampled and preprocessed."""
+
+    name: str
+    x: np.ndarray
+    color: str
+
+    @property
+    def is_real(self) -> bool:
+        return self.name == REAL_NAME
 
 
 def parse_args() -> argparse.Namespace:
@@ -48,8 +75,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--synthetic-path",
         type=str,
+        action="append",
         default=None,
-        help="Optional. When given, every panel overlays synthetic on real.",
+        metavar="[LABEL=]PATH",
+        help=(
+            "Optional, repeatable. Each occurrence adds one synthetic set overlaid "
+            "on the real data. Prefix with 'LABEL=' to name it in the legend, "
+            "otherwise the file stem is used. Pass several times to compare a "
+            "baseline and improved variants against SIFT in one report."
+        ),
     )
     parser.add_argument(
         "--synthetic-format", type=str, default="auto", choices=["auto", "npy", "fvecs"]
@@ -103,6 +137,21 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def parse_synthetic_spec(spec: str) -> Tuple[str, Path]:
+    """Split a '[LABEL=]PATH' argument into its label and path.
+
+    Only the first '=' separates, so paths containing '=' still work when a
+    label is supplied. A bare path falls back to the file stem as its label.
+    """
+    if "=" in spec:
+        label, _, raw = spec.partition("=")
+        label = label.strip()
+        if label:
+            return label, Path(raw)
+    path = Path(spec)
+    return path.stem, path
+
+
 # --------------------------------------------------------------------------
 # data prep
 # --------------------------------------------------------------------------
@@ -123,9 +172,7 @@ def maybe_l2_normalize(x: np.ndarray, mode: str, eps: float = 1.0e-8) -> np.ndar
     return (x / np.clip(norm, eps, None)).astype(np.float32, copy=False)
 
 
-def pairwise_distance_sample(
-    x: np.ndarray, num_pairs: int, seed: int
-) -> np.ndarray:
+def pairwise_distance_sample(x: np.ndarray, num_pairs: int, seed: int) -> np.ndarray:
     """Euclidean distances over randomly drawn distinct pairs."""
     rng = np.random.default_rng(seed)
     n = x.shape[0]
@@ -140,7 +187,9 @@ def nn_distances(x: np.ndarray, k: int, seed: int, max_rows: int = 20000) -> np.
     """Distance to the k-th nearest *other* point within the same set.
 
     Collapsed generators put mass on a few modes, which shows up as a
-    within-set NN distance distribution shifted far below the real one.
+    within-set NN distance distribution shifted far below the real one. All
+    sets are cut to the same max_rows first: k-NN distance shrinks as sample
+    count grows, so unequal N would make the comparison meaningless.
     """
     sub = subsample(x, max_rows, seed)
     nn = NearestNeighbors(n_neighbors=min(k + 1, sub.shape[0]))
@@ -160,43 +209,28 @@ def wasserstein1(a: np.ndarray, b: np.ndarray, num_quantiles: int = 512) -> floa
 # --------------------------------------------------------------------------
 
 
-def shared_hist(
-    real: np.ndarray,
-    synth: Optional[np.ndarray],
-    bins: int,
-) -> Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]:
-    """Density-normalized histograms of real/synthetic over shared bin edges."""
-    if synth is None:
-        lo, hi = float(real.min()), float(real.max())
-    else:
-        lo = float(min(real.min(), synth.min()))
-        hi = float(max(real.max(), synth.max()))
+def shared_edges(arrays: Sequence[np.ndarray], bins: int) -> np.ndarray:
+    """Common bin edges spanning every array, so histograms are comparable."""
+    lo = float(min(float(a.min()) for a in arrays))
+    hi = float(max(float(a.max()) for a in arrays))
     if hi <= lo:
         hi = lo + 1.0e-6
-    edges = np.linspace(lo, hi, bins + 1)
-    centers = 0.5 * (edges[:-1] + edges[1:])
-    real_h, _ = np.histogram(real, bins=edges, density=True)
-    synth_h = None if synth is None else np.histogram(synth, bins=edges, density=True)[0]
-    return centers, real_h, synth_h
+    return np.linspace(lo, hi, bins + 1)
 
 
 def overlay_hist_fig(
-    real: np.ndarray,
-    synth: Optional[np.ndarray],
+    named_values: Sequence[Tuple[str, np.ndarray, str]],
     bins: int,
     title: str,
     xaxis_title: str,
     log_y: bool = False,
 ) -> go.Figure:
-    centers, real_h, synth_h = shared_hist(real, synth, bins)
+    edges = shared_edges([v for _, v, _ in named_values], bins)
+    centers = 0.5 * (edges[:-1] + edges[1:])
     fig = go.Figure()
-    fig.add_bar(
-        x=centers, y=real_h, name=REAL_NAME, marker_color=REAL_COLOR, opacity=0.65
-    )
-    if synth_h is not None:
-        fig.add_bar(
-            x=centers, y=synth_h, name=SYNTH_NAME, marker_color=SYNTH_COLOR, opacity=0.65
-        )
+    for name, values, color in named_values:
+        hist, _ = np.histogram(values, bins=edges, density=True)
+        fig.add_bar(x=centers, y=hist, name=name, marker_color=color, opacity=0.55)
     fig.update_layout(
         title=title,
         xaxis_title=xaxis_title,
@@ -204,63 +238,49 @@ def overlay_hist_fig(
         barmode="overlay",
         bargap=0.0,
         template="plotly_white",
-        height=420,
+        height=440,
     )
     if log_y:
         fig.update_yaxes(type="log")
     return fig
 
 
-def fig_value_distribution(
-    real: np.ndarray, synth: Optional[np.ndarray], bins: int
-) -> go.Figure:
+def fig_value_distribution(series: Sequence[Series], bins: int) -> go.Figure:
     """All coordinates pooled. SIFT's quantized, zero-heavy shape lives here."""
-    fig = overlay_hist_fig(
-        real.ravel(),
-        None if synth is None else synth.ravel(),
+    return overlay_hist_fig(
+        [(s.name, s.x.ravel(), s.color) for s in series],
         bins,
         title="Pooled coordinate values (log density)",
         xaxis_title="coordinate value",
         log_y=True,
     )
-    return fig
 
 
-def fig_per_dim_marginals(
-    real: np.ndarray, synth: Optional[np.ndarray], bins: int
-) -> go.Figure:
+def fig_per_dim_marginals(series: Sequence[Series], bins: int) -> go.Figure:
     """One overlaid histogram per dimension, selectable from a dropdown."""
-    dim = real.shape[1]
+    dim = series[0].x.shape[1]
+    per_dim = len(series)
     fig = go.Figure()
-    traces_per_dim = 1 if synth is None else 2
 
     for d in range(dim):
-        centers, real_h, synth_h = shared_hist(
-            real[:, d], None if synth is None else synth[:, d], bins
-        )
-        fig.add_bar(
-            x=centers,
-            y=real_h,
-            name=REAL_NAME,
-            marker_color=REAL_COLOR,
-            opacity=0.65,
-            visible=(d == 0),
-        )
-        if synth_h is not None:
+        edges = shared_edges([s.x[:, d] for s in series], bins)
+        centers = 0.5 * (edges[:-1] + edges[1:])
+        for s in series:
+            hist, _ = np.histogram(s.x[:, d], bins=edges, density=True)
             fig.add_bar(
                 x=centers,
-                y=synth_h,
-                name=SYNTH_NAME,
-                marker_color=SYNTH_COLOR,
-                opacity=0.65,
+                y=hist,
+                name=s.name,
+                marker_color=s.color,
+                opacity=0.55,
                 visible=(d == 0),
             )
 
     buttons = []
     for d in range(dim):
-        visible = [False] * (dim * traces_per_dim)
-        for t in range(traces_per_dim):
-            visible[d * traces_per_dim + t] = True
+        visible = [False] * (dim * per_dim)
+        for t in range(per_dim):
+            visible[d * per_dim + t] = True
         buttons.append(
             dict(
                 label=f"dim {d}",
@@ -292,9 +312,9 @@ def fig_per_dim_marginals(
     return fig
 
 
-def fig_dim_profiles(real: np.ndarray, synth: Optional[np.ndarray]) -> go.Figure:
-    """Per-dimension mean, std and exact-zero fraction across all 128 dims."""
-    dims = np.arange(real.shape[1])
+def fig_dim_profiles(series: Sequence[Series]) -> go.Figure:
+    """Per-dimension mean, std and exact-zero fraction across all dims."""
+    dims = np.arange(series[0].x.shape[1])
     fig = make_subplots(
         rows=3,
         cols=1,
@@ -302,73 +322,44 @@ def fig_dim_profiles(real: np.ndarray, synth: Optional[np.ndarray]) -> go.Figure
         subplot_titles=("per-dim mean", "per-dim std", "per-dim fraction of exact zeros"),
         vertical_spacing=0.07,
     )
-    series = [(REAL_NAME, real, REAL_COLOR)]
-    if synth is not None:
-        series.append((SYNTH_NAME, synth, SYNTH_COLOR))
-
-    for name, arr, color in series:
-        stats = [
-            arr.mean(axis=0),
-            arr.std(axis=0),
-            (arr == 0.0).mean(axis=0),
-        ]
+    for s in series:
+        stats = [s.x.mean(axis=0), s.x.std(axis=0), (s.x == 0.0).mean(axis=0)]
         for row, values in enumerate(stats, start=1):
             fig.add_scatter(
                 x=dims,
                 y=values,
-                name=name,
-                legendgroup=name,
+                name=s.name,
+                legendgroup=s.name,
                 showlegend=(row == 1),
-                line=dict(color=color),
+                line=dict(color=s.color),
                 row=row,
                 col=1,
             )
-
     fig.update_xaxes(title_text="dimension", row=3, col=1)
-    fig.update_layout(
-        title="Per-dimension profiles",
-        template="plotly_white",
-        height=760,
-    )
+    fig.update_layout(title="Per-dimension profiles", template="plotly_white", height=760)
     return fig
 
 
-def fig_pca_spectrum(real: np.ndarray, synth: Optional[np.ndarray]) -> go.Figure:
+def fig_pca_spectrum(series: Sequence[Series]) -> go.Figure:
     """Explained-variance spectrum. A collapsed generator is rank-deficient."""
     fig = make_subplots(
         rows=1,
         cols=2,
         subplot_titles=("explained variance ratio (log)", "cumulative explained variance"),
     )
-    series = [(REAL_NAME, real, REAL_COLOR)]
-    if synth is not None:
-        series.append((SYNTH_NAME, synth, SYNTH_COLOR))
-
-    for name, arr, color in series:
-        pca = PCA(n_components=min(arr.shape[1], arr.shape[0]))
-        pca.fit(arr)
+    for s in series:
+        pca = PCA(n_components=min(s.x.shape[1], s.x.shape[0]))
+        pca.fit(s.x)
         ratio = pca.explained_variance_ratio_
         comps = np.arange(1, ratio.size + 1)
         fig.add_scatter(
-            x=comps,
-            y=ratio,
-            name=name,
-            legendgroup=name,
-            line=dict(color=color),
-            row=1,
-            col=1,
+            x=comps, y=ratio, name=s.name, legendgroup=s.name,
+            line=dict(color=s.color), row=1, col=1,
         )
         fig.add_scatter(
-            x=comps,
-            y=np.cumsum(ratio),
-            name=name,
-            legendgroup=name,
-            showlegend=False,
-            line=dict(color=color),
-            row=1,
-            col=2,
+            x=comps, y=np.cumsum(ratio), name=s.name, legendgroup=s.name,
+            showlegend=False, line=dict(color=s.color), row=1, col=2,
         )
-
     fig.update_yaxes(type="log", row=1, col=1)
     fig.update_xaxes(title_text="component", row=1, col=1)
     fig.update_xaxes(title_text="component", row=1, col=2)
@@ -376,59 +367,75 @@ def fig_pca_spectrum(real: np.ndarray, synth: Optional[np.ndarray]) -> go.Figure
     return fig
 
 
-def fig_correlation(real: np.ndarray, synth: Optional[np.ndarray]) -> go.Figure:
-    """Dimension-by-dimension correlation. SIFT has strong block structure from
-    its 4x4 spatial cells x 8 orientation bins layout; a generator that misses
-    it produces a visibly flatter matrix."""
-    real_corr = np.corrcoef(real, rowvar=False)
-    panels = [("real", real_corr, "RdBu")]
-    if synth is not None:
-        synth_corr = np.corrcoef(synth, rowvar=False)
-        panels.append(("synthetic", synth_corr, "RdBu"))
-        panels.append(("synthetic - real", synth_corr - real_corr, "RdBu"))
+def fig_correlation(series: Sequence[Series]) -> go.Figure:
+    """Dimension-by-dimension correlation. SIFT has block structure from its
+    4x4 spatial cells x 8 orientation bins layout; a generator that misses it
+    produces a visibly flatter matrix. With overlays, each synthetic gets a
+    difference panel against real rather than its own raw matrix, since the
+    difference is what localizes the error."""
+    real = next(s for s in series if s.is_real)
+    real_corr = np.corrcoef(real.x, rowvar=False)
+    panels: List[Tuple[str, np.ndarray]] = [("real", real_corr)]
+    for s in series:
+        if s.is_real:
+            continue
+        panels.append((f"{s.name} - real", np.corrcoef(s.x, rowvar=False) - real_corr))
 
     fig = make_subplots(rows=1, cols=len(panels), subplot_titles=[p[0] for p in panels])
-    for col, (name, mat, scale) in enumerate(panels, start=1):
+    for col, (_, mat) in enumerate(panels, start=1):
         fig.add_heatmap(
-            z=mat,
-            colorscale=scale,
-            zmid=0.0,
-            showscale=(col == len(panels)),
-            row=1,
-            col=col,
+            z=mat, colorscale="RdBu", zmid=0.0,
+            showscale=(col == len(panels)), row=1, col=col,
         )
     fig.update_layout(
         title="Per-dimension correlation structure",
         template="plotly_white",
-        height=420,
+        height=400,
     )
     return fig
 
 
 def fig_dim_divergence(
-    real: np.ndarray, synth: np.ndarray, top_k: int
-) -> Tuple[go.Figure, List[Dict]]:
-    """Rank dimensions by 1-D Wasserstein distance between marginals."""
-    dists = np.array(
-        [wasserstein1(real[:, d], synth[:, d]) for d in range(real.shape[1])]
-    )
-    order = np.argsort(dists)[::-1]
+    series: Sequence[Series], top_k: int
+) -> Tuple[go.Figure, Dict[str, List[Dict]]]:
+    """Rank dimensions by 1-D Wasserstein distance from real, per synthetic set.
+
+    Dimensions are ordered by the worst mismatch across all synthetics, so the
+    same x-axis ordering applies to every series and they stay comparable.
+    """
+    real = next(s for s in series if s.is_real)
+    synths = [s for s in series if not s.is_real]
+    dim = real.x.shape[1]
+
+    dists = {
+        s.name: np.array(
+            [wasserstein1(real.x[:, d], s.x[:, d]) for d in range(dim)]
+        )
+        for s in synths
+    }
+    worst_overall = np.max(np.stack(list(dists.values())), axis=0)
+    order = np.argsort(worst_overall)[::-1]
+
     fig = go.Figure()
-    fig.add_bar(
-        x=[f"dim {d}" for d in order],
-        y=dists[order],
-        marker_color=SYNTH_COLOR,
-    )
+    for s in synths:
+        fig.add_bar(
+            x=[f"dim {d}" for d in order],
+            y=dists[s.name][order],
+            name=s.name,
+            marker_color=s.color,
+        )
     fig.update_layout(
-        title="Per-dimension marginal mismatch (Wasserstein-1, worst first)",
+        title="Per-dimension marginal mismatch vs real (Wasserstein-1, worst first)",
         xaxis_title="dimension",
         yaxis_title="W1(real, synthetic)",
+        barmode="group",
         template="plotly_white",
-        height=420,
+        height=440,
     )
-    worst = [
-        {"dim": int(d), "wasserstein1": float(dists[d])} for d in order[:top_k]
-    ]
+    worst = {
+        name: [{"dim": int(d), "wasserstein1": float(v[d])} for d in order[:top_k]]
+        for name, v in dists.items()
+    }
     return fig, worst
 
 
@@ -437,22 +444,41 @@ def fig_dim_divergence(
 # --------------------------------------------------------------------------
 
 
-def summary_stats(name: str, x: np.ndarray) -> Dict:
-    norms = np.linalg.norm(x, axis=1)
+def effective_rank(x: np.ndarray) -> float:
+    """exp(Shannon entropy of the explained-variance spectrum).
+
+    Reads as "how many directions meaningfully carry variance": equals the
+    dimension count when variance is spread evenly and 1 when it all sits on a
+    single direction. Note this uses variance ratios, not the normalized
+    singular values of Roy & Vetterli, so absolute values are not comparable
+    with that definition -- only across sets measured here.
+    """
+    ratio = PCA(n_components=min(x.shape[1], x.shape[0])).fit(x).explained_variance_ratio_
+    return float(np.exp(-np.sum(ratio * np.log(ratio + 1.0e-12))))
+
+
+def summary_stats(s: Series, knn: int, num_pairs: int, seed: int) -> Dict:
+    norms = np.linalg.norm(s.x, axis=1)
     return {
-        "name": name,
-        "num_vectors": int(x.shape[0]),
-        "dim": int(x.shape[1]),
-        "value_mean": float(x.mean()),
-        "value_std": float(x.std()),
-        "value_min": float(x.min()),
-        "value_max": float(x.max()),
-        "exact_zero_fraction": float((x == 0.0).mean()),
+        "name": s.name,
+        "num_vectors": int(s.x.shape[0]),
+        "dim": int(s.x.shape[1]),
+        "value_mean": float(s.x.mean()),
+        "value_std": float(s.x.std()),
+        "value_min": float(s.x.min()),
+        "value_max": float(s.x.max()),
+        "exact_zero_fraction": float((s.x == 0.0).mean()),
+        "negative_fraction": float((s.x < 0.0).mean()),
         "norm_mean": float(norms.mean()),
         "norm_std": float(norms.std()),
         "duplicate_row_fraction": float(
-            1.0 - np.unique(x, axis=0).shape[0] / x.shape[0]
+            1.0 - np.unique(s.x, axis=0).shape[0] / s.x.shape[0]
         ),
+        "median_pairwise_distance": float(
+            np.median(pairwise_distance_sample(s.x, num_pairs, seed))
+        ),
+        f"median_{knn}nn_distance": float(np.median(nn_distances(s.x, knn, seed))),
+        "effective_rank": effective_rank(s.x),
     }
 
 
@@ -484,7 +510,6 @@ table { border-collapse: collapse; font-size: 14px; margin: 12px 0; }
 th, td { border: 1px solid #e2e8f0; padding: 6px 12px; text-align: right; }
 thead th { background: #f7fafc; } tbody th { text-align: left; }
 """
-
 
 CDN_SRC = "https://cdn.plot.ly/plotly-3.7.0.min.js"
 
@@ -540,90 +565,93 @@ def export_pngs(sections: List[Tuple[str, str, go.Figure]], out_dir: Path) -> Li
     return written
 
 
+def load_series(args: argparse.Namespace) -> List[Series]:
+    real_x = load_descriptors(Path(args.real_path), file_format=args.real_format)
+    real_x = maybe_l2_normalize(subsample(real_x, args.max_vectors, args.seed), args.preprocess)
+    series = [Series(REAL_NAME, real_x, REAL_COLOR)]
+
+    seen = {REAL_NAME}
+    for i, spec in enumerate(args.synthetic_path or []):
+        label, path = parse_synthetic_spec(spec)
+        if label in seen:
+            raise ValueError(f"Duplicate series label {label!r}; use LABEL=PATH to rename")
+        seen.add(label)
+        x = load_descriptors(path, file_format=args.synthetic_format)
+        if x.shape[1] != real_x.shape[1]:
+            raise ValueError(
+                f"Dimension mismatch for {label!r}: real has {real_x.shape[1]}, "
+                f"got {x.shape[1]}"
+            )
+        x = maybe_l2_normalize(subsample(x, args.max_vectors, args.seed), args.preprocess)
+        series.append(Series(label, x, SYNTH_PALETTE[i % len(SYNTH_PALETTE)]))
+    return series
+
+
 def main() -> None:
     args = parse_args()
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    real = load_descriptors(Path(args.real_path), file_format=args.real_format)
-    real = subsample(real, args.max_vectors, args.seed)
-    real = maybe_l2_normalize(real, args.preprocess)
-
-    synth = None
-    if args.synthetic_path is not None:
-        synth = load_descriptors(
-            Path(args.synthetic_path), file_format=args.synthetic_format
-        )
-        if synth.shape[1] != real.shape[1]:
-            raise ValueError(
-                f"Dimension mismatch: real has {real.shape[1]}, "
-                f"synthetic has {synth.shape[1]}"
-            )
-        synth = subsample(synth, args.max_vectors, args.seed)
-        synth = maybe_l2_normalize(synth, args.preprocess)
-
-    stats = [summary_stats(REAL_NAME, real)]
-    if synth is not None:
-        stats.append(summary_stats(SYNTH_NAME, synth))
+    series = load_series(args)
+    has_synth = len(series) > 1
+    stats = [summary_stats(s, args.knn, args.num_pairs, args.seed) for s in series]
 
     sections: List[Tuple[str, str, go.Figure]] = []
 
     sections.append(
         (
             "Pooled value distribution",
-            "Raw SIFT coordinates are quantized integers with heavy mass at zero. "
-            "A generator emitting a smooth unimodal blob here is wrong regardless "
-            "of what the critic score says.",
-            fig_value_distribution(real, synth, args.bins),
+            "Every coordinate of every vector flattened into one histogram -- the "
+            "equal-weight mixture of all per-dimension marginals. Raw SIFT is "
+            "quantized with heavy mass at exactly zero, so a smooth unimodal blob "
+            "here is wrong regardless of what the critic score says.",
+            fig_value_distribution(series, args.bins),
         )
     )
     sections.append(
         (
             "Per-dimension marginals",
-            "Use the dropdown to page through all dimensions. Aggregate overlap "
-            "can hide per-dimension mismatch.",
-            fig_per_dim_marginals(real, synth, args.bins),
+            "The same histogram split by dimension; use the dropdown to page "
+            "through. Aggregate overlap can hide compensating per-dimension error.",
+            fig_per_dim_marginals(series, args.bins),
         )
     )
     sections.append(
         (
             "Per-dimension profiles",
             "Mean, spread and exact-zero rate across dimensions. SIFT's zero rate "
-            "varies strongly by dimension; a generator with a flat profile has not "
-            "learned the descriptor layout.",
-            fig_dim_profiles(real, synth),
+            "varies strongly by dimension -- corner cells of the 4x4 grid are "
+            "emptier than central ones -- so a flat profile means the generator "
+            "learned an average rather than the descriptor layout.",
+            fig_dim_profiles(series),
         )
-    )
-
-    real_pairs = pairwise_distance_sample(real, args.num_pairs, args.seed)
-    synth_pairs = (
-        None if synth is None else pairwise_distance_sample(synth, args.num_pairs, args.seed)
     )
     sections.append(
         (
             "Pairwise distances",
-            "Distances between random pairs. This is what downstream ANN "
-            "benchmarking actually depends on.",
+            "Distances between random pairs: the global geometry, and what "
+            "downstream ANN benchmarking depends on.",
             overlay_hist_fig(
-                real_pairs,
-                synth_pairs,
+                [
+                    (s.name, pairwise_distance_sample(s.x, args.num_pairs, args.seed), s.color)
+                    for s in series
+                ],
                 args.bins,
                 "Pairwise Euclidean distance",
                 "distance",
             ),
         )
     )
-
-    real_nn = nn_distances(real, args.knn, args.seed)
-    synth_nn = None if synth is None else nn_distances(synth, args.knn, args.seed)
     sections.append(
         (
             f"Within-set {args.knn}-NN distances",
-            "The clearest mode-collapse tell: a collapsed generator packs samples "
-            "together, pushing this distribution far below the real one.",
+            "Each set measured against itself, not against real. Local packing "
+            "rather than global spread, and the clearest mode-collapse tell: a "
+            "collapsed generator crowds its samples, pushing this left of real. "
+            "All sets are cut to equal N first, since k-NN distance shrinks as "
+            "sample count grows.",
             overlay_hist_fig(
-                real_nn,
-                synth_nn,
+                [(s.name, nn_distances(s.x, args.knn, args.seed), s.color) for s in series],
                 args.bins,
                 f"Distance to {args.knn}-th nearest neighbour within set",
                 "distance",
@@ -637,8 +665,7 @@ def main() -> None:
                 "Vector norms",
                 "Only informative without L2 normalization.",
                 overlay_hist_fig(
-                    np.linalg.norm(real, axis=1),
-                    None if synth is None else np.linalg.norm(synth, axis=1),
+                    [(s.name, np.linalg.norm(s.x, axis=1), s.color) for s in series],
                     args.bins,
                     "L2 norm",
                     "norm",
@@ -649,41 +676,44 @@ def main() -> None:
     sections.append(
         (
             "PCA spectrum",
-            "A generator covering fewer effective directions than the data shows a "
-            "steeper falloff and a cumulative curve that saturates early.",
-            fig_pca_spectrum(real, synth),
+            "A generator covering fewer effective directions than the data falls "
+            "off more steeply and saturates earlier in the cumulative curve.",
+            fig_pca_spectrum(series),
         )
     )
     sections.append(
         (
             "Correlation structure",
-            "SIFT is 4x4 spatial cells x 8 orientation bins, which produces visible "
-            "block structure. The difference panel highlights what the generator missed.",
-            fig_correlation(real, synth),
+            "SIFT is 4x4 spatial cells x 8 orientation bins, which produces "
+            "visible block structure. Each synthetic is shown as a difference "
+            "against real, which is what localizes the error.",
+            fig_correlation(series),
         )
     )
 
-    worst_dims: List[Dict] = []
-    if synth is not None:
-        div_fig, worst_dims = fig_dim_divergence(real, synth, args.top_divergent)
+    worst_dims: Dict[str, List[Dict]] = {}
+    if has_synth:
+        div_fig, worst_dims = fig_dim_divergence(series, args.top_divergent)
         sections.append(
             (
                 "Per-dimension mismatch",
-                "Worst dimensions first. Cross-reference the leaders against the "
-                "marginals dropdown above.",
+                "Dimensions ordered by the worst mismatch across all synthetic "
+                "sets, so bars line up across series. Cross-reference the leaders "
+                "against the marginals dropdown above.",
                 div_fig,
             )
         )
 
+    synth_desc = (
+        " &middot; ".join(f"{s.name}" for s in series if not s.is_real)
+        if has_synth
+        else "no synthetic overlay"
+    )
     meta_html = (
         f'<div class="meta">real: <code>{args.real_path}</code>'
-        + (
-            f' &middot; synthetic: <code>{args.synthetic_path}</code>'
-            if args.synthetic_path
-            else " &middot; no synthetic overlay"
-        )
-        + f" &middot; preprocess: <code>{args.preprocess}</code>"
-        + f" &middot; subsampled to {real.shape[0]} rows</div>"
+        f" &middot; overlays: {synth_desc}"
+        f" &middot; preprocess: <code>{args.preprocess}</code>"
+        f" &middot; subsampled to {series[0].x.shape[0]} rows</div>"
         + stats_table_html(stats)
     )
 
@@ -701,7 +731,7 @@ def main() -> None:
 
     summary = {
         "real_path": args.real_path,
-        "synthetic_path": args.synthetic_path,
+        "synthetic_paths": args.synthetic_path or [],
         "preprocess": args.preprocess,
         "seed": args.seed,
         "stats": stats,

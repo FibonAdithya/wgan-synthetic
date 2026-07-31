@@ -51,3 +51,48 @@ def test_knn_returns_distances_in_ascending_order():
     x = rng.normal(size=(50, 8)).astype(np.float32)
     dist, _, _ = knn(x, k=5)
     assert np.all(np.diff(dist, axis=1) >= -1e-6)
+
+
+from src.eval.ann_difficulty import lid_mle, survivor_mask
+
+
+def _uniform_in_ball(n, d, seed):
+    """Sample uniformly inside the unit d-ball. LID of such a set equals d."""
+    rng = np.random.default_rng(seed)
+    direction = rng.normal(size=(n, d))
+    direction /= np.linalg.norm(direction, axis=1, keepdims=True)
+    radius = rng.random(size=(n, 1)) ** (1.0 / d)
+    return (direction * radius).astype(np.float32)
+
+
+def test_lid_recovers_the_generating_dimension():
+    x = _uniform_in_ball(20000, 4, seed=0)
+    dist, _, _ = knn(x, k=100)
+    estimate = float(np.median(lid_mle(dist[survivor_mask(dist)])))
+    # The Hill estimator is biased and its bias grows with d/n, so this is a
+    # deliberately loose 20% band around the true value of 4.
+    assert 3.2 < estimate < 4.8
+
+
+def test_lid_rises_with_the_generating_dimension():
+    low = _uniform_in_ball(20000, 4, seed=1)
+    high = _uniform_in_ball(20000, 12, seed=1)
+    d_low, _, _ = knn(low, k=100)
+    d_high, _, _ = knn(high, k=100)
+    lid_low = float(np.median(lid_mle(d_low[survivor_mask(d_low)])))
+    lid_high = float(np.median(lid_mle(d_high[survivor_mask(d_high)])))
+    assert lid_high > lid_low
+
+
+def test_survivor_mask_rejects_queries_with_a_zero_nearest_distance():
+    dist = np.array([[0.0, 1.0], [0.5, 1.0], [0.0, 2.0]])
+    assert survivor_mask(dist).tolist() == [False, True, False]
+
+
+def test_lid_is_finite_for_every_surviving_query_when_duplicates_exist():
+    base = _uniform_in_ball(2000, 4, seed=2)
+    x = np.vstack([base, base[:200]])  # 200 exact duplicate rows
+    dist, _, _ = knn(x, k=50)
+    values = lid_mle(dist[survivor_mask(dist)])
+    assert values.size > 0
+    assert np.all(np.isfinite(values))

@@ -79,3 +79,33 @@ def knn(x: np.ndarray, k: int) -> Tuple[np.ndarray, np.ndarray, int]:
         idx[selected].reshape(n, k_eff),
         k_eff,
     )
+
+
+def survivor_mask(dist: np.ndarray) -> np.ndarray:
+    """Queries whose nearest neighbour is strictly farther than zero.
+
+    A query sitting on an exact duplicate has r_1 = 0, which sends the LID
+    estimator to a degenerate value. Those queries are dropped rather than
+    clamped: clamping invents a number, dropping just declines to answer.
+    The count is reported so the bias stays visible -- duplicates are exactly
+    the low-LID region, so discarding them nudges the estimate upward.
+    """
+    return dist[:, 0] > 0.0
+
+
+def lid_mle(dist: np.ndarray) -> np.ndarray:
+    """Hill / Amsaleg maximum-likelihood local intrinsic dimensionality.
+
+        LID(q) = -[ (1/k) * sum_i log(r_i / r_k) ]^-1
+
+    Pass only rows selected by survivor_mask. The i=k term contributes zero
+    and is kept so the divisor is k, matching the standard MLE form.
+
+    Higher means locally higher-dimensional, which means harder to search:
+    this is the strongest single published predictor of ANN difficulty.
+    """
+    if dist.shape[0] == 0:
+        return np.empty(0, dtype=np.float64)
+    r_k = dist[:, -1:]
+    ratio = np.clip(dist / r_k, 1.0e-12, 1.0)
+    return -1.0 / np.mean(np.log(ratio), axis=1)

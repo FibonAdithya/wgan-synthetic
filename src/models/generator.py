@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict, Iterable, List
+from typing import Any, Iterable, List, Mapping
 
 import torch
 import torch.nn.functional as F
@@ -43,11 +43,12 @@ class SparseGenerator(nn.Module):
     ):
         super().__init__()
         hidden_dims = list(hidden_dims)
-        dims: List[int] = [latent_dim, *hidden_dims]
         if latent_dim <= 0 or output_dim <= 0 or any(dim <= 0 for dim in hidden_dims):
             raise ValueError("model dimensions must be greater than zero")
-        if len(dims) < 2:
+        if not hidden_dims:
             raise ValueError("SparseGenerator requires at least one hidden dimension")
+        if negative_slope < 0:
+            raise ValueError("negative_slope must not be negative")
         if gate_temperature <= 0:
             raise ValueError("gate_temperature must be greater than zero")
         if logit_clamp <= 0:
@@ -55,6 +56,7 @@ class SparseGenerator(nn.Module):
         if eps <= 0:
             raise ValueError("eps must be greater than zero")
 
+        dims: List[int] = [latent_dim, *hidden_dims]
         layers = []
         for i in range(len(dims) - 1):
             layers.append(nn.Linear(dims[i], dims[i + 1]))
@@ -67,8 +69,14 @@ class SparseGenerator(nn.Module):
         self.eps = float(eps)
 
     def _sample_gate(self, logits: torch.Tensor) -> torch.Tensor:
-        # Draw in float32 under AMP: eps=1e-8 rounds to zero in float16,
-        # which would leave log(0) capable of poisoning gate gradients.
+        """Sample a hard binary-concrete gate, returned in ``logits.dtype``.
+
+        Draw in float32 under AMP: eps=1e-8 rounds to zero in float16, which
+        would leave log(0) capable of poisoning gate gradients. The upcast is
+        needed only for the noise sampling itself, so the gate is cast back
+        before returning; the module therefore preserves the dtype implied by
+        the enclosing autocast region instead of silently promoting it.
+        """
         sample_logits = (
             logits.float()
             if logits.dtype in (torch.float16, torch.bfloat16)
@@ -85,8 +93,14 @@ class SparseGenerator(nn.Module):
         fallback = F.one_hot(
             sample_logits.argmax(dim=1), sample_logits.shape[1]
         ).to(hard.dtype)
+        # Note: on a rescued row the straight-through gradient still comes from
+        # `soft`, i.e. from the gate the forward pass did *not* take. This is
+        # the one place forward and backward genuinely disagree. It is harmless
+        # in practice -- the rescued coordinate is the argmax logit, so `soft`
+        # is its largest entry anyway, and all-off rows are vanishingly rare at
+        # d=128 -- so the behaviour is left as is.
         hard = torch.where(empty, fallback, hard)
-        return hard + soft - soft.detach()
+        return (hard + soft - soft.detach()).to(logits.dtype)
 
     def forward(self, z: torch.Tensor) -> torch.Tensor:
         h = self.trunk(z)
@@ -98,7 +112,7 @@ class SparseGenerator(nn.Module):
         return x / torch.clamp(norm, min=self.eps)
 
 
-def build_generator(model_cfg: Dict, output_dim: int) -> nn.Module:
+def build_generator(model_cfg: Mapping[str, Any], output_dim: int) -> nn.Module:
     """Build the configured generator, defaulting to the legacy MLP."""
     kind = model_cfg.get("generator_type", "mlp")
     common = {

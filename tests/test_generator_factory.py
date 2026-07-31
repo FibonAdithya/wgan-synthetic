@@ -1,3 +1,5 @@
+from types import MappingProxyType
+
 import pytest
 
 from src.models.generator import Generator, SparseGenerator, build_generator
@@ -42,6 +44,11 @@ def test_output_dim_is_respected():
     generator = build_generator(dict(BASE_CFG, generator_type="sparse"), output_dim=64)
     assert generator.magnitude_head.out_features == 64
     assert generator.gate_head.out_features == 64
+
+
+def test_read_only_mapping_config_is_accepted():
+    cfg = MappingProxyType(dict(BASE_CFG, generator_type="sparse"))
+    assert isinstance(build_generator(cfg, output_dim=128), SparseGenerator)
 
 
 def test_checkpoint_mismatch_fails_loudly():

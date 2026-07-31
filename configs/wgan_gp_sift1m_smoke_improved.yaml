@@ -3,7 +3,11 @@
 #   #2 distance regulariser enabled (pairwise-distance mean matching)
 #   #3 generator EMA of parameters
 #   #6 in-loop mode-collapse monitoring (collapse_stats logged at eval)
-# Otherwise identical to wgan_gp_sift1m_smoke.yaml for a fair baseline compare.
+# The hyperparameters below match wgan_gp_sift1m_smoke.yaml, but this is NOT a
+# controlled A/B against it: the distance regulariser changes the generator
+# objective and eval/sampling here runs on EMA weights, so any metric delta
+# mixes several effects at once. Treat it as a smoke test of the new code
+# paths, not as evidence that the upgrades help.
 seed: 42
 device: auto
 output_dir: runs/wgan_sift1m_smoke_improved
@@ -41,6 +45,14 @@ training:
   # ever becomes disk-backed (persistent_workers is wired up for that case).
   num_workers: 0
   # --- #3: generator EMA (0 disables; 0.999 is a common stable value) ---
+  # The accumulator starts at zero and is bias-corrected when loaded into the
+  # model, so even at 200 steps (0.999**200 ~= 0.82) the evaluated weights are
+  # a genuine weighted average of the observed parameters, with no
+  # contribution from the random initialisation. The averaging window is still
+  # ~1/(1-decay) = 1000 steps wide, i.e. wider than this run -- so here it
+  # effectively averages the whole trajectory. That is fine for a smoke test;
+  # a shorter decay (~0.99) would be the choice if this were a real 200-step
+  # run whose late-training weights mattered.
   ema_decay: 0.999
   # --- #2: pairwise-distance mean matching regulariser (was 0.0 = disabled) ---
   distance_reg_alpha: 0.1

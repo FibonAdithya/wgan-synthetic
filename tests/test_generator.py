@@ -97,8 +97,48 @@ def test_existing_generator_is_unchanged():
         ({"logit_clamp": 0}, "logit_clamp"),
         ({"eps": 0}, "eps"),
         ({"output_dim": 0}, "dimensions"),
+        ({"negative_slope": -0.1}, "negative_slope"),
     ],
 )
 def test_invalid_sparse_configuration_fails_early(kwargs, message):
     with pytest.raises(ValueError, match=message):
         build(**kwargs)
+
+
+LOW_PRECISION = [
+    pytest.param(torch.bfloat16, 3e-2, id="bfloat16"),
+    pytest.param(torch.float16, 5e-3, id="float16"),
+]
+
+
+@pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16])
+def test_low_precision_gate_preserves_input_dtype(gen, dtype):
+    torch.manual_seed(5)
+    logits = torch.randn(64, OUTPUT, dtype=dtype)
+    gate = gen._sample_gate(logits)
+    assert gate.dtype == dtype
+    assert torch.isfinite(gate).all()
+    assert (gate.sum(dim=1) > 0).all()
+
+
+@pytest.mark.parametrize("dtype, atol", LOW_PRECISION)
+def test_low_precision_forward_preserves_dtype(dtype, atol):
+    torch.manual_seed(6)
+    generator = build().to(dtype)
+    out = generator(torch.randn(64, LATENT, dtype=dtype))
+    assert out.dtype == dtype
+    assert torch.isfinite(out).all()
+    assert (out >= 0).all()
+    norms = out.float().norm(dim=1)
+    assert torch.allclose(norms, torch.ones_like(norms), atol=atol)
+
+
+def test_float32_output_is_unchanged_by_dtype_handling(gen):
+    torch.manual_seed(7)
+    z = torch.randn(16, LATENT)
+    torch.manual_seed(8)
+    a = gen(z)
+    torch.manual_seed(8)
+    b = gen(z)
+    assert a.dtype == torch.float32
+    assert torch.equal(a, b)

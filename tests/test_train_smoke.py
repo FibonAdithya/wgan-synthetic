@@ -1,6 +1,7 @@
 import math
 
 import pytest
+import torch
 
 from src.train.train_wgan_gp import train
 
@@ -62,6 +63,37 @@ def test_sparse_eval_reports_zero_negatives(tmp_path):
     _, meta = train(make_config(tmp_path, "sparse"))
     assert meta["eval"]
     assert all(entry["negative_fraction"] == 0.0 for entry in meta["eval"])
+
+
+def test_checkpoints_record_their_generator_weight_provenance(tmp_path):
+    """best_generator.pt is written inside the EMA swap, periodic checkpoints
+    outside it -- the saved dicts must say which is which."""
+    cfg = make_config(tmp_path, "mlp")
+    ckpt_path, _ = train(cfg)
+
+    best = torch.load(ckpt_path, weights_only=False)
+    assert best["generator_weights"] == "ema"
+
+    periodic = torch.load(ckpt_path.parent / "checkpoint_step_4.pt", weights_only=False)
+    assert periodic["generator_weights"] == "live"
+
+
+def test_training_resumes_on_live_weights_after_ema_eval(tmp_path):
+    """With EMA on, the final periodic checkpoint (saved after the eval at the
+    same step) must hold live weights, not the EMA snapshot."""
+    cfg = make_config(tmp_path, "mlp")
+    cfg["training"]["eval_every"] = 4
+    cfg["training"]["save_every"] = 4
+    ckpt_path, _ = train(cfg)
+
+    best = torch.load(ckpt_path, weights_only=False)
+    live = torch.load(ckpt_path.parent / "checkpoint_step_4.pt", weights_only=False)
+    assert best["step"] == live["step"] == 4
+    differs = any(
+        not torch.equal(best["generator_state_dict"][k], live["generator_state_dict"][k])
+        for k in live["generator_state_dict"]
+    )
+    assert differs, "EMA and live generator weights are identical -- swap/restore is a no-op"
 
 
 def test_mlp_config_without_generator_type_still_trains(tmp_path):

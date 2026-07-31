@@ -17,7 +17,7 @@ from src.data.sift1m_dataset import (
     load_descriptors,
     train_holdout_split,
 )
-from src.models.generator import Generator
+from src.models.generator import build_generator
 
 
 def parse_args() -> argparse.Namespace:
@@ -42,14 +42,11 @@ def get_device(device_cfg: str) -> torch.device:
     return torch.device(device_cfg)
 
 
-def load_generator(config: Dict, checkpoint_path: Path, device: torch.device) -> Generator:
+def load_generator(config: Dict, checkpoint_path: Path, device: torch.device) -> torch.nn.Module:
     data_cfg = config["data"]
     model_cfg = config["model"]
-    generator = Generator(
-        latent_dim=int(model_cfg["latent_dim"]),
-        output_dim=int(data_cfg["descriptor_dim"]),
-        hidden_dims=model_cfg["generator_hidden_dims"],
-        negative_slope=float(model_cfg["negative_slope"]),
+    generator = build_generator(
+        model_cfg, output_dim=int(data_cfg["descriptor_dim"])
     ).to(device)
     checkpoint = torch.load(checkpoint_path, map_location=device)
     generator.load_state_dict(checkpoint["generator_state_dict"])
@@ -58,7 +55,11 @@ def load_generator(config: Dict, checkpoint_path: Path, device: torch.device) ->
 
 
 def sample_fake(
-    generator: Generator, latent_dim: int, n: int, batch_size: int, device: torch.device
+    generator: torch.nn.Module,
+    latent_dim: int,
+    n: int,
+    batch_size: int,
+    device: torch.device,
 ) -> np.ndarray:
     out = []
     generated = 0

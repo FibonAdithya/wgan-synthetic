@@ -145,3 +145,31 @@ def relative_contrast(
 
     with np.errstate(divide="ignore", invalid="ignore"):
         return mean_distance / dist[:, 0]
+
+
+def k_occurrence(idx: np.ndarray, n: int, k_hub: int) -> np.ndarray:
+    """How often each point appears in other points' neighbour lists.
+
+    Reuses the leading columns of the k-NN cache, so k_hub must not exceed
+    the k the cache was built with. Ten is the convention in the hubness
+    literature and is what the report passes.
+    """
+    if k_hub > idx.shape[1]:
+        raise ValueError(f"k_hub={k_hub} exceeds cached neighbours {idx.shape[1]}")
+    return np.bincount(idx[:, :k_hub].ravel(), minlength=n)
+
+
+def hubness_skew(counts: np.ndarray) -> float:
+    """Skewness of the k-occurrence distribution.
+
+    Zero means every point is drawn on about equally. Large positive values
+    mean a few hubs dominate the neighbour lists, which is what degrades
+    graph indexes like HNSW -- searches funnel into the hubs and stall. A
+    generator has no direct training pressure to reproduce this, so it is a
+    property worth checking explicitly.
+    """
+    x = np.asarray(counts, dtype=np.float64)
+    spread = x.std()
+    if spread <= 0.0:
+        return 0.0
+    return float(np.mean(((x - x.mean()) / spread) ** 3))

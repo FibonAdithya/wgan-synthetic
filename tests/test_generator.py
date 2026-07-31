@@ -1,5 +1,6 @@
 import pytest
 import torch
+import torch.nn.functional as F
 
 from src.models.generator import Generator, SparseGenerator
 
@@ -55,6 +56,27 @@ def test_single_output_cannot_become_all_zero():
     out = generator(torch.randn(32, 2))
     assert (out > 0).all()
     assert torch.equal(out, torch.ones_like(out))
+
+
+def test_saturated_magnitude_still_yields_unit_norm():
+    # softplus underflows to exactly 0.0 below about -90 in float32. The gate
+    # fallback alone does not rescue this: an open gate over a zero magnitude
+    # still normalizes to the zero vector. Only the magnitude floor does.
+    generator = build()
+    with torch.no_grad():
+        generator.magnitude_head.weight.zero_()
+        generator.magnitude_head.bias.fill_(-1000.0)
+    torch.manual_seed(9)
+    out = generator(torch.randn(32, LATENT))
+    assert (F.softplus(torch.tensor(-1000.0)) == 0.0).item(), "premise: softplus underflows"
+    norms = out.norm(dim=1)
+    assert torch.allclose(norms, torch.ones_like(norms), atol=1e-5)
+    assert ((out > 0).sum(dim=1) > 0).all()
+
+
+def test_magnitude_floor_leaves_gate_zeros_exact(out):
+    # The floor must not leak a nonzero value through a closed gate.
+    assert (out == 0.0).any()
 
 
 def test_gate_head_receives_gradient(gen):

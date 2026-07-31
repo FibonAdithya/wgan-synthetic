@@ -104,7 +104,14 @@ class SparseGenerator(nn.Module):
 
     def forward(self, z: torch.Tensor) -> torch.Tensor:
         h = self.trunk(z)
-        magnitude = F.softplus(self.magnitude_head(h))
+        # The gate fallback rescues a row whose gates all close, but not one
+        # whose magnitudes all underflow: softplus saturates to exactly 0.0
+        # below about -90 in float32, and a rescued gate over a zero magnitude
+        # still normalizes to the zero vector. Floor the magnitude above `eps`
+        # so the unit-norm contract holds under divergence too -- a floor at or
+        # below `eps` would not, since the norm would stay inside the clamp
+        # below. Exact zeros are unaffected: those come from the gate.
+        magnitude = F.softplus(self.magnitude_head(h)).clamp(min=self.eps * 100.0)
         raw_logits = self.gate_head(h)
         logits = self.logit_clamp * torch.tanh(raw_logits / self.logit_clamp)
         x = self._sample_gate(logits) * magnitude

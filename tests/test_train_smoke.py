@@ -33,6 +33,7 @@ def make_config(tmp_path, generator_type):
             "lr_d": 1.0e-4,
             "betas": [0.0, 0.9],
             "lambda_gp": 5.0,
+            "ema_decay": 0.9,
             "num_workers": 0,
             "distance_reg_alpha": 0.1,
             "distance_reg_max_points": 16,

@@ -102,6 +102,49 @@ def batch_pairwise_distance_mean(x: Tensor, max_points: int = 128) -> Tensor:
     return pd.mean() if pd.numel() > 0 else torch.zeros((), device=x.device, dtype=x.dtype)
 
 
+def collapse_stats(fake: np.ndarray, max_points: int = 512) -> Dict[str, float]:
+    """Lightweight mode-collapse monitor.
+
+    A healthy generator spreads samples across the descriptor space; a
+    collapsed one packs them into a few points. We report:
+      - fake_std: mean per-dimension std (collapse -> near-zero)
+      - fake_min_pdist / fake_mean_pdist: min / mean pairwise L2 among a
+        subsample of generated vectors (collapse -> both -> 0)
+    """
+    n = fake.shape[0]
+    if n > max_points:
+        idx = np.random.default_rng(0).choice(n, size=max_points, replace=False)
+        fake = fake[idx]
+    std = float(fake.std(axis=0).mean())
+    if fake.shape[0] >= 2:
+        d = torch.pdist(torch.from_numpy(np.ascontiguousarray(fake)), p=2)
+        min_pd = float(d.min())
+        mean_pd = float(d.mean())
+    else:
+        min_pd = mean_pd = 0.0
+    return {
+        "fake_std": std,
+        "fake_min_pdist": min_pd,
+        "fake_mean_pdist": mean_pd,
+    }
+
+
+def ema_update(ema_params: Dict[str, Tensor], model: torch.nn.Module, decay: float) -> None:
+    """In-place exponential moving average of model parameters."""
+    with torch.no_grad():
+        for name, p in model.named_parameters():
+            if p.requires_grad:
+                ema_params[name].mul_(decay).add_(p.data, alpha=1.0 - decay)
+
+
+def load_ema_into_model(ema_params: Dict[str, Tensor], model: torch.nn.Module) -> None:
+    """Copy EMA weights into the model (for saving / sampling)."""
+    with torch.no_grad():
+        for name, p in model.named_parameters():
+            if name in ema_params:
+                p.data.copy_(ema_params[name])
+
+
 def save_checkpoint(
     generator: nn.Module,
     critic: Critic,
@@ -187,14 +230,28 @@ def train(config: Dict) -> Tuple[Path, Dict]:
     optim_d = torch.optim.Adam(critic.parameters(), lr=lr_d, betas=betas)
 
     dataset = NumpyTensorDataset(x_train)
+    num_workers = int(train_cfg.get("num_workers", 0))
     loader = DataLoader(
         dataset,
         batch_size=int(train_cfg["batch_size"]),
         shuffle=True,
         drop_last=True,
-        num_workers=0,
+        num_workers=num_workers,
+        # Keep workers alive across epochs: the loop re-creates the iterator on
+        # StopIteration, which would otherwise respawn the pool every epoch.
+        persistent_workers=num_workers > 0,
+        pin_memory=(device.type == "cuda"),
     )
     data_iter = iter(loader)
+
+    # Generator EMA (stabilises samples / checkpoint). Disabled when decay <= 0.
+    ema_decay = float(train_cfg.get("ema_decay", 0.0))
+    use_ema = ema_decay > 0.0
+    ema_params: Dict[str, Tensor] = {}
+    if use_ema:
+        for name, p in generator.named_parameters():
+            if p.requires_grad:
+                ema_params[name] = p.data.clone().detach()
 
     amp = bool(train_cfg["amp"] and device.type == "cuda")
     scaler_d = GradScaler(device="cuda", enabled=amp)
@@ -288,6 +345,9 @@ def train(config: Dict) -> Tuple[Path, Dict]:
         scaler_g.step(optim_g)
         scaler_g.update()
 
+        if use_ema:
+            ema_update(ema_params, generator, ema_decay)
+
         if step % log_every == 0 or step == 1:
             msg = {
                 "step": step,
@@ -302,20 +362,42 @@ def train(config: Dict) -> Tuple[Path, Dict]:
             print(json.dumps(msg))
 
         if step % eval_every == 0 or step == num_gen_steps:
-            fake_holdout = sample_generator(
-                generator=generator,
-                num_samples=x_holdout.shape[0],
-                latent_dim=latent_dim,
-                batch_size=int(train_cfg["batch_size"]),
-                device=device,
-            )
-            stats = tensor_stats(x_holdout, fake_holdout)
-            stats["step"] = step
-            run_meta.setdefault("eval", []).append(stats)
-            print(json.dumps({"eval": stats}))
-            if stats["cov_fro"] < best_cov:
-                best_cov = stats["cov_fro"]
-                save_checkpoint(generator, critic, optim_g, optim_d, out_dir, step, best=True)
+            live_backup: Dict[str, Tensor] = {}
+            if use_ema:
+                # Evaluate / sample from EMA weights for a stabilised view.
+                # Save live weights, swap in EMA, then restore so training
+                # continues on the optimised (live) parameters.
+                live_backup = {
+                    name: p.data.clone()
+                    for name, p in generator.named_parameters()
+                    if name in ema_params
+                }
+                load_ema_into_model(ema_params, generator)
+            try:
+                fake_holdout = sample_generator(
+                    generator=generator,
+                    num_samples=x_holdout.shape[0],
+                    latent_dim=latent_dim,
+                    batch_size=int(train_cfg["batch_size"]),
+                    device=device,
+                )
+                stats = tensor_stats(x_holdout, fake_holdout)
+                stats.update(collapse_stats(fake_holdout))
+                stats["step"] = step
+                run_meta.setdefault("eval", []).append(stats)
+                print(json.dumps({"eval": stats}))
+                if stats["cov_fro"] < best_cov:
+                    best_cov = stats["cov_fro"]
+                    save_checkpoint(generator, critic, optim_g, optim_d, out_dir, step, best=True)
+            finally:
+                # Restore live weights so the next training step is on the
+                # optimised parameters (EMA is only for eval/sampling/checkpoint).
+                # In a finally block so a failed eval can never strand the
+                # generator on EMA weights.
+                with torch.no_grad():
+                    for name, p in generator.named_parameters():
+                        if name in live_backup:
+                            p.data.copy_(live_backup[name])
 
         if step % save_every == 0:
             save_checkpoint(generator, critic, optim_g, optim_d, out_dir, step, best=False)

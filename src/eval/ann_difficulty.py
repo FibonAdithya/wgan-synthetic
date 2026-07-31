@@ -22,7 +22,10 @@ and testable without plotly or argparse.
 
 from __future__ import annotations
 
+from typing import Dict, Optional, Tuple
+
 import numpy as np
+from sklearn.neighbors import NearestNeighbors
 
 
 def gini(occupancy: np.ndarray) -> float:
@@ -39,3 +42,40 @@ def gini(occupancy: np.ndarray) -> float:
     n = x.size
     index = np.arange(1, n + 1, dtype=np.float64)
     return float(2.0 * np.sum(index * x) / (n * total) - (n + 1.0) / n)
+
+
+def knn(x: np.ndarray, k: int) -> Tuple[np.ndarray, np.ndarray, int]:
+    """Nearest neighbours of every row among the *other* rows.
+
+    Returns (distances, indices, k_eff). k is clamped to n-1 when the set is
+    smaller than requested, and k_eff reports what was actually used.
+
+    Self-exclusion is by index, not by dropping the first column. Exact
+    duplicate rows tie with the query at distance 0 and sklearn does not
+    promise the query sorts first, so column-dropping can silently leave a
+    point in its own neighbour list -- which would drag its k-occurrence up
+    and its LID down.
+    """
+    n = x.shape[0]
+    if n < 2:
+        raise ValueError(f"need at least 2 rows to compute neighbours, got {n}")
+    k_eff = min(k, n - 1)
+
+    nn = NearestNeighbors(n_neighbors=k_eff + 1, algorithm="brute").fit(x)
+    dist, idx = nn.kneighbors(x)
+
+    rows = np.arange(n)[:, None]
+    keep = idx != rows
+    # A row whose own index did not come back has k_eff+1 keepers; drop its
+    # farthest so every row yields exactly k_eff.
+    surplus = keep.sum(axis=1) > k_eff
+    if np.any(surplus):
+        last_true = (keep.shape[1] - 1) - np.argmax(keep[:, ::-1], axis=1)
+        keep[surplus, last_true[surplus]] = False
+
+    selected = np.where(keep)
+    return (
+        dist[selected].reshape(n, k_eff),
+        idx[selected].reshape(n, k_eff),
+        k_eff,
+    )

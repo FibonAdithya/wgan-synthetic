@@ -109,3 +109,39 @@ def lid_mle(dist: np.ndarray) -> np.ndarray:
     r_k = dist[:, -1:]
     ratio = np.clip(dist / r_k, 1.0e-12, 1.0)
     return -1.0 / np.mean(np.log(ratio), axis=1)
+
+
+def relative_contrast(
+    x: np.ndarray,
+    dist: np.ndarray,
+    seed: int,
+    num_targets: int = 2000,
+) -> np.ndarray:
+    """Mean distance to a fixed target sample, divided by nearest distance.
+
+    The classic Indyk-Motwani hardness measure. A value near 1 means the
+    nearest neighbour is barely closer than an arbitrary point, so an index
+    has almost nothing to exploit.
+
+    One target sample is drawn per set and shared by every query, so the
+    numerator is measured against a fixed reference rather than a per-query
+    one. Apply survivor_mask to the result before summarising; rows whose
+    nearest distance is zero divide to infinity here.
+    """
+    n = x.shape[0]
+    rng = np.random.default_rng(seed)
+    targets = x[np.sort(rng.choice(n, size=min(num_targets, n), replace=False))]
+
+    # Expanded-square distances in chunks. The broadcast form would allocate
+    # chunk x targets x dim floats, which is gigabytes at these sizes.
+    target_sq = np.einsum("ij,ij->i", targets, targets)
+    mean_distance = np.empty(n, dtype=np.float64)
+    chunk = 2048
+    for start in range(0, n, chunk):
+        block = x[start : start + chunk]
+        block_sq = np.einsum("ij,ij->i", block, block)
+        d2 = block_sq[:, None] + target_sq[None, :] - 2.0 * (block @ targets.T)
+        mean_distance[start : start + chunk] = np.sqrt(np.maximum(d2, 0.0)).mean(axis=1)
+
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return mean_distance / dist[:, 0]

@@ -96,3 +96,35 @@ def test_lid_is_finite_for_every_surviving_query_when_duplicates_exist():
     values = lid_mle(dist[survivor_mask(dist)])
     assert values.size > 0
     assert np.all(np.isfinite(values))
+
+
+from src.eval.ann_difficulty import relative_contrast
+
+
+def test_relative_contrast_falls_as_dimension_rises():
+    # Distances concentrate in high dimensions, so the gap between the mean
+    # distance and the nearest distance shrinks and search gets harder.
+    rng = np.random.default_rng(3)
+    low = rng.normal(size=(3000, 2)).astype(np.float32)
+    high = rng.normal(size=(3000, 64)).astype(np.float32)
+    d_low, _, _ = knn(low, k=10)
+    d_high, _, _ = knn(high, k=10)
+    rc_low = float(np.median(relative_contrast(low, d_low, seed=0)))
+    rc_high = float(np.median(relative_contrast(high, d_high, seed=0)))
+    assert rc_high < rc_low
+
+
+def test_relative_contrast_is_deterministic_under_a_fixed_seed():
+    rng = np.random.default_rng(4)
+    x = rng.normal(size=(1000, 8)).astype(np.float32)
+    dist, _, _ = knn(x, k=10)
+    first = relative_contrast(x, dist, seed=7)
+    second = relative_contrast(x, dist, seed=7)
+    assert np.array_equal(first, second)
+
+
+def test_relative_contrast_returns_one_value_per_row():
+    rng = np.random.default_rng(5)
+    x = rng.normal(size=(500, 8)).astype(np.float32)
+    dist, _, _ = knn(x, k=10)
+    assert relative_contrast(x, dist, seed=0).shape == (500,)

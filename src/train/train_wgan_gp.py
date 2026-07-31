@@ -10,7 +10,7 @@ from typing import Dict, Tuple
 import numpy as np
 import torch
 import yaml
-from torch import Tensor
+from torch import Tensor, nn
 from torch.amp import GradScaler, autocast
 from torch.utils.data import DataLoader
 
@@ -20,7 +20,7 @@ from src.data.sift1m_dataset import (
     build_training_data,
 )
 from src.models.critic import Critic
-from src.models.generator import Generator
+from src.models.generator import build_generator
 
 
 def set_seed(seed: int) -> None:
@@ -69,10 +69,20 @@ def tensor_stats(real: np.ndarray, fake: np.ndarray) -> Dict[str, float]:
     fake_var = fake.var(axis=0)
     cov_real = np.cov(real, rowvar=False)
     cov_fake = np.cov(fake, rowvar=False)
+    real_zero = real == 0.0
+    fake_zero = fake == 0.0
+    real_nnz = (~real_zero).sum(axis=1)
+    fake_nnz = (~fake_zero).sum(axis=1)
     return {
         "mean_l2": float(np.linalg.norm(real_mean - fake_mean)),
         "var_l2": float(np.linalg.norm(real_var - fake_var)),
         "cov_fro": float(np.linalg.norm(cov_real - cov_fake, ord="fro")),
+        "zero_fraction_gap": float(abs(fake_zero.mean() - real_zero.mean())),
+        "negative_fraction": float((fake < 0).mean()),
+        "per_dim_zero_rate_l1": float(
+            np.abs(fake_zero.mean(axis=0) - real_zero.mean(axis=0)).mean()
+        ),
+        "nnz_std_gap": float(abs(fake_nnz.std() - real_nnz.std())),
     }
 
 
@@ -93,7 +103,7 @@ def batch_pairwise_distance_mean(x: Tensor, max_points: int = 128) -> Tensor:
 
 
 def save_checkpoint(
-    generator: Generator,
+    generator: nn.Module,
     critic: Critic,
     optim_g: torch.optim.Optimizer,
     optim_d: torch.optim.Optimizer,
@@ -115,7 +125,7 @@ def save_checkpoint(
 
 
 def sample_generator(
-    generator: Generator,
+    generator: nn.Module,
     num_samples: int,
     latent_dim: int,
     batch_size: int,
@@ -163,12 +173,7 @@ def train(config: Dict) -> Tuple[Path, Dict]:
     latent_dim = int(model_cfg["latent_dim"])
     descriptor_dim = int(data_cfg["descriptor_dim"])
 
-    generator = Generator(
-        latent_dim=latent_dim,
-        output_dim=descriptor_dim,
-        hidden_dims=model_cfg["generator_hidden_dims"],
-        negative_slope=float(model_cfg["negative_slope"]),
-    ).to(device)
+    generator = build_generator(model_cfg, output_dim=descriptor_dim).to(device)
     critic = Critic(
         input_dim=descriptor_dim,
         hidden_dims=model_cfg["critic_hidden_dims"],

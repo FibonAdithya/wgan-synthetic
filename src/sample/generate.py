@@ -8,7 +8,7 @@ import numpy as np
 import torch
 import yaml
 
-from src.models.generator import Generator
+from src.models.generator import build_generator
 
 
 def get_device(device_cfg: str) -> torch.device:
@@ -45,11 +45,8 @@ def main() -> None:
     model_cfg = config["model"]
     data_cfg = config["data"]
 
-    generator = Generator(
-        latent_dim=int(model_cfg["latent_dim"]),
-        output_dim=int(data_cfg["descriptor_dim"]),
-        hidden_dims=model_cfg["generator_hidden_dims"],
-        negative_slope=float(model_cfg["negative_slope"]),
+    generator = build_generator(
+        model_cfg, output_dim=int(data_cfg["descriptor_dim"])
     ).to(device)
     checkpoint = torch.load(Path(args.checkpoint), map_location=device)
     generator.load_state_dict(checkpoint["generator_state_dict"])

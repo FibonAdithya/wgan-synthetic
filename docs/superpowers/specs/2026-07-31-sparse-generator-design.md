@@ -349,8 +349,17 @@ Criterion 4 is the guard against trading one form of unrealism for another.
 ## Open items
 
 - Branch base: this worktree is on `4a373c2`. PR #1
-  (`experiment/wgan-improvements`, EMA / distance-reg / collapse-monitor) is still
-  open, so the trainer here lacks those changes and all `train_wgan_gp.py` line
-  references above are to the `4a373c2` version. Rebase once PR #1 merges.
+  (`experiment/wgan-improvements`) is still open. Verified against the code at
+  `4a373c2`: `distance_reg_alpha` and the `num_workers` config key are already
+  present; what the PR adds and this worktree lacks is **generator EMA and the
+  collapse monitor** (`ema_decay`, `collapse_stats`, `fake_std` are all absent).
+  All `train_wgan_gp.py` line references above are to the `4a373c2` version and
+  will shift. Rebase once PR #1 merges.
+- Best-checkpoint selection is deliberately left on `cov_fro`
+  (`train_wgan_gp.py:309`), unchanged, so sparse runs stay comparable with existing
+  ones. Note the consequence: selection ignores the new support metrics, so
+  `best_generator.pt` could in principle be a checkpoint with good covariance and
+  poor sparsity. The new metrics are recorded in `run_metadata.json` per eval, so
+  this is visible after the fact. Revisit only if it actually occurs.
 - Real-data `nnz` standard deviation is unmeasured — `data/sift_base.npy` is not
   present in this checkout. Measure before interpreting `nnz_std_gap`.

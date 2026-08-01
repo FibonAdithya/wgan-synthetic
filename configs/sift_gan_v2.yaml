@@ -1,7 +1,8 @@
 # Variant v2 -- v1_5 plus the gated non-negative generator, which
 # reproduces SIFT's exact-zero support that a dense MLP cannot. Sole delta
 # from v1_5: model.generator_type and its two gate hyperparameters.
-# Matches runs/x100k_sparse_clamp4.
+# Matches runs/x100k_sparse_clamp4's settings at 30k steps; that run itself
+# used num_gen_steps: 100000 and log_every/eval_every/save_every: 500/2000/5000.
 seed: 42
 device: auto
 output_dir: runs/sift_gan_v2
@@ -25,7 +26,7 @@ model:
   negative_slope: 0.2
   generator_type: gated
   gate_temperature: 0.5
-  logit_clamp: 10.0
+  logit_clamp: 4.0
 
 training:
   batch_size: 512

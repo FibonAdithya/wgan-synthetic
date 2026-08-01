@@ -64,6 +64,10 @@ def gradient_penalty(critic: Critic, real: Tensor, fake: Tensor, device: torch.d
 
 
 def tensor_stats(real: np.ndarray, fake: np.ndarray) -> Dict[str, float]:
+    # zero_fraction_gap, negative_fraction, per_dim_zero_rate_l1, and
+    # nnz_std_gap exist because raw SIFT descriptors carry heavy mass at
+    # exactly zero, which a dense MLP generator cannot reproduce and the
+    # critic does not reliably penalize -- these measure that support gap.
     real_mean = real.mean(axis=0)
     fake_mean = fake.mean(axis=0)
     real_var = real.var(axis=0)

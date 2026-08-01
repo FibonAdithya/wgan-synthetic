@@ -136,6 +136,33 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def build_report_args(args: argparse.Namespace, specs: List[str]) -> argparse.Namespace:
+    """Build the Namespace `eda_report.run` expects from our own parsed args.
+
+    Field-for-field parity with `eda_report.parse_args` is load-bearing: if
+    `eda_report` gains a required argument and this Namespace is not updated
+    to match, sampling hundreds of thousands of vectors will succeed before
+    the mismatch surfaces as a runtime `AttributeError`. See
+    `tests/test_compare_variants.py::test_report_args_match_eda_report_fields`.
+    """
+    return argparse.Namespace(
+        real_path=args.real_path,
+        real_format=args.real_format,
+        synthetic_path=specs,
+        synthetic_format="npy",
+        output_dir=args.output_dir,
+        preprocess="l2",
+        max_vectors=args.max_vectors,
+        num_pairs=args.num_pairs,
+        knn=args.knn,
+        bins=args.bins,
+        top_divergent=args.top_divergent,
+        seed=args.seed,
+        no_png=args.no_png,
+        plotlyjs=args.plotlyjs,
+    )
+
+
 def main() -> None:
     args = parse_args()
     root = Path(args.root)
@@ -161,22 +188,7 @@ def main() -> None:
         )
         specs.append(f"{variant.name}={path}")
 
-    report_args = argparse.Namespace(
-        real_path=args.real_path,
-        real_format=args.real_format,
-        synthetic_path=specs,
-        synthetic_format="npy",
-        output_dir=args.output_dir,
-        preprocess="l2",
-        max_vectors=args.max_vectors,
-        num_pairs=args.num_pairs,
-        knn=args.knn,
-        bins=args.bins,
-        top_divergent=args.top_divergent,
-        seed=args.seed,
-        no_png=args.no_png,
-        plotlyjs=args.plotlyjs,
-    )
+    report_args = build_report_args(args, specs)
     report_path = eda_report.run(report_args)
     print(f"report: {report_path}")
 

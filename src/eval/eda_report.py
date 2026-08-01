@@ -587,8 +587,7 @@ def load_series(args: argparse.Namespace) -> List[Series]:
     return series
 
 
-def main() -> None:
-    args = parse_args()
+def run(args: argparse.Namespace) -> Path:
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -749,6 +748,12 @@ def main() -> None:
     elif png_error:
         print(f"PNG export skipped: {png_error}")
     print(f"Wrote {out_dir / 'summary.json'}")
+
+    return report_path
+
+
+def main() -> None:
+    run(parse_args())
 
 
 if __name__ == "__main__":

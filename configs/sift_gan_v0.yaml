@@ -1,6 +1,6 @@
 # Variant v0 -- plain WGAN-GP. The baseline every other variant is one
-# delta from. Matches runs/long_baseline and runs/bench_baseline; there is
-# no x100k run of this variant.
+# delta from. Matches runs/long_baseline; runs/bench_baseline is the same
+# config at 3k steps; there is no x100k run of this variant.
 seed: 42
 device: auto
 output_dir: runs/sift_gan_v0

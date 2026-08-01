@@ -1,7 +1,7 @@
 # Variant v1_5 -- v1 plus the pairwise-distance regularizer. Sole delta
 # from v1: training.distance_reg_alpha (and the point budget it needs).
-# Matches runs/long_improved and runs/bench_improved; runs/x100k_improved is
-# the same config at 100k steps.
+# Matches runs/long_improved; runs/bench_improved is the same config at 3k
+# steps; runs/x100k_improved is the same config at 100k steps.
 seed: 42
 device: auto
 output_dir: runs/sift_gan_v1_5

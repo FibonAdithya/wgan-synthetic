@@ -76,6 +76,47 @@ No sigmoid on critic output.
 
 ---
 
+## Model variants
+
+Four variants were trained. Each is exactly one config change from the one
+above it, so a difference visible in an EDA overlay attributes to a single
+cause.
+
+| Variant | Delta from previous | Config | Runs |
+|---|---|---|---|
+| `v0` | plain WGAN-GP | `configs/sift_gan_v0.yaml` | `long_baseline`, `bench_baseline` |
+| `v1` | + generator EMA (`ema_decay: 0.999`) | `configs/sift_gan_v1.yaml` | `long_ema_only`, `x100k_ema_only` |
+| `v1_5` | + distance reg (`distance_reg_alpha: 0.1`, 256 points) | `configs/sift_gan_v1_5.yaml` | `long_improved`, `x100k_improved`, `bench_improved` |
+| `v2` | + gated generator (`generator_type: gated`) | `configs/sift_gan_v2.yaml` | `x100k_sparse_clamp4` |
+
+Run length is an independent axis and is not a variant: `bench_*` are 3k
+generator steps, `long_*` are 30k, `x100k_*` are 100k. The run directory
+names predate this scheme and are kept as-is because the artifacts under
+them are already named that way.
+
+### Why v2 exists
+
+Raw SIFT descriptors carry heavy mass at exactly zero. A dense MLP generator
+cannot reproduce that support — it emits smooth values everywhere — and the
+critic does not reliably penalize it, so Wasserstein estimates look
+flattering while the marginals are plainly wrong. v2's generator multiplies a
+softplus magnitude by a sampled binary gate, producing exact zeros. See
+`src/models/generator.py` (`GatedGenerator`).
+
+### `generator_type`
+
+The architecture axis in the `model` config block, accepting `mlp` (default)
+and `gated`. It sits underneath the variant numbering: v0, v1 and v1_5 all
+use `mlp` and differ only in training settings.
+
+Checkpoints do not record `generator_type` — the architecture is rebuilt from
+the run config at load time. A checkpoint is therefore only loadable
+alongside the `run_config.yaml` written next to it. Checkpoints do record
+`generator_weights` (`"live"` or `"ema"`), which says which weights the file
+holds, not which architecture produced them.
+
+---
+
 ## Optimizer and training setup
 
 Default (current promoted config):
@@ -216,12 +257,25 @@ Memory-safe note:
     sets. A weak critic yields flattering Wasserstein estimates over samples
     whose marginals are plainly wrong -- most visibly SIFT's heavy exact-zero
     mass, which smooth generators do not reproduce.
+  - `src/eval/compare_variants.py` drives this across all four variants at
+    once, labelling the overlays `v0`/`v1`/`v1_5`/`v2` to match the variant
+    table. It resolves each variant's `best_generator.pt` and
+    `run_config.yaml`, samples the generator, and calls the report in
+    process. Variants whose checkpoints are not on the local machine are
+    skipped with a message, so a partial comparison still produces a report.
 
 ```bash
 .venv/bin/python -m src.eval.eda_report \
   --real-path data/sift_base.npy \
   --synthetic-path runs/bench_improved/synthetic_1m.npy \
   --output-dir runs/bench_improved/eda
+```
+
+```bash
+.venv/bin/python -m src.eval.compare_variants \
+  --real-path data/sift_base.npy \
+  --output-dir runs/eda_variants \
+  --num-samples 100000
 ```
 
 PNG export uses kaleido, which drives a headless Chrome. Without a Chrome

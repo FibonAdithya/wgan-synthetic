@@ -1,3 +1,7 @@
+> **AI-generated working note.** Written by Claude during development and kept
+> for provenance. It is not the source of truth: where this file disagrees with
+> `PROJECT_DOCUMENTATION.md`, the latter wins.
+
 # ANN Difficulty Panels Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

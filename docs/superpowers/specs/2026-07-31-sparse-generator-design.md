@@ -1,3 +1,7 @@
+> **AI-generated working note.** Written by Claude during development and kept
+> for provenance. It is not the source of truth: where this file disagrees with
+> `PROJECT_DOCUMENTATION.md`, the latter wins.
+
 # Sparse Generator Design
 
 **Date:** 2026-07-31

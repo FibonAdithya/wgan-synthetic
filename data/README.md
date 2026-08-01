@@ -24,3 +24,21 @@ This contract is implemented in `src/data/sift1m_dataset.py` and saved into trai
 ## Smoke mode
 
 If no dataset path is supplied, training script can generate synthetic unit-norm vectors for sanity checks (`data.synthetic_if_missing: true` in config).
+
+## What the variant comparison expects
+
+`python -m src.eval.compare_variants` reads, for each variant, a run
+directory containing both:
+
+- `best_generator.pt` — the checkpoint.
+- `run_config.yaml` — written by the training script. Required, because the
+  generator architecture is rebuilt from it; the checkpoint alone is not
+  enough to reconstruct the model.
+
+The directories it looks in are listed in the variant table in
+`PROJECT_DOCUMENTATION.md`. Pass `--root` to point at a different tree.
+Variants missing either file are skipped with a message rather than failing
+the run, since checkpoints commonly live only on the training box.
+
+Samples are written to `<output-dir>/samples/<variant>.npy` and reused as the
+report's input, so they can be inspected independently.

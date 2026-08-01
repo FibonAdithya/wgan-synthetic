@@ -49,7 +49,7 @@ def make_config(tmp_path, generator_type):
     return cfg
 
 
-@pytest.mark.parametrize("generator_type", ["mlp", "sparse"])
+@pytest.mark.parametrize("generator_type", ["mlp", "gated"])
 def test_training_loop_runs(tmp_path, generator_type):
     ckpt_path, meta = train(make_config(tmp_path, generator_type))
     assert ckpt_path.exists()
@@ -59,8 +59,8 @@ def test_training_loop_runs(tmp_path, generator_type):
         assert math.isfinite(entry["d_loss"])
 
 
-def test_sparse_eval_reports_zero_negatives(tmp_path):
-    _, meta = train(make_config(tmp_path, "sparse"))
+def test_gated_eval_reports_zero_negatives(tmp_path):
+    _, meta = train(make_config(tmp_path, "gated"))
     assert meta["eval"]
     assert all(entry["negative_fraction"] == 0.0 for entry in meta["eval"])
 

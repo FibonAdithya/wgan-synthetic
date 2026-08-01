@@ -342,7 +342,7 @@ def test_ema_decay_of_one_is_rejected(tmp_path):
     from src.train.train_wgan_gp import train
     from tests.test_train_smoke import make_config
 
-    config = make_config(tmp_path, "sparse")
+    config = make_config(tmp_path, "gated")
     config["training"]["ema_decay"] = 1.0
     with pytest.raises(ValueError, match="ema_decay"):
         train(config)

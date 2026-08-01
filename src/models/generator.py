@@ -28,7 +28,7 @@ class Generator(nn.Module):
         return self.net(z)
 
 
-class SparseGenerator(nn.Module):
+class GatedGenerator(nn.Module):
     """Generate non-negative unit vectors with a learnable point mass at zero."""
 
     def __init__(
@@ -46,7 +46,7 @@ class SparseGenerator(nn.Module):
         if latent_dim <= 0 or output_dim <= 0 or any(dim <= 0 for dim in hidden_dims):
             raise ValueError("model dimensions must be greater than zero")
         if not hidden_dims:
-            raise ValueError("SparseGenerator requires at least one hidden dimension")
+            raise ValueError("GatedGenerator requires at least one hidden dimension")
         if negative_slope < 0:
             raise ValueError("negative_slope must not be negative")
         if gate_temperature <= 0:
@@ -130,8 +130,8 @@ def build_generator(model_cfg: Mapping[str, Any], output_dim: int) -> nn.Module:
     }
     if kind == "mlp":
         return Generator(**common)
-    if kind == "sparse":
-        return SparseGenerator(
+    if kind == "gated":
+        return GatedGenerator(
             **common,
             gate_temperature=float(model_cfg.get("gate_temperature", 0.5)),
             logit_clamp=float(model_cfg.get("logit_clamp", 10.0)),

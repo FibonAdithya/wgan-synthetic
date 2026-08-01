@@ -20,7 +20,7 @@ model:
   generator_hidden_dims: [512, 1024, 1024]
   critic_hidden_dims: [1024, 512, 256]
   negative_slope: 0.2
-  generator_type: sparse
+  generator_type: gated
   gate_temperature: 0.5
   logit_clamp: 10.0
 

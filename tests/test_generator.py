@@ -2,7 +2,7 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from src.models.generator import Generator, SparseGenerator
+from src.models.generator import Generator, GatedGenerator
 
 LATENT = 16
 OUTPUT = 128
@@ -12,7 +12,7 @@ HIDDEN = [32, 32]
 def build(**overrides):
     kwargs = dict(latent_dim=LATENT, output_dim=OUTPUT, hidden_dims=HIDDEN)
     kwargs.update(overrides)
-    return SparseGenerator(**kwargs)
+    return GatedGenerator(**kwargs)
 
 
 @pytest.fixture
@@ -49,7 +49,7 @@ def test_no_all_zero_row(out):
 
 
 def test_single_output_cannot_become_all_zero():
-    generator = SparseGenerator(latent_dim=2, output_dim=1, hidden_dims=[2])
+    generator = GatedGenerator(latent_dim=2, output_dim=1, hidden_dims=[2])
     with torch.no_grad():
         generator.gate_head.weight.zero_()
         generator.gate_head.bias.fill_(-100.0)
@@ -122,7 +122,7 @@ def test_existing_generator_is_unchanged():
         ({"negative_slope": -0.1}, "negative_slope"),
     ],
 )
-def test_invalid_sparse_configuration_fails_early(kwargs, message):
+def test_invalid_gated_configuration_fails_early(kwargs, message):
     with pytest.raises(ValueError, match=message):
         build(**kwargs)
 

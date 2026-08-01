@@ -3,7 +3,7 @@ from pathlib import Path
 import torch
 
 from src.eval.evaluate_distribution import load_generator
-from src.models.generator import SparseGenerator, build_generator
+from src.models.generator import GatedGenerator, build_generator
 
 
 def test_load_generator_uses_configured_generator_factory(tmp_path: Path):
@@ -13,7 +13,7 @@ def test_load_generator_uses_configured_generator_factory(tmp_path: Path):
             "latent_dim": 4,
             "generator_hidden_dims": [6],
             "negative_slope": 0.2,
-            "generator_type": "sparse",
+            "generator_type": "gated",
             "gate_temperature": 0.25,
             "logit_clamp": 4.0,
         },
@@ -24,7 +24,7 @@ def test_load_generator_uses_configured_generator_factory(tmp_path: Path):
 
     loaded = load_generator(config, checkpoint_path, torch.device("cpu"))
 
-    assert isinstance(loaded, SparseGenerator)
+    assert isinstance(loaded, GatedGenerator)
     assert loaded.gate_temperature == 0.25
     assert loaded.logit_clamp == 4.0
     assert not loaded.training

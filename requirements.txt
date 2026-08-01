@@ -3,11 +3,12 @@ torch
 pyyaml
 tqdm
 scikit-learn
+scipy
 plotly
 # Static PNG export in src/eval/eda_report.py. Kaleido v1 drives a headless
 # Chrome; run `plotly_get_chrome` once if no browser is installed. The HTML
 # report is produced without it -- pass --no-png to skip export entirely.
 kaleido
-# Test suite for src/eval/ann_difficulty.py. Run from the repo root:
+# Test suite. Run from the repo root:
 #   python3 -m pytest
 pytest

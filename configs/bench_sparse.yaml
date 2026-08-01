@@ -1,0 +1,42 @@
+# Sparse-generator arm, otherwise aligned with the improved 100k benchmark.
+seed: 42
+device: auto
+output_dir: runs/x100k_sparse
+
+data:
+  real_path: data/sift_base.npy
+  format: npy
+  descriptor_dim: 128
+  holdout_fraction: 0.05
+  synthetic_if_missing: false
+  synthetic_num_vectors: 100000
+  preprocess:
+    center: false
+    whiten: false
+    l2_normalize: true
+
+model:
+  latent_dim: 128
+  generator_hidden_dims: [512, 1024, 1024]
+  critic_hidden_dims: [1024, 512, 256]
+  negative_slope: 0.2
+  generator_type: sparse
+  gate_temperature: 0.5
+  logit_clamp: 10.0
+
+training:
+  batch_size: 512
+  num_gen_steps: 100000
+  n_critic: 3
+  lr_g: 1.0e-4
+  lr_d: 1.0e-4
+  betas: [0.0, 0.9]
+  lambda_gp: 5.0
+  ema_decay: 0.999
+  num_workers: 0
+  distance_reg_alpha: 0.1
+  distance_reg_max_points: 256
+  amp: false
+  log_every: 500
+  eval_every: 2000
+  save_every: 5000

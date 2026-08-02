@@ -94,6 +94,15 @@ generator steps, `long_*` are 30k, `x100k_*` are 100k. The run directory
 names predate this scheme and are kept as-is because the artifacts under
 them are already named that way.
 
+The four `sift_gan_*` configs above are the variant definitions, all at 30k
+steps. Two further configs are run-length or ablation arms of them, not
+variants of their own:
+
+| Config | What it is |
+|---|---|
+| `configs/x100k_gated.yaml` | v2 at 100k steps with `logit_clamp: 10.0`, the value the design called for. Untrained — the v2 run that exists (`x100k_sparse_clamp4`) used 4.0, which is what `sift_gan_v2.yaml` reproduces. Kept so the clamp comparison can be run. |
+| `configs/wgan_gp_sift1m_smoke_improved.yaml` | 200-step smoke test on synthetic data (`synthetic_if_missing: true`), with EMA, the distance regularizer, `num_workers` and the collapse monitor all switched on, so the new training-loop paths get exercised without the dataset. Small model, unrelated hyperparameters to the variants above — not a variant and not for evaluation. Output lands in `runs/wgan_sift1m_smoke_improved`. |
+
 ### Why v2 exists
 
 Raw SIFT descriptors carry heavy mass at exactly zero. A dense MLP generator
@@ -263,6 +272,11 @@ Memory-safe note:
     `run_config.yaml`, samples the generator, and calls the report in
     process. Variants whose checkpoints are not on the local machine are
     skipped with a message, so a partial comparison still produces a report.
+    Each variant's latents are seeded from `--seed` and its own name, so a
+    variant's samples do not change depending on which other variants were
+    present. `--num-samples` defaults to `--max-vectors`, since the report
+    subsamples to that; raise it only to keep a larger `.npy` under
+    `<output-dir>/samples`.
 
 ```bash
 .venv/bin/python -m src.eval.eda_report \
@@ -274,8 +288,7 @@ Memory-safe note:
 ```bash
 .venv/bin/python -m src.eval.compare_variants \
   --real-path data/sift_base.npy \
-  --output-dir runs/eda_variants \
-  --num-samples 100000
+  --output-dir runs/eda_variants
 ```
 
 PNG export uses kaleido, which drives a headless Chrome. Without a Chrome

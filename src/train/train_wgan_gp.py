@@ -275,6 +275,10 @@ def sample_generator(
     batch_size: int,
     device: torch.device,
 ) -> np.ndarray:
+    # Restore the mode we found rather than forcing train(): callers outside
+    # the training loop (evaluate_distribution, compare_variants) hand us an
+    # eval()-mode generator and would otherwise get it back in train mode.
+    was_training = generator.training
     generator.eval()
     out = []
     generated = 0
@@ -288,7 +292,7 @@ def sample_generator(
             x = normalize_l2(generator(z)).detach().cpu().numpy()
             out.append(x)
             generated += cur
-    generator.train()
+    generator.train(was_training)
     return np.concatenate(out, axis=0)[:num_samples]
 
 

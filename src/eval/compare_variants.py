@@ -19,6 +19,7 @@ Example:
 from __future__ import annotations
 
 import argparse
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Sequence, Tuple
@@ -81,14 +82,34 @@ def resolve_variants(
     return found, skipped
 
 
+def variant_seed(base_seed: int, name: str) -> int:
+    """Derive a per-variant seed that does not depend on run order.
+
+    A single seed set before the sampling loop would leave each variant's
+    latents dependent on how many variants preceded it -- and variants get
+    skipped whenever their checkpoint is not on this machine, so v2's samples
+    would differ between a machine holding all four checkpoints and one
+    holding only v2. Keying off the variant name instead makes a variant's
+    samples reproducible from `--seed` alone.
+    """
+    digest = hashlib.sha256(name.encode("utf-8")).digest()
+    return (base_seed + int.from_bytes(digest[:4], "big")) % (2**31)
+
+
 def generate_samples(
-    variant: Variant, root: Path, num_samples: int, batch_size: int, out_dir: Path
+    variant: Variant,
+    root: Path,
+    num_samples: int,
+    batch_size: int,
+    out_dir: Path,
+    seed: int,
 ) -> Path:
     """Sample a variant's best checkpoint to an .npy file, and return its path."""
     run_dir = root / variant.run_dir
     config = yaml.safe_load((run_dir / RUN_CONFIG_NAME).read_text(encoding="utf-8"))
     device = get_device(config["device"])
     generator = load_generator(config, run_dir / CHECKPOINT_NAME, device)
+    torch.manual_seed(variant_seed(seed, variant.name))
     x = sample_generator(
         generator,
         num_samples=num_samples,
@@ -119,8 +140,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--num-samples",
         type=int,
-        default=100000,
-        help="Vectors to draw from each variant.",
+        default=None,
+        help=(
+            "Vectors to draw from each variant. Defaults to --max-vectors, since "
+            "the report subsamples to that anyway and anything beyond it is "
+            "generated and then discarded. Raise it only to keep a larger .npy "
+            "under <output-dir>/samples for separate use."
+        ),
     )
     parser.add_argument("--batch-size", type=int, default=4096)
     parser.add_argument("--max-vectors", type=int, default=50000)
@@ -165,11 +191,11 @@ def build_report_args(args: argparse.Namespace, specs: List[str]) -> argparse.Na
 
 def main() -> None:
     args = parse_args()
+    num_samples = args.num_samples if args.num_samples is not None else args.max_vectors
     root = Path(args.root)
     out_dir = Path(args.output_dir)
-    samples_dir = out_dir / "samples"
-    samples_dir.mkdir(parents=True, exist_ok=True)
 
+    # Resolve before creating anything, so an aborted run leaves no empty tree.
     found, skipped = resolve_variants(VARIANTS, root)
     for variant, reason in skipped:
         print(f"skipping {variant.name}: {reason}")
@@ -179,12 +205,19 @@ def main() -> None:
             "Copy them from the training box, or pass --root at the tree holding them."
         )
 
-    torch.manual_seed(args.seed)
+    samples_dir = out_dir / "samples"
+    samples_dir.mkdir(parents=True, exist_ok=True)
+
     specs = []
     for variant in found:
         print(f"sampling {variant.name} from {variant.run_dir}")
         path = generate_samples(
-            variant, root, args.num_samples, args.batch_size, samples_dir
+            variant,
+            root,
+            num_samples,
+            args.batch_size,
+            samples_dir,
+            seed=args.seed,
         )
         specs.append(f"{variant.name}={path}")
 

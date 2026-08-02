@@ -1,7 +1,12 @@
-# Gated-generator arm, otherwise aligned with the improved 100k benchmark.
+# Variant v2 at 100k steps with logit_clamp: 10.0 -- the clamp the design
+# called for. Not the trained v2: runs/x100k_sparse_clamp4 used 4.0, and
+# configs/sift_gan_v2.yaml reproduces that run. This config is the untrained
+# arm, kept so the clamp comparison can be run. The only deltas from
+# sift_gan_v2.yaml are logit_clamp, num_gen_steps, and the logging cadence
+# that goes with a 100k run.
 seed: 42
 device: auto
-output_dir: runs/x100k_sparse
+output_dir: runs/x100k_gated
 
 data:
   real_path: data/sift_base.npy

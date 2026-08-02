@@ -83,15 +83,8 @@ def test_resolve_finds_everything_when_present(tmp_path):
     assert skipped == []
 
 
-def test_generate_samples_round_trips_a_real_gated_checkpoint(tmp_path):
-    """Exercise the full generate_samples seam end to end.
-
-    This is the only test in the branch that proves a checkpoint written by
-    the real `save_checkpoint` (as `train_wgan_gp.train` writes them) can be
-    loaded back by `generate_samples` and sampled -- and, since it uses a
-    gated generator, that the sparse->gated rename did not break checkpoint
-    loadability.
-    """
+def _write_tiny_gated_run(tmp_path, name="tiny_gated"):
+    """Write a real save_checkpoint + run_config pair for a tiny gated model."""
     model_cfg = {
         "latent_dim": 4,
         "generator_hidden_dims": [6],
@@ -107,7 +100,7 @@ def test_generate_samples_round_trips_a_real_gated_checkpoint(tmp_path):
     optim_g = torch.optim.Adam(generator.parameters(), lr=1e-4)
     optim_d = torch.optim.Adam(critic.parameters(), lr=1e-4)
 
-    run_dir = tmp_path / "runs" / "tiny_gated"
+    run_dir = tmp_path / "runs" / name
     save_checkpoint(
         generator,
         critic,
@@ -126,13 +119,31 @@ def test_generate_samples_round_trips_a_real_gated_checkpoint(tmp_path):
     }
     (run_dir / "run_config.yaml").write_text(yaml.safe_dump(run_config))
 
-    variant = cv.Variant("tiny", "configs/sift_gan_v2.yaml", "runs/tiny_gated")
+    variant = cv.Variant(name, "configs/sift_gan_v2.yaml", f"runs/{name}")
+    return variant, descriptor_dim
+
+
+def test_generate_samples_round_trips_a_real_gated_checkpoint(tmp_path):
+    """Exercise the full generate_samples seam end to end.
+
+    This is the only test in the branch that proves a checkpoint written by
+    the real `save_checkpoint` (as `train_wgan_gp.train` writes them) can be
+    loaded back by `generate_samples` and sampled -- and, since it uses a
+    gated generator, that the sparse->gated rename did not break checkpoint
+    loadability.
+    """
+    variant, descriptor_dim = _write_tiny_gated_run(tmp_path)
     out_dir = tmp_path / "samples"
     out_dir.mkdir()
 
     num_samples = 20
     path = cv.generate_samples(
-        variant, root=tmp_path, num_samples=num_samples, batch_size=8, out_dir=out_dir
+        variant,
+        root=tmp_path,
+        num_samples=num_samples,
+        batch_size=8,
+        out_dir=out_dir,
+        seed=42,
     )
 
     assert path.exists()
@@ -142,6 +153,45 @@ def test_generate_samples_round_trips_a_real_gated_checkpoint(tmp_path):
     norms = (x ** 2).sum(axis=1) ** 0.5
     assert (abs(norms - 1.0) < 1e-4).all(), "gated generator output must be unit-norm"
     assert (x == 0.0).any(), "gated generator should produce exact zeros"
+
+
+def test_variant_seed_differs_per_variant_and_is_stable():
+    seeds = {v: cv.variant_seed(42, v) for v in ("v0", "v1", "v1_5", "v2")}
+    assert len(set(seeds.values())) == 4, "each variant must get its own latents"
+    assert cv.variant_seed(42, "v2") == seeds["v2"], "seeding must be deterministic"
+    assert cv.variant_seed(7, "v2") != seeds["v2"], "--seed must still move it"
+
+
+def test_generate_samples_does_not_depend_on_preceding_variants(tmp_path):
+    """A skipped variant must not change the samples of the ones that survive.
+
+    Variants are skipped whenever their checkpoint is not on this machine, so
+    a single seed for the whole loop would make v2's samples depend on how
+    many earlier checkpoints happened to be present.
+    """
+    variant, _ = _write_tiny_gated_run(tmp_path)
+    out_dir = tmp_path / "samples"
+    out_dir.mkdir()
+
+    def draw(sub_dir):
+        sub_dir.mkdir()
+        return np.load(
+            cv.generate_samples(
+                variant,
+                root=tmp_path,
+                num_samples=20,
+                batch_size=8,
+                out_dir=sub_dir,
+                seed=42,
+            )
+        )
+
+    first = draw(out_dir / "a")
+    # Stand in for the RNG an earlier variant would have consumed.
+    torch.randn(1000)
+    second = draw(out_dir / "b")
+
+    np.testing.assert_array_equal(first, second)
 
 
 def test_report_args_match_eda_report_fields(monkeypatch, tmp_path):

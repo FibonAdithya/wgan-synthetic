@@ -29,7 +29,16 @@ class Generator(nn.Module):
 
 
 class GatedGenerator(nn.Module):
-    """Generate non-negative unit vectors with a learnable point mass at zero."""
+    """Generate non-negative unit vectors with a learnable point mass at zero.
+
+    The gate is sampled in `eval()` mode too: `eval()` does not switch to a
+    deterministic threshold, so two forward passes on the same `z` give
+    different supports. That is intentional -- the gate noise is part of the
+    generative distribution, not a training-time regularizer like dropout, and
+    thresholding at inference would sample from a different distribution than
+    the critic was trained against. Callers needing reproducible output should
+    seed the global RNG (`torch.manual_seed`) rather than rely on `eval()`.
+    """
 
     def __init__(
         self,

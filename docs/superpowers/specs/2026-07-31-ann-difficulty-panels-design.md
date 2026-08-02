@@ -2,6 +2,11 @@
 > for provenance. It is not the source of truth: where this file disagrees with
 > `PROJECT_DOCUMENTATION.md`, the latter wins.
 
+> **Status: not implemented.** No part of this ships yet. Tasks 1-5 were
+> written and then removed before merge to keep that PR to the variant
+> naming work; the metrics land in a follow-up PR that implements this
+> plan end to end, panels included.
+
 # ANN difficulty panels for the SIFT EDA report
 
 Date: 2026-07-31

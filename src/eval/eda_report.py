@@ -579,7 +579,12 @@ def effective_rank(x: np.ndarray) -> float:
 
 
 def summary_stats(
-    s: Series, knn: int, num_pairs: int, seed: int, max_rows: int, metrics
+    s: Series,
+    knn: int,
+    num_pairs: int,
+    seed: int,
+    max_rows: int,
+    metrics: ann_difficulty.AnnMetrics,
 ) -> Dict:
     norms = np.linalg.norm(s.x, axis=1)
     stats = {
@@ -606,6 +611,15 @@ def summary_stats(
         "effective_rank": effective_rank(s.x),
     }
     stats.update(ann_difficulty.summary(metrics))
+    # Actual (post-clamp) measurement conditions, not the requested ones: a
+    # series with fewer rows than --ann-max-rows gets its k and nlist clamped
+    # inside knn()/cell_occupancy(), and its num_vectors above is the
+    # PRE-truncation count. Without these, nothing records what a series was
+    # actually measured under, and the report's section notes cannot tell a
+    # reader when conditions diverge across series.
+    stats["ann_measured_rows"] = metrics.num_rows
+    stats["ann_measured_k"] = metrics.k
+    stats["ann_measured_nlist"] = metrics.nlist
     return stats
 
 
@@ -716,6 +730,41 @@ def load_series(args: argparse.Namespace) -> List[Series]:
     return series
 
 
+def ann_condition_note(
+    series: Sequence[Series],
+    ann_metrics: Dict[str, "ann_difficulty.AnnMetrics"],
+    attrs: Tuple[Tuple[str, str], ...],
+) -> str:
+    """State the actual per-series ANN measurement conditions for `attrs`.
+
+    `attrs` is a sequence of (AnnMetrics field name, display label) pairs,
+    e.g. (("num_rows", "rows"), ("k", "k")). When every series in this run
+    was measured under the same conditions, one summary sentence is enough.
+    When they differ -- e.g. a series with fewer rows than --ann-max-rows
+    gets num_rows, k or nlist clamped -- a reader must not be able to mistake
+    one series' numbers for all of them, so each series' actual values are
+    spelled out instead.
+    """
+    per_series = {
+        s.name: tuple(getattr(ann_metrics[s.name], field) for field, _ in attrs)
+        for s in series
+    }
+    if len(set(per_series.values())) == 1:
+        values = next(iter(per_series.values()))
+        parts = ", ".join(f"{label}={v}" for (_, label), v in zip(attrs, values))
+        return f" Measured with {parts} for every series."
+    per_series_text = "; ".join(
+        f"{name} ("
+        + ", ".join(f"{label}={v}" for (_, label), v in zip(attrs, values))
+        + ")"
+        for name, values in per_series.items()
+    )
+    return (
+        " Measurement conditions differ across series (a series with fewer "
+        f"rows than requested has k and/or nlist clamped): {per_series_text}."
+    )
+
+
 def run(args: argparse.Namespace) -> Path:
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -747,7 +796,6 @@ def run(args: argparse.Namespace) -> Path:
         "These numbers come from a self-queried subsample, so they are not "
         "comparable with published SIFT1M figures."
     )
-    first_metrics = ann_metrics[series[0].name]
     sections.append(
         (
             "Local intrinsic dimensionality",
@@ -758,7 +806,7 @@ def run(args: argparse.Namespace) -> Path:
             "and it overstates it. Relative contrast sits alongside: values "
             "near 1 mean the nearest neighbour is barely closer than an "
             "arbitrary point, leaving an index little to exploit."
-            f" Measured on {first_metrics.num_rows} rows at k={first_metrics.k}."
+            + ann_condition_note(series, ann_metrics, (("num_rows", "rows"), ("k", "k")))
             + ann_note_suffix,
             fig_ann_profile(series, ann_metrics, args.bins),
         )
@@ -770,7 +818,9 @@ def run(args: argparse.Namespace) -> Path:
             "long right tail means a few hubs dominate, which is what stalls "
             "graph indexes like HNSW. A generator gets no direct training "
             "pressure to reproduce this, so matching it is genuine evidence "
-            "rather than a fitted artefact." + ann_note_suffix,
+            "rather than a fitted artefact."
+            + ann_condition_note(series, ann_metrics, (("num_rows", "rows"),))
+            + ann_note_suffix,
             overlay_hist_fig(
                 [
                     (s.name, ann_metrics[s.name].k_occurrence.astype(np.float64), s.color)
@@ -789,7 +839,8 @@ def run(args: argparse.Namespace) -> Path:
             "How evenly k-means would partition each set, which drives how many "
             "cells an IVF query has to probe. Each set is clustered on its own, "
             "because an index would be built on whichever set you shipped."
-            f" nlist={first_metrics.nlist}." + ann_note_suffix,
+            + ann_condition_note(series, ann_metrics, (("nlist", "nlist"),))
+            + ann_note_suffix,
             fig_ivf_balance(series, ann_metrics),
         )
     )

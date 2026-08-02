@@ -89,6 +89,39 @@ def test_survivor_mask_rejects_queries_with_a_zero_nearest_distance():
     assert survivor_mask(dist).tolist() == [False, True, False]
 
 
+def test_survivor_mask_rejects_queries_whose_k_neighbours_all_tie():
+    # Row 0: every neighbour distance is identical (r_1 == r_k), which would
+    # send lid_mle's ratio to 1.0 everywhere and its estimate to -inf. Row 1
+    # has a genuine spread and should survive.
+    dist = np.array([[1.0, 1.0, 1.0], [0.5, 0.8, 1.0]])
+    assert survivor_mask(dist).tolist() == [False, True]
+
+
+def test_lid_mle_would_be_negative_infinity_for_all_tied_neighbours():
+    # Documents the failure mode survivor_mask now guards against: passing a
+    # row with r_1 == r_k straight to lid_mle (bypassing the mask) still
+    # produces -inf, confirming the mask is the thing doing the rejecting.
+    dist = np.array([[1.0, 1.0, 1.0]])
+    with np.errstate(divide="ignore", invalid="ignore"):
+        result = lid_mle(dist)
+    assert result[0] == float("-inf")
+
+
+def test_compute_discards_all_tied_neighbour_queries_without_producing_inf_or_nan():
+    # np.eye(12): every off-diagonal distance is sqrt(2), so every query's k
+    # neighbours tie exactly. Before the fix this produced lid_median = -inf
+    # via an unguarded -1/0 in lid_mle, silently poisoning shared_edges and
+    # the histogram built on top of it.
+    x = np.eye(12, dtype=np.float32)
+    metrics = compute(x, k=5)
+    assert metrics.lid.size == 0
+    assert metrics.discarded_queries == 12
+    assert not np.any(np.isinf(metrics.lid))
+    assert not np.any(np.isnan(metrics.lid))
+    result = summary(metrics)
+    assert result["lid_median"] is None
+
+
 def test_lid_is_finite_for_every_surviving_query_when_duplicates_exist():
     base = _uniform_in_ball(2000, 4, seed=2)
     x = np.vstack([base, base[:200]])  # 200 exact duplicate rows

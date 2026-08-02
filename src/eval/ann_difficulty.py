@@ -84,15 +84,25 @@ def knn(x: np.ndarray, k: int) -> Tuple[np.ndarray, np.ndarray, int]:
 
 
 def survivor_mask(dist: np.ndarray) -> np.ndarray:
-    """Queries whose nearest neighbour is strictly farther than zero.
+    """Queries fit for the LID/relative-contrast estimators.
 
-    A query sitting on an exact duplicate has r_1 = 0, which sends the LID
-    estimator to a degenerate value. Those queries are dropped rather than
-    clamped: clamping invents a number, dropping just declines to answer.
-    The count is reported so the bias stays visible -- duplicates are exactly
-    the low-LID region, so discarding them nudges the estimate upward.
+    Two degenerate cases are dropped rather than clamped: clamping invents a
+    number, dropping just declines to answer.
+
+    - r_1 == 0: the query sits on an exact duplicate.
+    - r_1 >= r_k: every one of the k neighbours ties at the same distance
+      (only possible when r_1 == r_k, since distances are sorted ascending).
+      lid_mle's ratio r_i/r_k is then 1.0 for every i, so mean(log(ratio)) is
+      0.0 and the estimator divides by zero, returning -inf. One -inf among
+      thousands of finite values is enough to poison every downstream
+      consumer that takes a min/max over the array (histogram bin edges,
+      summary statistics), so it must not reach lid_mle at all.
+
+    The count of dropped queries is reported so the bias stays visible --
+    duplicates are exactly the low-LID region, so discarding them nudges the
+    estimate upward.
     """
-    return dist[:, 0] > 0.0
+    return (dist[:, 0] > 0.0) & (dist[:, 0] < dist[:, -1])
 
 
 def lid_mle(dist: np.ndarray) -> np.ndarray:

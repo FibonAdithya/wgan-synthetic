@@ -2,6 +2,41 @@
 
 Train a WGAN-GP model to generate synthetic 128D vectors with statistics and neighborhood behavior similar to SIFT1M descriptors.
 
+## Documentation map
+
+Human-maintained, and the source of truth:
+
+- `README.md` — this file. Setup and the commands you run day to day.
+- `PROJECT_DOCUMENTATION.md` — technical reference: architecture, training
+  objective, data contract, evaluation, and the model variant table.
+- `data/README.md` — the data contract and what the evaluation tools expect
+  on disk.
+
+AI working notes, kept for provenance and **not** authoritative:
+
+- `docs/superpowers/` — design specs and implementation plans written by
+  Claude during development. See `docs/superpowers/README.md`. Where these
+  disagree with `PROJECT_DOCUMENTATION.md`, the latter wins.
+
+## Model variants
+
+Four variants were trained, each one config change from the previous:
+
+| Variant | Delta | Config |
+|---|---|---|
+| `v0` | plain WGAN-GP | `configs/sift_gan_v0.yaml` |
+| `v1` | + generator EMA | `configs/sift_gan_v1.yaml` |
+| `v1_5` | + pairwise-distance regularizer | `configs/sift_gan_v1_5.yaml` |
+| `v2` | + gated non-negative generator | `configs/sift_gan_v2.yaml` |
+
+Full detail, including which run directory holds each, is in
+`PROJECT_DOCUMENTATION.md`. To see all four overlaid on real SIFT in one
+report:
+
+    python -m src.eval.compare_variants \
+        --real-path data/sift_base.npy \
+        --output-dir runs/eda_variants
+
 ## What this project provides
 
 - SIFT-like descriptor loader and preprocessing pipeline.

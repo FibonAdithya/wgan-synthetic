@@ -1,0 +1,63 @@
+# Improved smoke config: exercises the training-loop upgrades
+#   #1 dataloader parallelism (num_workers) + less-frequent eval
+#   #2 distance regulariser enabled (pairwise-distance mean matching)
+#   #3 generator EMA of parameters
+#   #6 in-loop mode-collapse monitoring (collapse_stats logged at eval)
+# The hyperparameters below match wgan_gp_sift1m_smoke.yaml, but this is NOT a
+# controlled A/B against it: the distance regulariser changes the generator
+# objective and eval/sampling here runs on EMA weights, so any metric delta
+# mixes several effects at once. Treat it as a smoke test of the new code
+# paths, not as evidence that the upgrades help.
+seed: 42
+device: auto
+output_dir: runs/wgan_sift1m_smoke_improved
+
+data:
+  real_path: null
+  format: auto
+  descriptor_dim: 128
+  holdout_fraction: 0.05
+  synthetic_if_missing: true
+  synthetic_num_vectors: 50000
+  preprocess:
+    center: false
+    whiten: false
+    l2_normalize: true
+
+model:
+  latent_dim: 64
+  generator_hidden_dims: [256, 512, 1024]
+  critic_hidden_dims: [1024, 512, 256]
+  negative_slope: 0.2
+
+training:
+  batch_size: 256
+  num_gen_steps: 200
+  n_critic: 5
+  lr_g: 1.0e-4
+  lr_d: 1.0e-4
+  betas: [0.0, 0.9]
+  lambda_gp: 10.0
+  amp: false
+  # --- #1: dataloader parallelism ---
+  # 0 is correct for this dataset: NumpyTensorDataset is fully in-memory, so
+  # worker processes only add IPC overhead. Raise this only if the dataset
+  # ever becomes disk-backed (persistent_workers is wired up for that case).
+  num_workers: 0
+  # --- #3: generator EMA (0 disables; 0.999 is a common stable value) ---
+  # The accumulator starts at zero and is bias-corrected when loaded into the
+  # model, so even at 200 steps (0.999**200 ~= 0.82) the evaluated weights are
+  # a genuine weighted average of the observed parameters, with no
+  # contribution from the random initialisation. The averaging window is still
+  # ~1/(1-decay) = 1000 steps wide, i.e. wider than this run -- so here it
+  # effectively averages the whole trajectory. That is fine for a smoke test;
+  # a shorter decay (~0.99) would be the choice if this were a real 200-step
+  # run whose late-training weights mattered.
+  ema_decay: 0.999
+  # --- #2: pairwise-distance mean matching regulariser (was 0.0 = disabled) ---
+  distance_reg_alpha: 0.1
+  distance_reg_max_points: 256
+  log_every: 20
+  # eval less often so sampling cost doesn't dominate short CPU runs
+  eval_every: 200
+  save_every: 200

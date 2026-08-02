@@ -432,6 +432,90 @@ def fig_correlation(series: Sequence[Series]) -> go.Figure:
     return fig
 
 
+def fig_ann_profile(
+    series: Sequence[Series], metrics: Dict[str, "ann_difficulty.AnnMetrics"], bins: int
+) -> go.Figure:
+    """LID and relative contrast side by side, overlaid across sets.
+
+    Both read off the same surviving queries, so a set that shifts left on
+    LID and right on contrast is unambiguously easier to search than real --
+    not an artefact of different query subsets.
+    """
+    fig = make_subplots(
+        rows=1,
+        cols=2,
+        subplot_titles=(
+            "local intrinsic dimensionality",
+            "relative contrast",
+        ),
+    )
+    for col, attr in ((1, "lid"), (2, "relative_contrast")):
+        values = [getattr(metrics[s.name], attr) for s in series]
+        populated = [v for v in values if v.size]
+        if not populated:
+            continue
+        edges = shared_edges(populated, bins)
+        centers = 0.5 * (edges[:-1] + edges[1:])
+        for s in series:
+            v = getattr(metrics[s.name], attr)
+            if not v.size:
+                continue
+            hist, _ = np.histogram(v, bins=edges, density=True)
+            fig.add_bar(
+                x=centers,
+                y=hist,
+                name=s.name,
+                legendgroup=s.name,
+                showlegend=(col == 1),
+                marker_color=s.color,
+                opacity=0.55,
+                row=1,
+                col=col,
+            )
+    fig.update_layout(
+        title="ANN difficulty profile",
+        barmode="overlay",
+        bargap=0.0,
+        template="plotly_white",
+        height=440,
+    )
+    return fig
+
+
+def fig_ivf_balance(
+    series: Sequence[Series], metrics: Dict[str, "ann_difficulty.AnnMetrics"]
+) -> go.Figure:
+    """Lorenz curve of cluster occupancy: how lopsided an IVF partition is.
+
+    The diagonal is a perfectly even split. Bowing below it means a few
+    cells hold most of the points, so a query has to probe more of them to
+    reach the same recall.
+    """
+    fig = go.Figure()
+    fig.add_scatter(
+        x=[0.0, 1.0],
+        y=[0.0, 1.0],
+        name="perfect balance",
+        line=dict(color="#a0aec0", dash="dash"),
+    )
+    for s in series:
+        occupancy = metrics[s.name].cell_occupancy
+        fig.add_scatter(
+            x=np.arange(1, occupancy.size + 1) / occupancy.size,
+            y=np.cumsum(occupancy) / occupancy.sum(),
+            name=s.name,
+            line=dict(color=s.color),
+        )
+    fig.update_layout(
+        title="IVF cell balance",
+        xaxis_title="fraction of cells (emptiest first)",
+        yaxis_title="cumulative fraction of points",
+        template="plotly_white",
+        height=440,
+    )
+    return fig
+
+
 def fig_dim_divergence(
     series: Sequence[Series], top_k: int
 ) -> Tuple[go.Figure, Dict[str, List[Dict]]]:
@@ -657,6 +741,58 @@ def run(args: argparse.Namespace) -> Path:
     ]
 
     sections: List[Tuple[str, str, go.Figure]] = []
+
+    ann_note_suffix = (
+        " Compare against the <code>real</code> series in this report only. "
+        "These numbers come from a self-queried subsample, so they are not "
+        "comparable with published SIFT1M figures."
+    )
+    first_metrics = ann_metrics[series[0].name]
+    sections.append(
+        (
+            "Local intrinsic dimensionality",
+            "How locally high-dimensional the neighbourhood of a typical query "
+            "is, and the strongest single predictor of how hard an index will "
+            "find this data. A synthetic set landing well below real is easier "
+            "to search and would understate any index's difficulty; well above "
+            "and it overstates it. Relative contrast sits alongside: values "
+            "near 1 mean the nearest neighbour is barely closer than an "
+            "arbitrary point, leaving an index little to exploit."
+            f" Measured on {first_metrics.num_rows} rows at k={first_metrics.k}."
+            + ann_note_suffix,
+            fig_ann_profile(series, ann_metrics, args.bins),
+        )
+    )
+    sections.append(
+        (
+            "Hubness",
+            "How often each point turns up in other points' neighbour lists. A "
+            "long right tail means a few hubs dominate, which is what stalls "
+            "graph indexes like HNSW. A generator gets no direct training "
+            "pressure to reproduce this, so matching it is genuine evidence "
+            "rather than a fitted artefact." + ann_note_suffix,
+            overlay_hist_fig(
+                [
+                    (s.name, ann_metrics[s.name].k_occurrence.astype(np.float64), s.color)
+                    for s in series
+                ],
+                args.bins,
+                f"k-occurrence at k={args.ann_hub_k} (log density)",
+                "times appearing in a neighbour list",
+                log_y=True,
+            ),
+        )
+    )
+    sections.append(
+        (
+            "IVF cell balance",
+            "How evenly k-means would partition each set, which drives how many "
+            "cells an IVF query has to probe. Each set is clustered on its own, "
+            "because an index would be built on whichever set you shipped."
+            f" nlist={first_metrics.nlist}." + ann_note_suffix,
+            fig_ivf_balance(series, ann_metrics),
+        )
+    )
 
     sections.append(
         (

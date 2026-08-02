@@ -51,6 +51,14 @@ SYNTH_PALETTE = [
     "#a0522d",
 ]
 
+# Single source of truth for the ANN-difficulty flag defaults, shared with
+# compare_variants.py so its hand-built Namespace cannot silently drift from
+# what this module's own --ann-* / --ivf-nlist flags default to.
+ANN_K_DEFAULT = 100
+ANN_HUB_K_DEFAULT = 10
+ANN_MAX_ROWS_DEFAULT = 20000
+IVF_NLIST_DEFAULT = 256
+
 
 @dataclass
 class Series:
@@ -112,19 +120,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--ann-k",
         type=int,
-        default=100,
+        default=ANN_K_DEFAULT,
         help="Neighbours per query for the LID and relative-contrast panels.",
     )
     parser.add_argument(
         "--ann-hub-k",
         type=int,
-        default=10,
+        default=ANN_HUB_K_DEFAULT,
         help="Neighbour depth for the k-occurrence count behind the hubness panel.",
     )
     parser.add_argument(
         "--ann-max-rows",
         type=int,
-        default=20000,
+        default=ANN_MAX_ROWS_DEFAULT,
         help=(
             "Equal-N truncation for every difficulty metric, and for the "
             "within-set k-NN panel. LID, contrast and hubness all drift with "
@@ -134,7 +142,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--ivf-nlist",
         type=int,
-        default=256,
+        default=IVF_NLIST_DEFAULT,
         help="Cluster count for the IVF cell-balance panel.",
     )
     parser.add_argument("--bins", type=int, default=80)

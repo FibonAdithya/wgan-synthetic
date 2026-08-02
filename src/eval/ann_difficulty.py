@@ -22,6 +22,7 @@ and testable without plotly or argparse.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
 import numpy as np
@@ -198,3 +199,91 @@ def cell_occupancy(x: np.ndarray, nlist: int, seed: int) -> Tuple[np.ndarray, in
     )
     labels = kmeans.fit_predict(x)
     return np.sort(np.bincount(labels, minlength=nlist_eff)), nlist_eff
+
+
+@dataclass
+class AnnMetrics:
+    """Everything one set contributes to the difficulty panels.
+
+    lid and relative_contrast are aligned: both carry one entry per query
+    that survived survivor_mask, in the same order.
+    """
+
+    lid: np.ndarray
+    relative_contrast: np.ndarray
+    k_occurrence: np.ndarray
+    cell_occupancy: np.ndarray
+    num_rows: int
+    k: int
+    nlist: int
+    discarded_queries: int
+
+
+def _subsample(x: np.ndarray, max_rows: int, seed: int) -> np.ndarray:
+    """Cut to max_rows (0 = keep all).
+
+    Deliberately duplicated from eda_report rather than imported: this module
+    must not depend on the report. It is five lines and the dependency
+    direction is worth more than the sharing.
+    """
+    if max_rows <= 0 or x.shape[0] <= max_rows:
+        return x
+    rng = np.random.default_rng(seed)
+    return x[np.sort(rng.choice(x.shape[0], size=max_rows, replace=False))]
+
+
+def compute(
+    x: np.ndarray,
+    *,
+    k: int = 100,
+    k_hub: int = 10,
+    nlist: int = 256,
+    max_rows: int = 20000,
+    seed: int = 42,
+) -> AnnMetrics:
+    """Measure every difficulty metric for one set off a single k-NN pass.
+
+    Callers must pass the same max_rows for every set they intend to compare:
+    LID, relative contrast and hubness all drift with sample count, so
+    unequal N makes the overlay meaningless.
+    """
+    x = np.ascontiguousarray(_subsample(x, max_rows, seed), dtype=np.float32)
+    n = x.shape[0]
+
+    dist, idx, k_eff = knn(x, k)
+    survivors = survivor_mask(dist)
+
+    lid = lid_mle(dist[survivors])
+    contrast = relative_contrast(x, dist, seed)[survivors]
+    counts = k_occurrence(idx, n, min(k_hub, k_eff))
+    occupancy, nlist_eff = cell_occupancy(x, nlist, seed)
+
+    return AnnMetrics(
+        lid=lid,
+        relative_contrast=contrast,
+        k_occurrence=counts,
+        cell_occupancy=occupancy,
+        num_rows=n,
+        k=k_eff,
+        nlist=nlist_eff,
+        discarded_queries=int((~survivors).sum()),
+    )
+
+
+def summary(m: AnnMetrics) -> Dict[str, Optional[float]]:
+    """Scalars for the report's statistics table and summary.json.
+
+    lid_median and relative_contrast_median are None when every query was
+    discarded, which happens only for a fully degenerate set. Callers must
+    render None rather than assuming a float.
+    """
+    has_queries = m.lid.size > 0
+    return {
+        "lid_median": float(np.median(m.lid)) if has_queries else None,
+        "relative_contrast_median": (
+            float(np.median(m.relative_contrast)) if has_queries else None
+        ),
+        "hubness_skew": hubness_skew(m.k_occurrence),
+        "ivf_gini": gini(m.cell_occupancy),
+        "lid_discarded_queries": float(m.discarded_queries),
+    }

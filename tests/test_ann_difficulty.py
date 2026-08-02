@@ -202,3 +202,58 @@ def test_well_separated_blobs_partition_more_evenly_than_one_dense_lump():
     blob_occupancy, _ = cell_occupancy(blobs, nlist=8, seed=0)
     lump_occupancy, _ = cell_occupancy(lump, nlist=8, seed=0)
     assert gini(blob_occupancy) < gini(lump_occupancy)
+
+
+from src.eval.ann_difficulty import compute, summary
+
+
+def test_compute_truncates_to_max_rows():
+    rng = np.random.default_rng(12)
+    x = rng.normal(size=(5000, 8)).astype(np.float32)
+    metrics = compute(x, k=20, k_hub=5, nlist=16, max_rows=1000, seed=0)
+    assert metrics.num_rows == 1000
+    assert metrics.k_occurrence.shape == (1000,)
+
+
+def test_compute_is_deterministic_under_a_fixed_seed():
+    rng = np.random.default_rng(13)
+    x = rng.normal(size=(1200, 8)).astype(np.float32)
+    kwargs = dict(k=20, k_hub=5, nlist=16, max_rows=800, seed=5)
+    first = compute(x, **kwargs)
+    second = compute(x, **kwargs)
+    assert np.array_equal(first.lid, second.lid)
+    assert np.array_equal(first.k_occurrence, second.k_occurrence)
+    assert np.array_equal(first.cell_occupancy, second.cell_occupancy)
+
+
+def test_compute_counts_discarded_duplicate_queries():
+    rng = np.random.default_rng(14)
+    base = rng.normal(size=(600, 8)).astype(np.float32)
+    x = np.vstack([base, base[:100]])
+    metrics = compute(x, k=20, k_hub=5, nlist=16, max_rows=0, seed=0)
+    assert metrics.discarded_queries >= 200
+    assert np.all(np.isfinite(metrics.lid))
+    assert np.all(np.isfinite(metrics.relative_contrast))
+
+
+def test_compute_survives_a_set_that_is_entirely_duplicates():
+    x = np.tile(np.array([[1.0, 0.0, 0.0]], dtype=np.float32), (300, 1))
+    metrics = compute(x, k=10, k_hub=5, nlist=8, max_rows=0, seed=0)
+    assert metrics.lid.size == 0
+    assert metrics.discarded_queries == 300
+    assert summary(metrics)["lid_median"] is None
+
+
+def test_summary_returns_the_agreed_keys():
+    rng = np.random.default_rng(15)
+    x = rng.normal(size=(800, 8)).astype(np.float32)
+    result = summary(compute(x, k=20, k_hub=5, nlist=16, max_rows=0, seed=0))
+    assert set(result) == {
+        "lid_median",
+        "relative_contrast_median",
+        "hubness_skew",
+        "ivf_gini",
+        "lid_discarded_queries",
+    }
+    assert result["lid_median"] > 0
+    assert result["lid_discarded_queries"] == 0

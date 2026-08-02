@@ -149,11 +149,12 @@ def test_hubness_skew_is_higher_when_a_hub_is_planted():
     rng = np.random.default_rng(7)
     shell = rng.normal(size=(1500, 6)).astype(np.float32)
     shell /= np.linalg.norm(shell, axis=1, keepdims=True)
-    # A single point at the centre of a dense cluster is close to many points
-    # and lands in a disproportionate share of neighbour lists.
-    cluster_center = shell[:100].mean(axis=0)
-    cluster_center = (cluster_center / np.linalg.norm(cluster_center)).astype(np.float32)
-    planted = np.vstack([shell, cluster_center[np.newaxis, :]])
+    # A tight knot of near-duplicates is close to everything inside
+    # itself, so those points crowd into each other's lists and take a
+    # disproportionate share of the neighbour mass.
+    tight = shell[:1] + rng.normal(size=(50, 6)).astype(np.float32) * 0.01
+    tight /= np.linalg.norm(tight, axis=1, keepdims=True)
+    planted = np.vstack([shell, tight])
 
     _, idx_plain, _ = knn(shell, k=20)
     _, idx_planted, _ = knn(planted, k=20)

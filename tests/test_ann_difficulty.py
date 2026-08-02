@@ -165,3 +165,40 @@ def test_hubness_skew_is_higher_when_a_hub_is_planted():
 
 def test_hubness_skew_is_zero_for_a_flat_count_distribution():
     assert hubness_skew(np.array([4, 4, 4, 4])) == 0.0
+
+
+from src.eval.ann_difficulty import cell_occupancy
+
+
+def test_cell_occupancy_totals_the_row_count_and_sorts_ascending():
+    rng = np.random.default_rng(8)
+    x = rng.normal(size=(600, 8)).astype(np.float32)
+    occupancy, nlist_eff = cell_occupancy(x, nlist=16, seed=0)
+    assert occupancy.sum() == 600
+    assert occupancy.shape == (nlist_eff,)
+    assert np.all(np.diff(occupancy) >= 0)
+
+
+def test_cell_occupancy_clamps_nlist_to_half_the_row_count():
+    rng = np.random.default_rng(9)
+    x = rng.normal(size=(40, 4)).astype(np.float32)
+    _, nlist_eff = cell_occupancy(x, nlist=256, seed=0)
+    assert nlist_eff == 20
+
+
+def test_cell_occupancy_is_deterministic_under_a_fixed_seed():
+    rng = np.random.default_rng(10)
+    x = rng.normal(size=(600, 8)).astype(np.float32)
+    first, _ = cell_occupancy(x, nlist=16, seed=3)
+    second, _ = cell_occupancy(x, nlist=16, seed=3)
+    assert np.array_equal(first, second)
+
+
+def test_well_separated_blobs_partition_more_evenly_than_one_dense_lump():
+    rng = np.random.default_rng(11)
+    centres = rng.normal(size=(8, 6)).astype(np.float32) * 30.0
+    blobs = np.repeat(centres, 100, axis=0) + rng.normal(size=(800, 6)).astype(np.float32)
+    lump = rng.normal(size=(800, 6)).astype(np.float32)
+    blob_occupancy, _ = cell_occupancy(blobs, nlist=8, seed=0)
+    lump_occupancy, _ = cell_occupancy(lump, nlist=8, seed=0)
+    assert gini(blob_occupancy) < gini(lump_occupancy)

@@ -25,6 +25,7 @@ from __future__ import annotations
 from typing import Dict, Optional, Tuple
 
 import numpy as np
+from sklearn.cluster import MiniBatchKMeans
 from sklearn.neighbors import NearestNeighbors
 
 
@@ -173,3 +174,27 @@ def hubness_skew(counts: np.ndarray) -> float:
     if spread <= 0.0:
         return 0.0
     return float(np.mean(((x - x.mean()) / spread) ** 3))
+
+
+def cell_occupancy(x: np.ndarray, nlist: int, seed: int) -> Tuple[np.ndarray, int]:
+    """Points per cluster under a k-means partition, sorted ascending.
+
+    Stands in for how an IVF index would carve up the set. Each set is
+    clustered independently, because an index would be built on whichever
+    set was actually shipped -- clustering real and reusing its centroids
+    would measure coverage instead of balance.
+
+    nlist is clamped to n // 2 so a small set cannot ask for more cells than
+    it can meaningfully fill. Returns the clamped value alongside the counts
+    so the caller can report it.
+    """
+    n = x.shape[0]
+    nlist_eff = max(2, min(nlist, n // 2))
+    kmeans = MiniBatchKMeans(
+        n_clusters=nlist_eff,
+        random_state=seed,
+        n_init=3,
+        batch_size=1024,
+    )
+    labels = kmeans.fit_predict(x)
+    return np.sort(np.bincount(labels, minlength=nlist_eff)), nlist_eff

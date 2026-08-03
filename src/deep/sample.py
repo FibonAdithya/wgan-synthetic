@@ -46,7 +46,14 @@ def sample_variant(
     seed: int = 42,
     checkpoint_name: str = CHECKPOINT_NAME,
 ) -> np.ndarray:
-    """Draw `num_samples` vectors in original DEEP coordinates."""
+    """Draw `num_samples` vectors in original DEEP coordinates.
+
+    Note: this calls `torch.manual_seed(seed)`, mutating the *global* torch
+    RNG state with no save/restore of what it was beforehand. A caller
+    looping over several variants (e.g. a report generator) with the same
+    `seed` each iteration gets reproducible draws per call, but should not
+    assume the global RNG is left as it found it.
+    """
     run_dir = Path(run_dir)
     state = load_preprocess_state(run_dir)
     config = yaml.safe_load((run_dir / RUN_CONFIG_NAME).read_text(encoding="utf-8"))

@@ -152,6 +152,34 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-vectors", type=int, default=50000)
     parser.add_argument("--num-pairs", type=int, default=200000)
     parser.add_argument("--knn", type=int, default=5)
+    parser.add_argument(
+        "--ann-k",
+        type=int,
+        default=eda_report.ANN_K_DEFAULT,
+        help="Neighbours per query for the LID and relative-contrast panels.",
+    )
+    parser.add_argument(
+        "--ann-hub-k",
+        type=int,
+        default=eda_report.ANN_HUB_K_DEFAULT,
+        help="Neighbour depth for the k-occurrence count behind the hubness panel.",
+    )
+    parser.add_argument(
+        "--ann-max-rows",
+        type=int,
+        default=eda_report.ANN_MAX_ROWS_DEFAULT,
+        help=(
+            "Equal-N truncation for every difficulty metric, and for the "
+            "within-set k-NN panel. LID, contrast and hubness all drift with "
+            "sample count, so every set must be cut to the same size."
+        ),
+    )
+    parser.add_argument(
+        "--ivf-nlist",
+        type=int,
+        default=eda_report.IVF_NLIST_DEFAULT,
+        help="Cluster count for the IVF cell-balance panel.",
+    )
     parser.add_argument("--bins", type=int, default=80)
     parser.add_argument("--top-divergent", type=int, default=16)
     parser.add_argument("--seed", type=int, default=42)
@@ -181,6 +209,10 @@ def build_report_args(args: argparse.Namespace, specs: List[str]) -> argparse.Na
         max_vectors=args.max_vectors,
         num_pairs=args.num_pairs,
         knn=args.knn,
+        ann_k=args.ann_k,
+        ann_hub_k=args.ann_hub_k,
+        ann_max_rows=args.ann_max_rows,
+        ivf_nlist=args.ivf_nlist,
         bins=args.bins,
         top_divergent=args.top_divergent,
         seed=args.seed,

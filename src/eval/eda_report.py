@@ -36,6 +36,7 @@ from sklearn.decomposition import PCA
 from sklearn.neighbors import NearestNeighbors
 
 from src.data.sift1m_dataset import load_descriptors
+from src.eval import ann_difficulty
 
 REAL_NAME = "real"
 REAL_COLOR = "#2b6cb0"
@@ -49,6 +50,14 @@ SYNTH_PALETTE = [
     "#00897b",
     "#a0522d",
 ]
+
+# Single source of truth for the ANN-difficulty flag defaults, shared with
+# compare_variants.py so its hand-built Namespace cannot silently drift from
+# what this module's own --ann-* / --ivf-nlist flags default to.
+ANN_K_DEFAULT = 100
+ANN_HUB_K_DEFAULT = 10
+ANN_MAX_ROWS_DEFAULT = 20000
+IVF_NLIST_DEFAULT = 256
 
 
 @dataclass
@@ -108,6 +117,34 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--num-pairs", type=int, default=200000)
     parser.add_argument("--knn", type=int, default=5)
+    parser.add_argument(
+        "--ann-k",
+        type=int,
+        default=ANN_K_DEFAULT,
+        help="Neighbours per query for the LID and relative-contrast panels.",
+    )
+    parser.add_argument(
+        "--ann-hub-k",
+        type=int,
+        default=ANN_HUB_K_DEFAULT,
+        help="Neighbour depth for the k-occurrence count behind the hubness panel.",
+    )
+    parser.add_argument(
+        "--ann-max-rows",
+        type=int,
+        default=ANN_MAX_ROWS_DEFAULT,
+        help=(
+            "Equal-N truncation for every difficulty metric, and for the "
+            "within-set k-NN panel. LID, contrast and hubness all drift with "
+            "sample count, so every set must be cut to the same size."
+        ),
+    )
+    parser.add_argument(
+        "--ivf-nlist",
+        type=int,
+        default=IVF_NLIST_DEFAULT,
+        help="Cluster count for the IVF cell-balance panel.",
+    )
     parser.add_argument("--bins", type=int, default=80)
     parser.add_argument(
         "--top-divergent",
@@ -183,7 +220,7 @@ def pairwise_distance_sample(x: np.ndarray, num_pairs: int, seed: int) -> np.nda
     return np.linalg.norm(x[i] - x[j], axis=1)
 
 
-def nn_distances(x: np.ndarray, k: int, seed: int, max_rows: int = 20000) -> np.ndarray:
+def nn_distances(x: np.ndarray, k: int, seed: int, max_rows: int) -> np.ndarray:
     """Distance to the k-th nearest *other* point within the same set.
 
     Collapsed generators put mass on a few modes, which shows up as a
@@ -395,6 +432,90 @@ def fig_correlation(series: Sequence[Series]) -> go.Figure:
     return fig
 
 
+def fig_ann_profile(
+    series: Sequence[Series], metrics: Dict[str, "ann_difficulty.AnnMetrics"], bins: int
+) -> go.Figure:
+    """LID and relative contrast side by side, overlaid across sets.
+
+    Both read off the same surviving queries, so a set that shifts left on
+    LID and right on contrast is unambiguously easier to search than real --
+    not an artefact of different query subsets.
+    """
+    fig = make_subplots(
+        rows=1,
+        cols=2,
+        subplot_titles=(
+            "local intrinsic dimensionality",
+            "relative contrast",
+        ),
+    )
+    for col, attr in ((1, "lid"), (2, "relative_contrast")):
+        values = [getattr(metrics[s.name], attr) for s in series]
+        populated = [v for v in values if v.size]
+        if not populated:
+            continue
+        edges = shared_edges(populated, bins)
+        centers = 0.5 * (edges[:-1] + edges[1:])
+        for s in series:
+            v = getattr(metrics[s.name], attr)
+            if not v.size:
+                continue
+            hist, _ = np.histogram(v, bins=edges, density=True)
+            fig.add_bar(
+                x=centers,
+                y=hist,
+                name=s.name,
+                legendgroup=s.name,
+                showlegend=(col == 1),
+                marker_color=s.color,
+                opacity=0.55,
+                row=1,
+                col=col,
+            )
+    fig.update_layout(
+        title="ANN difficulty profile",
+        barmode="overlay",
+        bargap=0.0,
+        template="plotly_white",
+        height=440,
+    )
+    return fig
+
+
+def fig_ivf_balance(
+    series: Sequence[Series], metrics: Dict[str, "ann_difficulty.AnnMetrics"]
+) -> go.Figure:
+    """Lorenz curve of cluster occupancy: how lopsided an IVF partition is.
+
+    The diagonal is a perfectly even split. Bowing below it means a few
+    cells hold most of the points, so a query has to probe more of them to
+    reach the same recall.
+    """
+    fig = go.Figure()
+    fig.add_scatter(
+        x=[0.0, 1.0],
+        y=[0.0, 1.0],
+        name="perfect balance",
+        line=dict(color="#a0aec0", dash="dash"),
+    )
+    for s in series:
+        occupancy = metrics[s.name].cell_occupancy
+        fig.add_scatter(
+            x=np.arange(1, occupancy.size + 1) / occupancy.size,
+            y=np.cumsum(occupancy) / occupancy.sum(),
+            name=s.name,
+            line=dict(color=s.color),
+        )
+    fig.update_layout(
+        title="IVF cell balance",
+        xaxis_title="fraction of cells (emptiest first)",
+        yaxis_title="cumulative fraction of points",
+        template="plotly_white",
+        height=440,
+    )
+    return fig
+
+
 def fig_dim_divergence(
     series: Sequence[Series], top_k: int
 ) -> Tuple[go.Figure, Dict[str, List[Dict]]]:
@@ -457,9 +578,16 @@ def effective_rank(x: np.ndarray) -> float:
     return float(np.exp(-np.sum(ratio * np.log(ratio + 1.0e-12))))
 
 
-def summary_stats(s: Series, knn: int, num_pairs: int, seed: int) -> Dict:
+def summary_stats(
+    s: Series,
+    knn: int,
+    num_pairs: int,
+    seed: int,
+    max_rows: int,
+    metrics: ann_difficulty.AnnMetrics,
+) -> Dict:
     norms = np.linalg.norm(s.x, axis=1)
-    return {
+    stats = {
         "name": s.name,
         "num_vectors": int(s.x.shape[0]),
         "dim": int(s.x.shape[1]),
@@ -477,9 +605,22 @@ def summary_stats(s: Series, knn: int, num_pairs: int, seed: int) -> Dict:
         "median_pairwise_distance": float(
             np.median(pairwise_distance_sample(s.x, num_pairs, seed))
         ),
-        f"median_{knn}nn_distance": float(np.median(nn_distances(s.x, knn, seed))),
+        f"median_{knn}nn_distance": float(
+            np.median(nn_distances(s.x, knn, seed, max_rows))
+        ),
         "effective_rank": effective_rank(s.x),
     }
+    stats.update(ann_difficulty.summary(metrics))
+    # Actual (post-clamp) measurement conditions, not the requested ones: a
+    # series with fewer rows than --ann-max-rows gets its k and nlist clamped
+    # inside knn()/cell_occupancy(), and its num_vectors above is the
+    # PRE-truncation count. Without these, nothing records what a series was
+    # actually measured under, and the report's section notes cannot tell a
+    # reader when conditions diverge across series.
+    stats["ann_measured_rows"] = metrics.num_rows
+    stats["ann_measured_k"] = metrics.k
+    stats["ann_measured_nlist"] = metrics.nlist
+    return stats
 
 
 def stats_table_html(stats: List[Dict]) -> str:
@@ -487,7 +628,9 @@ def stats_table_html(stats: List[Dict]) -> str:
     header = "".join(f"<th>{s['name']}</th>" for s in stats)
     rows = []
     for k in keys:
-        cells = "".join(f"<td>{s[k]:.6g}</td>" for s in stats)
+        cells = "".join(
+            f"<td>{'n/a' if s[k] is None else format(s[k], '.6g')}</td>" for s in stats
+        )
         rows.append(f"<tr><th>{k}</th>{cells}</tr>")
     return (
         "<table><thead><tr><th>statistic</th>"
@@ -587,15 +730,120 @@ def load_series(args: argparse.Namespace) -> List[Series]:
     return series
 
 
+def ann_condition_note(
+    series: Sequence[Series],
+    ann_metrics: Dict[str, "ann_difficulty.AnnMetrics"],
+    attrs: Tuple[Tuple[str, str], ...],
+) -> str:
+    """State the actual per-series ANN measurement conditions for `attrs`.
+
+    `attrs` is a sequence of (AnnMetrics field name, display label) pairs,
+    e.g. (("num_rows", "rows"), ("k", "k")). When every series in this run
+    was measured under the same conditions, one summary sentence is enough.
+    When they differ -- e.g. a series with fewer rows than --ann-max-rows
+    gets num_rows, k or nlist clamped -- a reader must not be able to mistake
+    one series' numbers for all of them, so each series' actual values are
+    spelled out instead.
+    """
+    per_series = {
+        s.name: tuple(getattr(ann_metrics[s.name], field) for field, _ in attrs)
+        for s in series
+    }
+    if len(set(per_series.values())) == 1:
+        values = next(iter(per_series.values()))
+        parts = ", ".join(f"{label}={v}" for (_, label), v in zip(attrs, values))
+        return f" Measured with {parts} for every series."
+    per_series_text = "; ".join(
+        f"{name} ("
+        + ", ".join(f"{label}={v}" for (_, label), v in zip(attrs, values))
+        + ")"
+        for name, values in per_series.items()
+    )
+    return (
+        " Measurement conditions differ across series (a series with fewer "
+        f"rows than requested has k and/or nlist clamped): {per_series_text}."
+    )
+
+
 def run(args: argparse.Namespace) -> Path:
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     series = load_series(args)
     has_synth = len(series) > 1
-    stats = [summary_stats(s, args.knn, args.num_pairs, args.seed) for s in series]
+    ann_metrics = {
+        s.name: ann_difficulty.compute(
+            s.x,
+            k=args.ann_k,
+            k_hub=args.ann_hub_k,
+            nlist=args.ivf_nlist,
+            max_rows=args.ann_max_rows,
+            seed=args.seed,
+        )
+        for s in series
+    }
+    stats = [
+        summary_stats(
+            s, args.knn, args.num_pairs, args.seed, args.ann_max_rows, ann_metrics[s.name]
+        )
+        for s in series
+    ]
 
     sections: List[Tuple[str, str, go.Figure]] = []
+
+    ann_note_suffix = (
+        " Compare against the <code>real</code> series in this report only. "
+        "These numbers come from a self-queried subsample, so they are not "
+        "comparable with published SIFT1M figures."
+    )
+    sections.append(
+        (
+            "Local intrinsic dimensionality",
+            "How locally high-dimensional the neighbourhood of a typical query "
+            "is, and the strongest single predictor of how hard an index will "
+            "find this data. A synthetic set landing well below real is easier "
+            "to search and would understate any index's difficulty; well above "
+            "and it overstates it. Relative contrast sits alongside: values "
+            "near 1 mean the nearest neighbour is barely closer than an "
+            "arbitrary point, leaving an index little to exploit."
+            + ann_condition_note(series, ann_metrics, (("num_rows", "rows"), ("k", "k")))
+            + ann_note_suffix,
+            fig_ann_profile(series, ann_metrics, args.bins),
+        )
+    )
+    sections.append(
+        (
+            "Hubness",
+            "How often each point turns up in other points' neighbour lists. A "
+            "long right tail means a few hubs dominate, which is what stalls "
+            "graph indexes like HNSW. A generator gets no direct training "
+            "pressure to reproduce this, so matching it is genuine evidence "
+            "rather than a fitted artefact."
+            + ann_condition_note(series, ann_metrics, (("num_rows", "rows"),))
+            + ann_note_suffix,
+            overlay_hist_fig(
+                [
+                    (s.name, ann_metrics[s.name].k_occurrence.astype(np.float64), s.color)
+                    for s in series
+                ],
+                args.bins,
+                f"k-occurrence at k={args.ann_hub_k} (log density)",
+                "times appearing in a neighbour list",
+                log_y=True,
+            ),
+        )
+    )
+    sections.append(
+        (
+            "IVF cell balance",
+            "How evenly k-means would partition each set, which drives how many "
+            "cells an IVF query has to probe. Each set is clustered on its own, "
+            "because an index would be built on whichever set you shipped."
+            + ann_condition_note(series, ann_metrics, (("nlist", "nlist"),))
+            + ann_note_suffix,
+            fig_ivf_balance(series, ann_metrics),
+        )
+    )
 
     sections.append(
         (
@@ -650,7 +898,10 @@ def run(args: argparse.Namespace) -> Path:
             "All sets are cut to equal N first, since k-NN distance shrinks as "
             "sample count grows.",
             overlay_hist_fig(
-                [(s.name, nn_distances(s.x, args.knn, args.seed), s.color) for s in series],
+                [
+                    (s.name, nn_distances(s.x, args.knn, args.seed, args.ann_max_rows), s.color)
+                    for s in series
+                ],
                 args.bins,
                 f"Distance to {args.knn}-th nearest neighbour within set",
                 "distance",
@@ -733,6 +984,12 @@ def run(args: argparse.Namespace) -> Path:
         "synthetic_paths": args.synthetic_path or [],
         "preprocess": args.preprocess,
         "seed": args.seed,
+        "ann_settings": {
+            "k": args.ann_k,
+            "k_hub": args.ann_hub_k,
+            "max_rows": args.ann_max_rows,
+            "nlist": args.ivf_nlist,
+        },
         "stats": stats,
         "worst_dimensions": worst_dims,
         "report_html": str(report_path),

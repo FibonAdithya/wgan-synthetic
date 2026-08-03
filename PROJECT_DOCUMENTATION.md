@@ -254,10 +254,22 @@ Memory-safe note:
   - `src/eval/eda_report.py`
   - One self-contained interactive HTML file (plotly bundled inline, opens
     offline) plus a `summary.json` and best-effort PNGs.
-  - Panels: pooled value distribution, per-dimension marginals with a dropdown
-    over all 128 dims, per-dim mean/std/zero-rate profiles, pairwise distances,
-    within-set kNN distances, PCA spectrum, correlation heatmaps, and a
-    Wasserstein-1 ranking of the worst-matching dimensions.
+  - Panels: local intrinsic dimensionality and relative contrast (ANN
+    difficulty), hubness (k-occurrence), IVF cell balance, pooled value
+    distribution, per-dimension marginals with a dropdown over all 128 dims,
+    per-dim mean/std/zero-rate profiles, pairwise distances, within-set kNN
+    distances, PCA spectrum, correlation heatmaps, and a Wasserstein-1
+    ranking of the worst-matching dimensions.
+  - The ANN-difficulty panels (`src/eval/ann_difficulty.py`) ask whether a
+    synthetic set would *behave* like SIFT under nearest-neighbour search,
+    not just look like it: `--ann-k` (default 100) sets the neighbour depth
+    for LID and relative contrast, `--ann-hub-k` (default 10) the depth for
+    the hubness k-occurrence count, `--ann-max-rows` (default 20000) the
+    equal-N truncation every set is cut to so the metrics stay comparable
+    across series, and `--ivf-nlist` (default 256) the cluster count for the
+    IVF cell-balance panel. These numbers are self-queried subsample
+    statistics, not published SIFT1M figures, and are only comparable across
+    the series in one report.
   - `--synthetic-path` is optional; without it the report is pure dataset EDA.
     With it, every panel overlays the two so mismatch is visible by eye.
   - `--preprocess l2` (default) matches the training contract, since generator

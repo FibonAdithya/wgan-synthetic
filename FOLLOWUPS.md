@@ -71,3 +71,38 @@ Still needed: sync `summary.json`, logs and `run_metadata.json` on the
 because it is an operational concern with no natural home in this codebase
 and no test that would prove it works. A shell script beside
 `data/sample_sift1m_100k.sh` is the likely shape.
+
+### Known gaps from the final whole-branch review (2026-08-03)
+
+These were deliberately left unfixed when finishing `ann/difficulty-panels`.
+They are honest known gaps, not planned work with an owner or timeline.
+
+1. **Resume does not restore RNG state, dataloader position, or `GradScaler`
+   state.** A resumed run replays the same shuffle order and the same `z`
+   sequence from wherever `set_seed` puts the global RNG, rather than
+   continuing the stream that produced the checkpoint. Currently zero impact
+   on AMP specifically, since every shipped config sets `amp: false` and
+   `GradScaler` is a no-op when disabled.
+
+2. **`WGAN_GPU_LOCK_DIR` is a test hook that doubles as a mutual-exclusion
+   bypass.** Two agents on one box, one with the env var set and one without,
+   get different lock files for the same physical card -- the lock only
+   coordinates processes that agree on the lock directory.
+
+3. **The CUDA context is created before the lock is acquired.**
+   `gpu_lock_key` calls `torch.cuda.get_device_properties`, which triggers
+   PyTorch's lazy CUDA init. A process about to be refused the lock still
+   allocates a context on the card first, which can push the current holder
+   into OOM.
+
+4. **All 13 configs in `configs/` still say `device: auto`**, and the launch
+   snippets in `PROJECT_DOCUMENTATION.md` and `README.md` still show it, so
+   the documented happy path now hard-fails under `strict=True` unless
+   `CUDA_VISIBLE_DEVICES` is exported first. The refusal itself is
+   intentional; no config or doc snippet was updated to match it.
+
+5. **`tests/test_gpu_lock.py::test_lock_is_released_even_when_the_body_raises`
+   passes even with the `finally` body deleted**, because CPython's refcount
+   GC closes the file handle and drops the flock as the `with` block unwinds
+   via exception. The asserted behaviour (the lock is released) is real, but
+   the test does not prove the `finally` clause is what does it.

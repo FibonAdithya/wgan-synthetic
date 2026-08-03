@@ -62,19 +62,21 @@ def _claim_key(
     path = _lock_dir() / f"wgan-gpu-{key}.lock"
     path.parent.mkdir(parents=True, exist_ok=True)
     handle = path.open("a+")
-    deadline = time.monotonic() + max(0.0, timeout_s)
+    t0 = time.monotonic()
+    deadline = t0 + max(0.0, timeout_s)
     while True:
         try:
             fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
             break
         except OSError:
             if time.monotonic() >= deadline:
+                elapsed = time.monotonic() - t0
                 handle.seek(0)
                 holder = handle.read().strip() or "(holder wrote no metadata)"
                 handle.close()
                 raise GpuBusyError(
                     f"GPU lock {path} is held by: {holder}. "
-                    f"Waited {timeout_s:.0f}s. Raise "
+                    f"Waited {elapsed:.0f}s. Raise "
                     f"training.gpu_lock_timeout_s to queue for longer."
                 ) from None
             time.sleep(poll_s)

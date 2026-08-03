@@ -331,6 +331,12 @@ def train(config: Dict, resume: Optional[str] = None) -> Tuple[Path, Dict]:
     seed = int(config["seed"])
     set_seed(seed)
     device = resolve_device(config["device"], strict=True)
+    # Snapshot the card now, before training touches it: memory_free_bytes
+    # after hours of training (with a populated caching allocator) cannot
+    # answer whether anyone else was resident at launch, which is the one
+    # thing this snapshot exists for. A run that dies mid-training must not
+    # lose this snapshot either.
+    gpu_meta = gpu_preflight(device)
     memory_fraction = float(config["training"].get("gpu_memory_fraction", 0.9))
     if device.type == "cuda" and 0.0 < memory_fraction < 1.0:
         # Belt and braces: if the lock is bypassed, a run degrades instead of
@@ -418,6 +424,7 @@ def train(config: Dict, resume: Optional[str] = None) -> Tuple[Path, Dict]:
             "descriptor_dim": descriptor_dim,
         },
         "preprocess_state": preprocess_state.to_serializable(),
+        "gpu": gpu_meta,
         "metrics": [],
     }
 
@@ -426,13 +433,14 @@ def train(config: Dict, resume: Optional[str] = None) -> Tuple[Path, Dict]:
     start_step = 0
     if resume is not None:
         ckpt = torch.load(resume, map_location=device, weights_only=False)
-        generator.load_state_dict(ckpt["generator_state_dict"])
-        critic.load_state_dict(ckpt["critic_state_dict"])
-        optim_g.load_state_dict(ckpt["optim_g_state_dict"])
-        optim_d.load_state_dict(ckpt["optim_d_state_dict"])
         start_step = int(ckpt["step"])
-        ema_step = int(ckpt.get("ema_step", 0))
-        best_cov = float(ckpt.get("best_cov", float("inf")))
+        # Cheap refusals first, before any load_state_dict call does wasted
+        # work on a resume we are about to reject anyway.
+        if start_step >= num_gen_steps:
+            raise ValueError(
+                f"checkpoint is at step {start_step}, already at or past "
+                f"num_gen_steps={num_gen_steps}; raise the budget to continue"
+            )
         if use_ema:
             saved = ckpt.get("ema_params") or {}
             # An EMA-enabled resume from a checkpoint written without a shadow
@@ -443,12 +451,28 @@ def train(config: Dict, resume: Optional[str] = None) -> Tuple[Path, Dict]:
                     f"{resume} carries no EMA shadow but ema_decay is "
                     f"{ema_decay}; resuming would silently restart the average"
                 )
-            ema_params = {k: v.to(device) for k, v in saved.items()}
-        if start_step >= num_gen_steps:
+        # best_generator.pt is written with EMA weights whenever EMA is
+        # enabled (see save_checkpoint's docstring). Installing those as the
+        # live parameters here would pair EMA-derived weights with
+        # optim_g_state_dict's Adam moments -- which belong to the discarded
+        # live weights -- and the restored shadow would re-average toward the
+        # wrong weights from then on. Only a live-weights checkpoint is safe
+        # to resume from.
+        generator_weights = ckpt.get("generator_weights", "live")
+        if generator_weights != "live":
             raise ValueError(
-                f"checkpoint is at step {start_step}, already at or past "
-                f"num_gen_steps={num_gen_steps}; raise the budget to continue"
+                f"{resume} holds '{generator_weights}' generator weights, not "
+                f"'live'; only a live-weights checkpoint can be resumed from "
+                f"(a best_generator.pt written with EMA enabled cannot be)"
             )
+        generator.load_state_dict(ckpt["generator_state_dict"])
+        critic.load_state_dict(ckpt["critic_state_dict"])
+        optim_g.load_state_dict(ckpt["optim_g_state_dict"])
+        optim_d.load_state_dict(ckpt["optim_d_state_dict"])
+        ema_step = int(ckpt.get("ema_step", 0))
+        best_cov = float(ckpt.get("best_cov", float("inf")))
+        if use_ema:
+            ema_params = {k: v.to(device) for k, v in ckpt["ema_params"].items()}
 
     run_meta["resumed_from_step"] = start_step
 
@@ -589,8 +613,6 @@ def train(config: Dict, resume: Optional[str] = None) -> Tuple[Path, Dict]:
                 ema_step=ema_step,
                 best_cov=best_cov,
             )
-
-    run_meta["gpu"] = gpu_preflight(device)
 
     with (out_dir / "run_metadata.json").open("w", encoding="utf-8") as f:
         json.dump(run_meta, f, indent=2)

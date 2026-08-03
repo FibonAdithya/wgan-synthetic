@@ -10,13 +10,18 @@ import argparse
 import os
 import time
 from pathlib import Path
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 import h5py
 import numpy as np
 
 DEEP_URL = "http://ann-benchmarks.com/deep-image-96-angular.hdf5"
 DESCRIPTOR_DIM = 96
+
+# ann-benchmarks.com sits behind Cloudflare, which 403s the default
+# "Python-urllib/x.y" User-Agent as a bot-blocking heuristic. A plain
+# browser-like UA is enough to pass; no other headers are required.
+USER_AGENT = "Mozilla/5.0 (compatible; deep-gan-fetch/1.0)"
 
 
 def fetch(
@@ -66,7 +71,8 @@ def fetch(
         return dest
 
     try:
-        with os.fdopen(fd, "wb") as handle, urlopen(url) as response:
+        request = Request(url, headers={"User-Agent": USER_AGENT})
+        with os.fdopen(fd, "wb") as handle, urlopen(request) as response:
             while True:
                 chunk = response.read(chunk_bytes)
                 if not chunk:

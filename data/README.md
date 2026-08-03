@@ -42,3 +42,21 @@ the run, since checkpoints commonly live only on the training box.
 
 Samples are written to `<output-dir>/samples/<variant>.npy` and reused as the
 report's input, so they can be inspected independently.
+
+## DEEP image descriptors
+
+The deep track expects 96-dimensional descriptors from
+`deep-image-96-angular`, as `.npy` with shape `[N, 96]`, float32.
+
+Fetch and subset them with:
+
+    python -m src.deep.download --out-dir data
+
+That downloads `deep-image-96-angular.hdf5` once into a shared cache and writes
+`data/deep96_250k.npy` (pipeline smoke runs) and `data/deep96_1m.npy` (the real
+runs). Neither the HDF5 nor the subsets are committed.
+
+DEEP vectors arrive already L2-normalized, dense, and signed — the opposite of
+SIFT on every count. The `deep_gan_v2` config additionally PCA-whitens; its
+samples must be drawn with `src.deep.sample`, which inverts that transform.
+`src.sample.generate` does not, and would return vectors in whitened space.

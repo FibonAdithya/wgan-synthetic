@@ -20,6 +20,7 @@ from src.data.sift1m_dataset import (
     PreprocessConfig,
     build_training_data,
 )
+from src.device import resolve_device
 from src.models.critic import Critic
 from src.models.generator import build_generator
 
@@ -29,16 +30,6 @@ def set_seed(seed: int) -> None:
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
-
-
-def get_device(device_cfg: str) -> torch.device:
-    if device_cfg == "auto":
-        if torch.cuda.is_available():
-            return torch.device("cuda")
-        if torch.backends.mps.is_available():
-            return torch.device("mps")
-        return torch.device("cpu")
-    return torch.device(device_cfg)
 
 
 def gradient_penalty(critic: Critic, real: Tensor, fake: Tensor, device: torch.device) -> Tensor:
@@ -299,7 +290,7 @@ def sample_generator(
 def train(config: Dict) -> Tuple[Path, Dict]:
     seed = int(config["seed"])
     set_seed(seed)
-    device = get_device(config["device"])
+    device = resolve_device(config["device"], strict=True)
     out_dir = Path(config["output_dir"])
     out_dir.mkdir(parents=True, exist_ok=True)
 

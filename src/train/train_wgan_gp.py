@@ -327,7 +327,7 @@ def sample_generator(
     return np.concatenate(out, axis=0)[:num_samples]
 
 
-def train(config: Dict) -> Tuple[Path, Dict]:
+def train(config: Dict, resume: Optional[str] = None) -> Tuple[Path, Dict]:
     seed = int(config["seed"])
     set_seed(seed)
     device = resolve_device(config["device"], strict=True)
@@ -423,7 +423,36 @@ def train(config: Dict) -> Tuple[Path, Dict]:
 
     best_cov = float("inf")
 
-    for step in range(1, num_gen_steps + 1):
+    start_step = 0
+    if resume is not None:
+        ckpt = torch.load(resume, map_location=device, weights_only=False)
+        generator.load_state_dict(ckpt["generator_state_dict"])
+        critic.load_state_dict(ckpt["critic_state_dict"])
+        optim_g.load_state_dict(ckpt["optim_g_state_dict"])
+        optim_d.load_state_dict(ckpt["optim_d_state_dict"])
+        start_step = int(ckpt["step"])
+        ema_step = int(ckpt.get("ema_step", 0))
+        best_cov = float(ckpt.get("best_cov", float("inf")))
+        if use_ema:
+            saved = ckpt.get("ema_params") or {}
+            # An EMA-enabled resume from a checkpoint written without a shadow
+            # would restart the average silently, which is the exact failure
+            # persisting it was meant to prevent. Refuse instead.
+            if not saved:
+                raise ValueError(
+                    f"{resume} carries no EMA shadow but ema_decay is "
+                    f"{ema_decay}; resuming would silently restart the average"
+                )
+            ema_params = {k: v.to(device) for k, v in saved.items()}
+        if start_step >= num_gen_steps:
+            raise ValueError(
+                f"checkpoint is at step {start_step}, already at or past "
+                f"num_gen_steps={num_gen_steps}; raise the budget to continue"
+            )
+
+    run_meta["resumed_from_step"] = start_step
+
+    for step in range(start_step + 1, num_gen_steps + 1):
         d_loss_val = 0.0
         gp_val = 0.0
         wasserstein_val = 0.0
@@ -575,6 +604,13 @@ def train(config: Dict) -> Tuple[Path, Dict]:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train WGAN-GP for SIFT1M-like descriptors.")
     parser.add_argument("--config", type=str, required=True, help="Path to YAML config.")
+    parser.add_argument(
+        "--resume",
+        type=str,
+        default=None,
+        help="Checkpoint to continue from. The config's num_gen_steps is the "
+             "target total, not an additional budget.",
+    )
     return parser.parse_args()
 
 
@@ -589,7 +625,7 @@ def main() -> None:
         run_dir=Path(config["output_dir"]),
         timeout_s=float(train_cfg.get("gpu_lock_timeout_s", 1800.0)),
     ):
-        best_ckpt, _ = train(config)
+        best_ckpt, _ = train(config, resume=args.resume)
     print(f"Training complete. Best checkpoint: {best_ckpt}")
 
 

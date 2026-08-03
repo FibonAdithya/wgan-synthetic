@@ -140,56 +140,97 @@ New `model` config keys: `generator_type: structured_gated`, `layout: [4, 4, 8]`
 noise smoothing width). `layout` is validated against `output_dim` at
 construction: `prod(layout)` must equal `output_dim`.
 
-### Critic: `NeighbourAwareCritic` (`critic_type: neighbour`)
+### Critic: unchanged (rejected — see below)
 
-Gives the objective a handle on local structure.
-
-**The naive version is wrong.** Classic minibatch discrimination computes each
-sample's features from the rest of the batch, making `D(x)` a function of the
-whole batch. That breaks WGAN-GP: the gradient penalty constrains
-`||grad_x D(x)|| -> 1` for a critic that is a function of `x` alone. With
-batch-dependent features the penalty stops measuring what it is supposed to.
-
-**Fixed reference buffer instead.** Hold a buffer `R` of `reference_size: 2048`
-vectors sampled from the real *training* split. For any input `x`, append its
-sorted distances to the `neighbour_k: 5` nearest members of `R`, log1p-scaled.
-Critic input becomes `128 + 5 = 133`.
-
-Because `R` is fixed within a step, `D(x)` is a genuine function of `x`, so the
-gradient penalty stays well-defined — and since the distances are
-differentiable in `x`, the penalty correctly flows through the feature
-computation. `R` is resampled every `reference_refresh_every: 1000` steps to
-stop the generator overfitting one buffer; resampling happens between steps,
-never inside one.
-
-The buffer lives inside the module as a registered persistent buffer, so
-`critic(x)` stays a plain one-argument callable and **`gradient_penalty` needs
-no change**.
-
-**Deliberate limitation.** Feeding the critic neighbour distances is a softer
-form of optimising the eval metric. The features are raw sorted distances, not
-the log-ratios `log(r_i / r_k)` that LID is built from, so the critic gets
-local information and must learn what to do with it rather than being handed
-the metric's sufficient statistic. LID remains a quantity the model was never
-directly trained on. This is weaker independence than before, and results
-should be reported as such rather than over-claimed.
+The critic stays the existing pointwise `Critic`. An earlier draft of this spec
+added a neighbour-aware critic; it was measured and cut. The negative result is
+recorded below so it is not re-proposed.
 
 ### Code seams
 
-Three focused changes, all following existing patterns:
+One focused change, following existing patterns:
 
 - `src/models/generator.py` — add `StructuredGateGenerator`, register
   `structured_gated` in `build_generator`. `tests/test_generator_factory.py`
   already covers the dispatch.
-- `src/models/critic.py` — add `NeighbourAwareCritic` and a
-  `build_critic(model_cfg, input_dim)` factory mirroring `build_generator`,
-  with `critic_type` defaulting to `mlp`.
-- `src/train/train_wgan_gp.py` — swap the direct `Critic(...)` construction at
-  line 325 for `build_critic(...)`, and call `critic.resample_reference(...)`
-  on the refresh cadence.
 
-`generate.py` and `evaluate_distribution.py` build only the generator, so the
-critic change never touches the sampling path.
+`generate.py` and `evaluate_distribution.py` build only the generator, and
+`critic.py` and the training loop are untouched by the model change.
+
+## Rejected: the neighbour-aware critic
+
+### What was proposed
+
+LID is a **local** property, but the critic is pointwise (`128 -> 1`) and judges
+each vector in isolation, so nothing in the objective depends on local
+structure. The proposal was to append, to the critic's input, each vector's
+sorted distances to the `k` nearest members of a fixed reference buffer `R` of
+real vectors — giving the adversarial signal a handle on local geometry while
+keeping `D(x)` a function of `x` alone, so the gradient penalty stays
+well-defined.
+
+The buffer size (`reference_size: 2048`) and depth (`neighbour_k: 5`) were
+guesses. Grounding them empirically killed the mechanism.
+
+### Measurement
+
+Queries were 4000 held-out real vectors versus 4000 vectors from the actual v2
+run (`x100k_sparse_clamp4.npy`), scored by AUC from an L2-normalized logistic
+probe. `tools/probes/reference_probe.py`, `critic_control.py`, `anchor_probe.py`.
+
+| features | AUC (real vs v2) |
+|---|---|
+| **raw 128 dims — what the critic already sees** | **0.6291** |
+| random buffer 2048, k=5 | 0.5329 |
+| kmeans anchors 2048, k=5 | 0.5555 |
+| random buffer 200000, k=5 | 0.6155 |
+| raw + random 2048 | **0.6097** |
+| raw + kmeans 2048 | 0.6344 |
+| raw + random 65536 | 0.6476 |
+| raw + random 200000 | 0.6824 |
+
+### Why it was cut
+
+1. **The proposed size was worse than nothing.** At `reference_size: 2048`,
+   raw + neighbour features (0.6097) scored *below* raw alone (0.6291). The
+   features are noise at that scale and dilute the signal the critic already
+   has.
+
+2. **Distance concentration caps the mechanism.** Median distance to the
+   nearest reference point is 0.5354 at M=2048 and 0.4239 at M=200000 — a
+   hundredfold increase in buffer size moves it 21%. For scale, the median
+   5-NN distance within the *full 1M real set* is 0.5153. In 128 dimensions,
+   distance-to-nearest-of-M is nearly independent of M, so a reference buffer
+   cannot resolve local structure at any affordable size.
+
+3. **The only setting with a real gain is unaffordable.** M=200000 buys +0.053
+   AUC over raw, at 102M distance evaluations per critic call.
+
+4. **The probe is a lower bound that flatters the mechanism.** These are linear
+   probes; the real critic is a deep MLP that extracts more from the raw 128
+   dims than 0.6291, which shrinks the neighbour features' marginal value
+   further.
+
+K-means anchors did work as hypothesised — 2048 centroids matched roughly 50-65k
+random points — but the resulting gain over raw alone (+0.005) is within noise.
+
+### A defect worth remembering
+
+The design drew `R` from the training split, while real batches also come from
+the training split. Batch points therefore land *in* `R` and score distance
+exactly 0 — a free "this is real" tell the generator can never reproduce. At
+batch 512 the expected rate is `512 * M / 950000`: **1.1 points per batch at
+M=2048**, 8.8 at M=16384. Any future variant of this idea must draw the buffer
+from the holdout split.
+
+### What remains unresolved
+
+Cutting this leaves the original structural gap open: **no part of the training
+objective sees local structure.** The generator change is a bet that the right
+architecture reaches the right local geometry without being explicitly driven
+there. If v3 fixes sparsity but leaves LID short, that bet failed, and the next
+candidate is the explicit LID/kNN regularizer — which was rejected earlier for
+weakening LID as independent evidence, but which would at least move the metric.
 
 ## GPU isolation and durability
 
@@ -255,9 +296,9 @@ processes into `run_metadata.json` at start.
 
 `save_checkpoint` already persists `step`, generator, critic and **both
 optimizer states** — everything a resume needs. There is simply no code path
-that loads them back. Add `--resume <checkpoint>`, plus two format gaps:
-persist the **EMA shadow** (with `ema_decay: 0.999`, a resume that loses it
-silently restarts the average) and the **reference buffer** for v4/v2b.
+that loads them back. Add `--resume <checkpoint>`, plus one format gap: persist
+the **EMA shadow** (with `ema_decay: 0.999`, a resume that loses it silently
+restarts the average).
 
 Because the box is ephemeral, resume only helps if checkpoints leave it:
 
@@ -271,9 +312,9 @@ Because the box is ephemeral, resume only helps if checkpoints leave it:
 
 ## Implementation sequencing
 
-This spec covers two separable bodies of work: the model changes (generator,
-critic) and the run infrastructure (device claiming, lock, resume, off-box
-sync). They share no code and can be reviewed independently.
+This spec covers two separable bodies of work: the generator change and the run
+infrastructure (device claiming, lock, resume, off-box sync). They share no code
+and can be reviewed independently.
 
 The infrastructure lands **first**, as its own reviewable chunk. It is a
 prerequisite for spending GPU time safely on a shared, ephemeral box, and it is
@@ -286,17 +327,23 @@ Serialised on the single GPU, in dependency order:
 
 | Arm | Config | Isolates | Runs after |
 |---|---|---|---|
-| **v3** | structured gate, standard critic | Does correlated, over-dispersed support fix sparsity and `nnz_std_gap`? | — |
-| **v4** | structured gate + neighbour critic | Does the local-structure signal close LID? | v3 |
-| **v2b** | v2's independent gate + neighbour critic | Was it the gate or the critic that did the work? | v3 |
-| *reserve* | winner at a second seed | Is the result seed luck? | v4 / v2b |
+| **v3** | structured gate | Does correlated, over-dispersed support fix sparsity and `nnz_std_gap`, and does LID follow? | — |
+| **v3-seed** | v3 at a second seed | Is the result seed luck? | v3 |
+| *reserve* | ablation chosen by what v3 shows | — | v3 |
 
-v2b is what makes the result falsifiable. Without it a v4 win is unattributable
-between the two changes.
+Each arm is 100k generator steps at the v2 hyperparameters, exactly one config
+change from v2, following the existing one-change-per-variant convention.
 
-Each arm is 100k generator steps at the v2 hyperparameters, one config change
-from its comparison point, following the existing one-change-per-variant
-convention.
+Cutting the neighbour-aware critic collapsed the plan from four arms to two
+committed ones. The reserve is deliberately unassigned: v3 is a single change
+with two distinct sub-mechanisms (the per-vector sparsity level and the
+neighbourhood coupling), and if v3 lands between success and failure the useful
+third arm is whichever of those two the result implicates. Committing to it now
+would be guessing.
+
+Because only one GPU is available, arms run serially. Two committed 100k arms
+sit comfortably inside the 3-5 run budget, with headroom that did not exist
+under the four-arm plan.
 
 ## Success criteria
 
@@ -332,12 +379,7 @@ Following `tests/test_generator.py` conventions:
   property the whole design exists to deliver, so it is tested directly rather
   than only observed after training.
 
-For the critic:
-
-- Features are a pure function of `x` given a fixed buffer.
-- Gradients flow through the distance computation.
-- `resample_reference` changes the features.
-- Gradient penalty remains finite and well-behaved with features attached.
+The critic is unchanged, so its existing coverage stands as is.
 
 For device handling:
 
@@ -347,13 +389,13 @@ For device handling:
 
 ## Risks
 
-- **The gate mechanism may fix sparsity without moving LID.** The two are
-  linked by hypothesis, not by proof. v3 is deliberately run first and alone so
-  this is observable before spending the v4/v2b budget.
-- **The neighbour-aware critic may destabilise WGAN-GP.** Appending features
-  changes the critic's input distribution and its Lipschitz geometry. Watch the
-  logged `gp` term; if it climbs, the feature scaling (currently log1p) is the
-  first thing to revisit.
+- **The gate mechanism may fix sparsity without moving LID.** This is now the
+  dominant risk, and it is a genuine bet rather than a hedged one: with the
+  neighbour-aware critic cut, nothing in the objective sees local structure, so
+  v3 rests entirely on the architecture reaching the right geometry without
+  being driven there. v3 runs first and alone so the answer arrives before any
+  further budget is committed. If sparsity lands and LID does not, see "What
+  remains unresolved" above.
 - **Correlated noise may reduce effective gate entropy**, collapsing support
   diversity. Fixing the noise kernel (above) removes the worst version — the
   generator cannot learn its way to zero noise — but smoothing still lowers the
@@ -365,10 +407,13 @@ For device handling:
 
 ## Appendix A: probe scripts
 
-Three read-only scripts, committed under `tools/probes/` so the evidence above
-is reproducible rather than merely reported. Each was run against
-`/workspace/wgan-synthetic/data/sift_base.npy` with 200k rows at seed 0. They
-hard-code that path; point `PATH` at any local copy to re-run.
+Six read-only scripts, committed under `tools/probes/` so the evidence above is
+reproducible rather than merely reported. All were run against
+`/workspace/wgan-synthetic/data/sift_base.npy` at seed 0 — the structure probes
+on 200k rows, the critic probes on 4000 queries per side. They hard-code that
+path; repoint the constants at any local copy to re-run.
+
+**Structure probes** (drove the generator design):
 
 1. `layout_probe.py` — overall zero fraction, `nnz` mean/std vs the
    binomial-independent baseline, mean zero-indicator correlation by pair class
@@ -380,3 +425,16 @@ hard-code that path; point `PATH` at any local copy to re-run.
 3. `distance_probe.py` — residual correlation vs `|i−j|`, the group-of-4
    boundary test at `|i−j| = 1`, and within-cell residual correlation vs
    circular orientation distance.
+
+**Critic probes** (drove the rejection):
+
+4. `reference_probe.py` — expected zero-distance leak per batch, feature
+   stability across an independent buffer resample, and real-vs-v2 AUC by
+   buffer size and neighbour depth.
+5. `critic_control.py` — the decisive control: AUC from the raw 128 dims for
+   comparison, buffer sizes to 200k, and median nearest-reference distance vs
+   buffer size (the distance-concentration evidence).
+6. `anchor_probe.py` — k-means centroids versus random samples at equal buffer
+   size. Note: the `kmeans 16384` row was never obtained; the run was killed
+   after its ssh connection dropped, and the cheaper rows had already settled
+   the decision.

@@ -2,7 +2,7 @@
 > for provenance. It is not the source of truth: where this file disagrees with
 > `PROJECT_DOCUMENTATION.md`, the latter wins.
 
-# Structured-Gate Generator and Neighbour-Aware Critic
+# Structured-Gate Generator and Local Log-Ratio Regularizer
 
 **Date:** 2026-08-03
 **Branch:** `worktree-gan+next-iteration`
@@ -146,16 +146,69 @@ The critic stays the existing pointwise `Critic`. An earlier draft of this spec
 added a neighbour-aware critic; it was measured and cut. The negative result is
 recorded below so it is not re-proposed.
 
+### Generator regularizer: local log-ratio profile (the hedge)
+
+v3 bets that the right architecture reaches the right local geometry without
+being driven there. That bet is unhedged: with the neighbour-aware critic cut,
+nothing in the objective sees local structure. **v4 hedges it** with an explicit
+penalty, following the `distance_reg_alpha` pattern v1_5 already established.
+
+**What is matched.** Within a minibatch, compute each point's `k` nearest
+neighbours *among the other points in that batch*, giving sorted distances
+`r_1 <= ... <= r_k`. The matched quantity is the mean log-ratio profile
+
+```
+    p_i = mean_over_batch[ log(r_i / r_k) ]  ,  i = 1 .. k-1
+```
+
+and the penalty is `L_lid = alpha * || p_fake - p_real ||_1`, added to the
+generator loss.
+
+**Why the log-ratio profile rather than LID itself.** `p` is exactly the
+sufficient statistic the Hill estimator reduces to a scalar — `LID = -1 /
+mean_i(p_i)` — so matching `p` moves LID directly. But `p` is bounded and
+smooth, whereas LID's `-1/x` blows up as the mean log-ratio approaches zero.
+Matching `p` also gives a `(k-1)`-vector target rather than v1_5's single
+scalar, so it constrains the *shape* of the local neighbourhood, not just its
+scale.
+
+**Degenerate batches.** The failure modes are already characterised in
+`src/eval/ann_difficulty.py`: `r_1 = 0` (duplicate samples, entirely plausible
+under mode collapse) and `r_1 = r_k` (all neighbours tied). Rows failing
+`survivor_mask`'s condition are dropped from the batch mean, and the penalty
+contributes zero when no rows survive. The eval module's numpy implementation
+is the reference for this logic; training needs a torch reimplementation
+alongside it, not an import.
+
+**Real-side target uses an EMA.** The real distribution is fixed, so estimating
+`p_real` fresh from each minibatch only injects noise into the gradient.
+Maintain an EMA of the real profile (decay 0.99) and use it as the target. Same
+cost, lower variance.
+
+**Batch-relative, not absolute.** `r_i` here are within-batch distances at
+batch 512, far larger than true k-NN distances in a 1M set. That bias is
+identical on both sides and cancels — the same equal-N discipline the ANN
+panels already enforce.
+
+Cost is one extra `512 x 512` distance matrix per generator step. Negligible.
+
+New `training` config keys: `lid_reg_alpha` (default `0.0`, i.e. off — v3 runs
+with it disabled), `lid_reg_k` (default 20), `lid_reg_max_points` (default 256,
+mirroring `distance_reg_max_points`).
+
 ### Code seams
 
-One focused change, following existing patterns:
+Two focused changes, following existing patterns:
 
 - `src/models/generator.py` — add `StructuredGateGenerator`, register
   `structured_gated` in `build_generator`. `tests/test_generator_factory.py`
   already covers the dispatch.
+- `src/train/train_wgan_gp.py` — add the log-ratio penalty to the generator
+  loss beside the existing `distance_reg` term, and log it under `lid_reg` in
+  the same metrics dict. Off by default, so v0-v3 behaviour is bit-identical.
 
 `generate.py` and `evaluate_distribution.py` build only the generator, and
-`critic.py` and the training loop are untouched by the model change.
+`critic.py` is untouched.
 
 ## Rejected: the neighbour-aware critic
 
@@ -223,14 +276,14 @@ batch 512 the expected rate is `512 * M / 950000`: **1.1 points per batch at
 M=2048**, 8.8 at M=16384. Any future variant of this idea must draw the buffer
 from the holdout split.
 
-### What remains unresolved
+### What this leaves open
 
-Cutting this leaves the original structural gap open: **no part of the training
-objective sees local structure.** The generator change is a bet that the right
-architecture reaches the right local geometry without being explicitly driven
-there. If v3 fixes sparsity but leaves LID short, that bet failed, and the next
-candidate is the explicit LID/kNN regularizer — which was rejected earlier for
-weakening LID as independent evidence, but which would at least move the metric.
+Cutting this leaves the original structural gap: **no part of the adversarial
+objective sees local structure.** The gap is now addressed outside the critic,
+by the log-ratio regularizer above — v3 tests the unhedged architectural bet,
+v4 hedges it. What is *not* recovered is a local-structure signal inside the
+adversarial game itself; the regularizer is an explicit penalty bolted beside
+it, with the evidential cost described under Success criteria.
 
 ## GPU isolation and durability
 
@@ -312,14 +365,18 @@ Because the box is ephemeral, resume only helps if checkpoints leave it:
 
 ## Implementation sequencing
 
-This spec covers two separable bodies of work: the generator change and the run
-infrastructure (device claiming, lock, resume, off-box sync). They share no code
-and can be reviewed independently.
+This spec covers three separable bodies of work: the generator change, the
+log-ratio regularizer, and the run infrastructure (device claiming, lock,
+resume, off-box sync). They share no code and can be reviewed independently.
+The regularizer is off by default, so it can land before v3 finishes without
+affecting it.
 
 The infrastructure lands **first**, as its own reviewable chunk. It is a
 prerequisite for spending GPU time safely on a shared, ephemeral box, and it is
 testable without a GPU — the lock, the device-resolution rules and the resume
-path all exercise on CPU. Model work follows, gated on a green infra chunk.
+path all exercise on CPU. The generator lands next, gated on a green infra
+chunk, so v3 can start. The regularizer lands last and in parallel with v3's
+run — it is inert at `lid_reg_alpha: 0.0` and cannot perturb an arm in flight.
 
 ## Experiment plan
 
@@ -327,23 +384,28 @@ Serialised on the single GPU, in dependency order:
 
 | Arm | Config | Isolates | Runs after |
 |---|---|---|---|
-| **v3** | structured gate | Does correlated, over-dispersed support fix sparsity and `nnz_std_gap`, and does LID follow? | — |
-| **v3-seed** | v3 at a second seed | Is the result seed luck? | v3 |
-| *reserve* | ablation chosen by what v3 shows | — | v3 |
+| **v3** | structured gate, `lid_reg_alpha: 0.0` | Does correlated, over-dispersed support fix sparsity — and does LID follow on its own? | — |
+| **v4** | v3 + `lid_reg_alpha > 0` | If LID does not follow, can it be driven there — and does the rest of the local structure come with it? | v3 |
+| *reserve* | seed repeat of whichever arm lands, or the sub-mechanism ablation v3 implicates | — | v4 |
 
-Each arm is 100k generator steps at the v2 hyperparameters, exactly one config
-change from v2, following the existing one-change-per-variant convention.
+Each arm is 100k generator steps at the v2 hyperparameters. v3 is exactly one
+config change from v2 and v4 is exactly one from v3, so the
+one-change-per-variant convention holds and v3-vs-v4 attributes cleanly to the
+regularizer.
 
-Cutting the neighbour-aware critic collapsed the plan from four arms to two
-committed ones. The reserve is deliberately unassigned: v3 is a single change
-with two distinct sub-mechanisms (the per-vector sparsity level and the
-neighbourhood coupling), and if v3 lands between success and failure the useful
-third arm is whichever of those two the result implicates. Committing to it now
-would be guessing.
+**v4 runs regardless of v3's outcome**, because it answers a different question
+in each case. If v3 misses LID, v4 asks whether the metric is reachable at all.
+If v3 *hits* LID unaided, v4 becomes the more interesting arm: it tests whether
+the explicit penalty adds anything beyond what the architecture already
+achieved, and a null result there is a strong endorsement of v3.
+
+The reserve stays unassigned deliberately. v3 bundles two sub-mechanisms — the
+per-vector sparsity level and the neighbourhood coupling — and if the result
+lands between success and failure, the useful third arm is whichever one the
+data implicates. Committing now would be guessing.
 
 Because only one GPU is available, arms run serially. Two committed 100k arms
-sit comfortably inside the 3-5 run budget, with headroom that did not exist
-under the four-arm plan.
+plus a reserve sit inside the 3-5 run budget.
 
 ## Success criteria
 
@@ -352,15 +414,35 @@ under the four-arm plan.
 - `lid_median` within 5% of real 17.74, i.e. **16.85–18.63**
 - `exact_zero_fraction` in **0.21–0.25**
 
-**Independent evidence** — reported, not gated, and never trained on directly:
+**Independent evidence** — reported, not gated:
 
 - `nnz` std approaching the measured **14.45** (v2 sits near the binomial 4.76)
 - residual zero-correlation ~**+0.32** at `|i−j| = 1` and ~**+0.27** at offset 8
-- `hubness_skew` (real 1.884) and `ivf_gini` (real 0.304)
+- `hubness_skew` (real 1.884), `ivf_gini` (real 0.304), `relative_contrast`
+  (real 2.267)
 
 The correlation-profile targets are new and specific to this design. They are
 the strongest available check that the generator reproduces SIFT's structure
 rather than merely hitting a scalar.
+
+### The two arms are not judged the same way
+
+This matters, and it is the price of hedging.
+
+**v3 trains on none of the above.** If it hits the LID gate, LID is genuine
+independent evidence and the result is strong.
+
+**v4 trains on LID's sufficient statistic.** Its `lid_median` is a *fitted*
+number, not evidence — hitting the gate only demonstrates that the regularizer
+works, which is close to tautological. So for v4 the gate above is necessary
+but says almost nothing on its own, and the real question is what comes with
+it: does driving the log-ratio profile to the real one also pull
+`hubness_skew`, `ivf_gini` and `relative_contrast` toward real, or does the
+model satisfy the penalty while the rest of the local structure stays wrong?
+
+Those three are untouched by the regularizer and remain independent under both
+arms, as do all the support statistics. Any write-up of a v4 result must lead
+with them rather than with LID.
 
 ## Testing
 
@@ -379,6 +461,20 @@ Following `tests/test_generator.py` conventions:
   property the whole design exists to deliver, so it is tested directly rather
   than only observed after training.
 
+For the log-ratio regularizer:
+
+- The penalty is zero when fake and real batches are drawn from the same
+  distribution, and grows as they diverge.
+- Gradients flow to the generator through the within-batch neighbour distances.
+- Degenerate batches are handled: an all-duplicate batch (`r_1 = 0`) and an
+  all-tied batch (`r_1 = r_k`) both yield a finite penalty and finite
+  gradients, never `inf` or `nan`. This mirrors the cases already covered in
+  `tests/test_ann_difficulty.py`.
+- With `lid_reg_alpha: 0.0` the generator loss is bit-identical to the current
+  one, so v0-v3 are unaffected.
+- The torch implementation agrees with `ann_difficulty`'s numpy reference on
+  the same input, within float tolerance. This keeps the two from drifting.
+
 The critic is unchanged, so its existing coverage stands as is.
 
 For device handling:
@@ -389,13 +485,22 @@ For device handling:
 
 ## Risks
 
-- **The gate mechanism may fix sparsity without moving LID.** This is now the
-  dominant risk, and it is a genuine bet rather than a hedged one: with the
-  neighbour-aware critic cut, nothing in the objective sees local structure, so
-  v3 rests entirely on the architecture reaching the right geometry without
-  being driven there. v3 runs first and alone so the answer arrives before any
-  further budget is committed. If sparsity lands and LID does not, see "What
-  remains unresolved" above.
+- **The gate mechanism may fix sparsity without moving LID.** v3 rests entirely
+  on the architecture reaching the right geometry without being driven there.
+  This is now hedged rather than fatal: v4 exists precisely for this outcome.
+  v3 still runs first, so the unhedged answer is on record before the
+  regularizer muddies it.
+- **The regularizer may satisfy the profile without fixing the geometry.**
+  Matching a `(k-1)`-vector of mean log-ratios is a much weaker constraint than
+  matching the local geometry itself; a model can hit it while `hubness_skew`
+  and `ivf_gini` stay wrong. This is the specific thing v4's read-out is
+  designed to detect, and a v4 that hits LID while missing everything else is
+  an informative negative, not a failure of the experiment.
+- **The regularizer may destabilise training.** Within-batch neighbour
+  distances give a noisier gradient than v1_5's single scalar, and the penalty
+  competes with the adversarial loss. The real-side EMA reduces variance;
+  beyond that, `lid_reg_alpha` starts at v1_5's proven scale (0.1) and the
+  logged `lid_reg` term is watched alongside `wasserstein` for divergence.
 - **Correlated noise may reduce effective gate entropy**, collapsing support
   diversity. Fixing the noise kernel (above) removes the worst version — the
   generator cannot learn its way to zero noise — but smoothing still lowers the

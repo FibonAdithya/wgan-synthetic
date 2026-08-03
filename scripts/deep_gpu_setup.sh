@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Provision /workspace/deep-gan on tig-gpu from a git bundle pushed up from a
+# local worktree. Never touches /workspace/wgan-synthetic, which is a shared
+# checkout other agents may be using.
+set -euo pipefail
+
+REMOTE="${REMOTE:-tig-gpu}"
+WORK_DIR="/workspace/deep-gan"
+CACHE_DIR="/workspace/data-cache"
+BUNDLE="/tmp/deep-gan.bundle"
+BRANCH="$(git branch --show-current)"
+
+echo "==> bundling ${BRANCH}"
+git bundle create "${BUNDLE}" "${BRANCH}"
+scp -q "${BUNDLE}" "${REMOTE}:/tmp/deep-gan.bundle"
+
+echo "==> unpacking on ${REMOTE}"
+ssh "${REMOTE}" bash -s <<REMOTE_SCRIPT
+set -euo pipefail
+if [ -d "${WORK_DIR}/.git" ]; then
+    cd "${WORK_DIR}"
+    git fetch /tmp/deep-gan.bundle "${BRANCH}:refs/heads/${BRANCH}" --force
+    git checkout --force "${BRANCH}"
+else
+    git clone -b "${BRANCH}" /tmp/deep-gan.bundle "${WORK_DIR}"
+fi
+cd "${WORK_DIR}"
+/venv/main/bin/pip install -q -r requirements.txt
+mkdir -p "${CACHE_DIR}"
+REMOTE_SCRIPT
+
+echo "==> fetching DEEP data (shared cache, downloads only once)"
+ssh "${REMOTE}" "cd ${WORK_DIR} && /venv/main/bin/python -m src.deep.download \
+    --cache-path ${CACHE_DIR}/deep-image-96-angular.hdf5 --out-dir data"
+
+echo "==> done: ${REMOTE}:${WORK_DIR}"

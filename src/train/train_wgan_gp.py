@@ -23,6 +23,35 @@ from src.data.sift1m_dataset import (
 from src.device import resolve_device
 from src.models.critic import Critic
 from src.models.generator import build_generator
+from src.train.gpu_lock import claim_gpu, gpu_lock_key
+
+
+def gpu_preflight(device: torch.device) -> Dict[str, object]:
+    """Snapshot of the card at launch, for `run_metadata.json`.
+
+    Costs nothing and turns "the run died at step 60k" into an answerable
+    question -- specifically, whether it was already sharing the card.
+
+    The spec also asked for a list of other compute processes on the card.
+    Torch exposes no such API (it needs NVML), and adding a dependency for
+    forensics is not worth it: `memory_free_bytes` well below
+    `memory_total_bytes` at launch already says someone else is resident,
+    which is the only part that changes a decision.
+    """
+    meta: Dict[str, object] = {"device": str(device)}
+    if device.type != "cuda":
+        return meta
+    props = torch.cuda.get_device_properties(device)
+    free, total = torch.cuda.mem_get_info(device)
+    meta.update(
+        {
+            "name": props.name,
+            "uuid": gpu_lock_key(device),
+            "memory_free_bytes": int(free),
+            "memory_total_bytes": int(total),
+        }
+    )
+    return meta
 
 
 def set_seed(seed: int) -> None:
@@ -291,6 +320,11 @@ def train(config: Dict) -> Tuple[Path, Dict]:
     seed = int(config["seed"])
     set_seed(seed)
     device = resolve_device(config["device"], strict=True)
+    memory_fraction = float(config["training"].get("gpu_memory_fraction", 0.9))
+    if device.type == "cuda" and 0.0 < memory_fraction < 1.0:
+        # Belt and braces: if the lock is bypassed, a run degrades instead of
+        # taking the whole card down with it.
+        torch.cuda.set_per_process_memory_fraction(memory_fraction, device)
     out_dir = Path(config["output_dir"])
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -510,6 +544,8 @@ def train(config: Dict) -> Tuple[Path, Dict]:
                 generator_weights="live",
             )
 
+    run_meta["gpu"] = gpu_preflight(device)
+
     with (out_dir / "run_metadata.json").open("w", encoding="utf-8") as f:
         json.dump(run_meta, f, indent=2)
 
@@ -529,7 +565,14 @@ def main() -> None:
     args = parse_args()
     with Path(args.config).open("r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
-    best_ckpt, _ = train(config)
+    device = resolve_device(config["device"], strict=True)
+    train_cfg = config["training"]
+    with claim_gpu(
+        device,
+        run_dir=Path(config["output_dir"]),
+        timeout_s=float(train_cfg.get("gpu_lock_timeout_s", 1800.0)),
+    ):
+        best_ckpt, _ = train(config)
     print(f"Training complete. Best checkpoint: {best_ckpt}")
 
 

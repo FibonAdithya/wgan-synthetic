@@ -6,7 +6,7 @@ import json
 import math
 import random
 from pathlib import Path
-from typing import Dict, Iterator, Tuple
+from typing import Dict, Iterator, Optional, Tuple
 
 import numpy as np
 import torch
@@ -263,14 +263,22 @@ def save_checkpoint(
     step: int,
     best: bool = False,
     generator_weights: str = "live",
+    ema_params: Optional[Dict[str, Tensor]] = None,
+    ema_step: int = 0,
+    best_cov: float = float("inf"),
 ) -> None:
     """Write a checkpoint.
 
     `generator_weights` records which parameters `generator_state_dict` holds:
     "live" (the currently optimised parameters) or "ema" (the bias-corrected
     EMA swapped in for evaluation). Everything else in the file -- critic and
-    both optimiser states -- is always live; the EMA is a read-only shadow of
-    the generator and has no optimiser moments of its own.
+    both optimiser states -- is always live.
+
+    `ema_params`, `ema_step` and `best_cov` are the live training state a
+    resume needs and the model files do not carry. The EMA shadow matters
+    most: at decay 0.999 a resume that loses it silently restarts a
+    thousand-step average, and since best_generator.pt is chosen from EMA
+    weights the damage only shows up in the final artifact.
     """
     if generator_weights not in ("live", "ema"):
         raise ValueError(f"generator_weights must be 'live' or 'ema', got {generator_weights!r}")
@@ -281,6 +289,9 @@ def save_checkpoint(
         "critic_state_dict": critic.state_dict(),
         "optim_g_state_dict": optim_g.state_dict(),
         "optim_d_state_dict": optim_d.state_dict(),
+        "ema_params": {k: v.detach().cpu() for k, v in (ema_params or {}).items()},
+        "ema_step": int(ema_step),
+        "best_cov": float(best_cov),
     }
     out_dir.mkdir(parents=True, exist_ok=True)
     torch.save(ckpt, out_dir / f"checkpoint_step_{step}.pt")
@@ -529,6 +540,9 @@ def train(config: Dict) -> Tuple[Path, Dict]:
                         step,
                         best=True,
                         generator_weights="ema" if use_ema else "live",
+                        ema_params=ema_params,
+                        ema_step=ema_step,
+                        best_cov=best_cov,
                     )
 
         if step % save_every == 0:
@@ -542,6 +556,9 @@ def train(config: Dict) -> Tuple[Path, Dict]:
                 step,
                 best=False,
                 generator_weights="live",
+                ema_params=ema_params,
+                ema_step=ema_step,
+                best_cov=best_cov,
             )
 
     run_meta["gpu"] = gpu_preflight(device)

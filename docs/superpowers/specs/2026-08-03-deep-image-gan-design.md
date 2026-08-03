@@ -176,18 +176,62 @@ pipeline smoke runs and 1M for the real runs. The full 10M is not used — a
 WGAN never sees a full epoch anyway, so beyond ~1M the extra rows change
 sample diversity marginally while making every load heavier.
 
-Training runs on `tig-gpu` (RTX 4060, 8 GB). These MLPs are ~2.5M parameters
-total, so the constraint is wall clock, not memory.
+Training runs on `tig-gpu` (RTX 4060, 8 GB). Measured on that card with the
+exact layer sizes above, batch 512, `n_critic: 3` and the gradient penalty:
+
+- **71 MiB peak allocated, 98 MiB reserved** — under ~600 MiB of VRAM once the
+  CUDA context is counted, i.e. under 8% of the card.
+- **47.6 ms per generator step**, so a 30k-step rung is ~24 minutes and the
+  full four-rung ladder is ~1.6 hours run sequentially.
+
+Neither memory nor wall clock is the binding constraint. Contention with other
+users of the box is (below).
+
+## Sharing the GPU box
+
+Other agents may run jobs on `tig-gpu` concurrently. The measurements above
+show the two jobs can coexist — this work cannot exhaust 8 GB of VRAM by any
+plausible margin — so the plan isolates rather than waits. Contention risk is
+on the filesystem and process namespace, not the GPU.
+
+**Never touch `/workspace/wgan-synthetic`.** That shared checkout may be
+another agent's working tree. This work gets its own directory,
+`/workspace/deep-gan/`, populated from a git bundle pushed up from the local
+worktree.
+
+- **VRAM ceiling.** Each training process calls
+  `torch.cuda.set_per_process_memory_fraction(0.25)` at startup — a hard cap at
+  ~2 GB, roughly 20x the measured peak, so a runaway allocation fails our job
+  instead of another agent's. Set `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`
+  so the allocator returns freed blocks rather than sitting on a fragmented
+  reserve.
+- **Run the ladder sequentially, one rung at a time.** Four concurrent rungs
+  would contend with each other for SMs before they contended with anyone else,
+  and finish no sooner in aggregate. One at a time also leaves the card mostly
+  free for whoever else wants it.
+- **Preflight check.** Before launching a rung, read
+  `nvidia-smi --query-gpu=memory.used,utilization.gpu`. If the card is already
+  heavily loaded, queue behind it rather than piling on. This is courtesy, not
+  correctness — the job would still run.
+- **Namespaced supervisor programs.** `deepgan_<variant>`, so
+  `supervisorctl` names cannot collide with another agent's services. Logs to
+  `/var/log/portal/deepgan_<variant>.log`.
+- **Shared, atomically-written data cache.** The 4 GB HDF5 goes to
+  `/workspace/data-cache/deep-image-96-angular.hdf5` — deliberately shared,
+  since it is read-only and nobody benefits from two copies. `download.py`
+  writes to a temporary file in the same directory and `os.replace`s it into
+  place, so a concurrent reader sees either no file or a complete one, never a
+  partial download. A lockfile makes the second of two concurrent downloaders
+  wait for the first rather than duplicating a 4 GB fetch.
 
 ### Persistence
 
 `workspace_is_volume=false` on that instance. **Nothing on the container
-filesystem survives a recycle or destroy**, including the repo copy at
-`/workspace/wgan-synthetic` and every checkpoint written there. The plan
-therefore:
+filesystem survives a recycle or destroy** — not `/workspace/deep-gan`, not the
+shared data cache, not a single checkpoint. The plan therefore:
 
-- pushes work up as a git bundle, matching the `sparse.bundle` pattern already
-  in that box's home directory;
+- pushes work up as a git bundle into `/workspace/deep-gan`, matching the
+  `sparse.bundle` pattern already in that box's home directory;
 - runs training as a **supervisor service**, not a loose background process —
   the instance's own agent guide is explicit that a bare `python … &` dies with
   the shell and its logs never reach the portal;

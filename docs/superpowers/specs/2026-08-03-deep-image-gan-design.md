@@ -38,9 +38,10 @@ suite — none of which is dimension-bound.
 
 ## Scope
 
-A parallel `src/deep/` track: data acquisition, a DEEP-appropriate generator, a
-four-rung variant ladder, and an ANN-difficulty comparison report. Trained to
-completion on the `tig-gpu` box.
+A parallel `src/deep/` track: data acquisition, a DEEP-appropriate
+preprocessing inverse and spectrum regularizer, a three-rung variant ladder,
+and an ANN-difficulty comparison report. Trained to completion on the
+`tig-gpu` box.
 
 Explicitly out of scope:
 
@@ -71,13 +72,13 @@ Rejected: no DEEP-appropriate inductive bias, and no answer to where the data
 comes from. It is the `deep_v0` rung of the chosen design, not a design.
 
 **Parallel deep track (chosen).** New `src/deep/` modules that *call* the
-existing trainer rather than reimplement it. SIFT files take three additive
+existing trainer rather than reimplement it. SIFT files take two additive
 touches and no behavioural change.
 
 This is cheaper than it first appears because `train(config: Dict)`
 (`src/train/train_wgan_gp.py:299`) is already a clean, config-driven entry
-point. The deep track supplies a config and a generator; the loop is reused
-as-is.
+point. The deep track supplies a config and one optional loss term; the loop
+is reused as-is.
 
 ## Architecture
 
@@ -85,11 +86,10 @@ as-is.
 src/deep/
   download.py    fetch deep-image-96-angular.hdf5 -> data/deep96_{1m,250k}.npy
   dataset.py     HDF5 reader + inverse-preprocess
-  generator.py   SphericalGenerator
   spectrum.py    covariance-spectrum regularizer
   sample.py      sampler that inverts preprocessing before writing
   report.py      deep variant table -> ANN-difficulty comparison
-configs/deep_gan_{v0,v1,v1_5,v2}.yaml
+configs/deep_gan_{v0,v1,v2}.yaml
 tests/test_deep_*.py
 ```
 
@@ -101,9 +101,6 @@ Each module has one job and can be tested without the others:
 - `dataset.py` adds `invert_preprocess(x, state)`, the inverse of the existing
   `apply_preprocess`. This is the piece the pipeline genuinely lacks today, and
   the `deep_v2` rung cannot be correct without it.
-- `generator.py` holds `SphericalGenerator`: an MLP trunk with an explicit
-  L2-normalizing output head. Unlike `GatedGenerator` it is sign-free and has
-  no stochastic gate, so it is deterministic given `z`.
 - `spectrum.py` is a pure function of two batches, returning a scalar loss. No
   model state, no config coupling.
 - `sample.py` mirrors `src/sample/generate.py` but applies
@@ -112,16 +109,34 @@ Each module has one job and can be tested without the others:
 - `report.py` holds the deep variant table and drives the comparison, mirroring
   `src/eval/compare_variants.py`.
 
+### Correction: no spherical generator is needed
+
+An earlier draft of this spec added a `SphericalGenerator` with an
+L2-normalizing output head, as a rung testing whether the critic benefits from
+seeing on-manifold samples. **That rung was removed: it is a no-op.**
+
+`normalize_l2` is already applied at every point the generator's output is
+consumed — the critic step (`src/train/train_wgan_gp.py:408`), the generator
+step (`:435`), `sample_generator` (`:292`), and `src/sample/generate.py:64`.
+The normalize is differentiable and sits in the autograd graph, so a plain MLP
+wrapped in `normalize_l2` is mathematically identical to an MLP with a
+normalizing head; only the location of the code differs. The critic already
+trains against unit-norm samples.
+
+The spherical inductive bias is therefore free, and `deep_v0` has it. This also
+removes `src/deep/generator.py` and the `build_generator` touch, leaving two
+shared-file touches instead of three.
+
 ### Touches to shared files
 
-Three, all additive:
+Two, both additive:
 
-1. `src/models/generator.py` — a `"spherical"` branch in `build_generator`.
-   The existing `"mlp"` and `"gated"` branches are untouched.
-2. `src/train/train_wgan_gp.py` — an optional `spectrum_reg_alpha` term,
+1. `src/train/train_wgan_gp.py` — an optional `spectrum_reg_alpha` term,
    following the `distance_reg_alpha` precedent already in the loop. Defaults
    to `0.0`, so SIFT configs behave identically.
-3. `data/README.md` — document the DEEP data contract alongside the SIFT one.
+2. `data/README.md` — document the DEEP data contract alongside the SIFT one.
+
+`requirements.txt` also gains `h5py`, needed only by `download.py`.
 
 ## Variant ladder
 
@@ -130,9 +145,8 @@ methodology of the SIFT table in `PROJECT_DOCUMENTATION.md`.
 
 | Variant | Delta | Tests |
 |---|---|---|
-| `deep_v0` | plain MLP; EMA and GP settings carried over from SIFT | baseline; post-hoc normalize only |
-| `deep_v1` | `model.generator_type: spherical` | critic sees on-manifold samples during training |
-| `deep_v1_5` | `+ training.spectrum_reg_alpha` | explicit pressure on the PCA variance decay |
+| `deep_v0` | plain MLP; EMA and GP settings carried over from SIFT | baseline; already spherical via `normalize_l2` |
+| `deep_v1` | `+ training.spectrum_reg_alpha: 0.1` | explicit pressure on the PCA variance decay |
 | `deep_v2` | `+ data.preprocess.whiten: true`, inverse at sample time | anisotropy exact by construction |
 
 `deep_v0` is derived from `configs/sift_gan_v1.yaml` — the SIFT rung that has
@@ -146,10 +160,10 @@ row's stated delta varies.
 Carrying these forward rather than re-ablating them is deliberate: those
 questions were answered on SIFT, and re-running them costs GPU hours for no new
 information. `spectrum_reg_alpha` defaults to `0.0` everywhere except
-`deep_v1_5`, where its starting value is `0.1`, matching the scale
+`deep_v1`, where its starting value is `0.1`, matching the scale
 `distance_reg_alpha` uses in `sift_gan_v1_5.yaml`.
 
-`deep_v1_5` and `deep_v2` attack the same problem — the PCA variance decay —
+`deep_v1` and `deep_v2` attack the same problem — the PCA variance decay —
 by different means: one by penalty, one by construction. The ladder is
 informative precisely because they can be compared.
 
@@ -182,7 +196,7 @@ exact layer sizes above, batch 512, `n_critic: 3` and the gradient penalty:
 - **71 MiB peak allocated, 98 MiB reserved** — under ~600 MiB of VRAM once the
   CUDA context is counted, i.e. under 8% of the card.
 - **47.6 ms per generator step**, so a 30k-step rung is ~24 minutes and the
-  full four-rung ladder is ~1.6 hours run sequentially.
+  full three-rung ladder is ~1.2 hours run sequentially.
 
 Neither memory nor wall clock is the binding constraint. Contention with other
 users of the box is (below).
@@ -205,7 +219,7 @@ worktree.
   instead of another agent's. Set `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`
   so the allocator returns freed blocks rather than sitting on a fragmented
   reserve.
-- **Run the ladder sequentially, one rung at a time.** Four concurrent rungs
+- **Run the ladder sequentially, one rung at a time.** Three concurrent rungs
   would contend with each other for SMs before they contended with anyone else,
   and finish no sooner in aggregate. One at a time also leaves the card mostly
   free for whoever else wants it.
@@ -246,8 +260,6 @@ nor the `.npy` subsets are committed.
 Unit tests per module, following the existing `tests/` conventions (imports at
 the top of the file, per FOLLOWUPS item 3):
 
-- `SphericalGenerator` emits unit-norm rows, admits negative values, and is
-  deterministic given `z` — the last being the contrast with `GatedGenerator`.
 - `invert_preprocess(apply_preprocess(x)) ~= x` for each combination of
   center/whiten, within float32 tolerance. This is the round-trip that
   `deep_v2` depends on.

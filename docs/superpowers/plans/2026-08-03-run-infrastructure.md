@@ -216,6 +216,7 @@ Sampling and eval keep the permissive behaviour."
 Create `tests/test_gpu_lock.py`:
 
 ```python
+import os
 import time
 from pathlib import Path
 
@@ -251,7 +252,7 @@ def test_second_concurrent_claim_fails_and_names_the_holder(tmp_path, monkeypatc
     # operator deciding whether to wait or kill.
     message = str(excinfo.value)
     assert "run_a" in message
-    assert str(__import__("os").getpid()) in message
+    assert str(os.getpid()) in message
 
 
 def test_different_keys_do_not_block_each_other(tmp_path, monkeypatch):

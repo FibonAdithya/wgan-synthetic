@@ -1,5 +1,5 @@
 import argparse
-import inspect
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -24,13 +24,16 @@ def test_deep_variants_do_not_collide_with_sift_run_dirs():
     assert not sift_dirs & {v.run_dir for v in DEEP_VARIANTS}
 
 
-def test_report_args_match_eda_report_fields():
+def test_report_args_match_eda_report_fields(monkeypatch, tmp_path):
     """Field-for-field parity with eda_report.parse_args is load-bearing.
 
     If eda_report gains a required argument and this Namespace is not updated,
     sampling hundreds of thousands of vectors succeeds before the mismatch
-    surfaces as a runtime AttributeError. Mirrors the SIFT test of the same
-    name in tests/test_compare_variants.py.
+    surfaces as a runtime AttributeError. Rather than scraping parse_args's
+    source (fragile against multi-line add_argument calls), invoke the real
+    parse_args and compare its actual field set against build_report_args's
+    output, both ways. Mirrors the SIFT test of the same name in
+    tests/test_compare_variants.py.
     """
     args = argparse.Namespace(
         real_path="real.npy",
@@ -49,15 +52,22 @@ def test_report_args_match_eda_report_fields():
         no_png=True,
         plotlyjs="inline",
     )
-    produced = vars(build_report_args(args, ["v0=samples/v0.npy"]))
+    produced = build_report_args(args, ["v0=samples/v0.npy"])
 
-    source = inspect.getsource(eda_report.parse_args)
-    expected = {
-        line.split('"')[1].lstrip("-").replace("-", "_")
-        for line in source.splitlines()
-        if "add_argument(" in line and '"--' in line
-    }
-    assert expected - set(produced) == set()
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "eda_report.py",
+            "--real-path",
+            "real.npy",
+            "--output-dir",
+            str(tmp_path / "out"),
+        ],
+    )
+    eda_args = eda_report.parse_args()
+
+    assert set(vars(produced)) == set(vars(eda_args))
 
 
 def test_report_args_pass_through_the_ann_settings():

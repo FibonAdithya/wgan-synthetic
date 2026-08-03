@@ -547,7 +547,7 @@ def main() -> None:
 - [ ] **Step 6: Run the full suite**
 
 Run: `/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/python -m pytest -q`
-Expected: PASS, 126 tests. `tests/test_train_smoke.py` unaffected — it calls `train()`, which takes no lock.
+Expected: PASS, 132 tests. `tests/test_train_smoke.py` unaffected — it calls `train()`, which takes no lock.
 
 - [ ] **Step 7: Commit**
 
@@ -696,7 +696,7 @@ Expected: PASS (2 tests)
 - [ ] **Step 6: Run the full suite**
 
 Run: `/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/python -m pytest -q`
-Expected: PASS, 128 tests.
+Expected: PASS, 134 tests.
 
 - [ ] **Step 7: Commit**
 
@@ -880,7 +880,7 @@ Expected: PASS (5 tests)
 - [ ] **Step 6: Run the full suite**
 
 Run: `/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/python -m pytest -q`
-Expected: PASS, 131 tests.
+Expected: PASS, 137 tests.
 
 - [ ] **Step 7: Commit**
 
@@ -980,7 +980,7 @@ and no test that would prove it works. A shell script beside
 - [ ] **Step 3: Verify the suite still passes**
 
 Run: `/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/python -m pytest -q`
-Expected: PASS, 131 tests. Documentation-only changes.
+Expected: PASS, 137 tests. Documentation-only changes.
 
 - [ ] **Step 4: Commit**
 
@@ -1002,7 +1002,7 @@ After Task 6, confirm the whole phase:
 /home/fibonadithya/TIG/wgan-synthetic/.venv/bin/python -m pytest -q
 ```
 
-Expected: 131 passed, up from the 118 baseline.
+Expected: 137 passed, up from the 118 baseline.
 
 Then confirm the strict-mode refusal actually fires on hardware, which no CPU
 test can prove:

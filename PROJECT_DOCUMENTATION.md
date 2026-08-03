@@ -147,17 +147,48 @@ Training entrypoint:
 
 ## Device behavior
 
-Auto device selection (implemented):
+Resolved by `src/device.py` (`resolve_device`), shared by training, sampling
+and eval.
+
+Order for `device: auto`:
 
 1. CUDA (if available)
 2. MPS (Apple Metal, if available)
 3. CPU fallback
 
-Applied in:
+Training passes `strict=True`, which **rejects `auto` when CUDA is present
+and `CUDA_VISIBLE_DEVICES` is unset**. Plain `auto` resolves to a bare
+`cuda`, i.e. `cuda:0`, so on a shared box two runs silently land on the same
+card. Name the device in the config (`device: cuda:0`) or pin the process.
+Sampling and eval stay permissive -- they are short and read-only.
 
-- `src/train/train_wgan_gp.py`
-- `src/sample/generate.py`
-- `src/eval/evaluate_distribution.py`
+### GPU claiming
+
+`src/train/gpu_lock.py` takes an exclusive `flock` for the duration of a run,
+keyed on the card's **UUID** rather than its index, since two processes with
+different `CUDA_VISIBLE_DEVICES` mappings both see their card as index 0. The
+lock is acquired in `main()`, so it covers every CLI launch but not direct
+`train()` calls from tests.
+
+| Config key | Default | Meaning |
+|---|---|---|
+| `training.gpu_lock_timeout_s` | `1800` | Seconds to queue for a busy card before giving up. |
+| `training.gpu_memory_fraction` | `0.9` | Per-process cap, so a bypassed lock degrades a run rather than taking the card down. |
+
+`flock` is advisory and host-local: it coordinates cooperating processes on
+one machine, and does nothing across hosts or against a process that does not
+take the lock.
+
+`run_metadata.json` records a `gpu` block with the card's name, UUID and free
+and total memory at launch.
+
+### Resume
+
+`--resume <checkpoint>` continues a run. `num_gen_steps` is the target
+**total**, not an additional budget. Checkpoints carry both optimiser states,
+the EMA shadow, `ema_step` and `best_cov`. Resuming an EMA-enabled run from a
+checkpoint without a shadow is refused rather than silently restarting the
+average.
 
 ---
 

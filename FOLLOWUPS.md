@@ -56,3 +56,18 @@ constant.
 - `fig_ann_profile`: when `populated` is empty for a column, `continue` leaves a
   bare subplot with no axis titles and no note. Only reachable if every series is
   fully degenerate.
+
+## Run infrastructure
+
+### Off-box sync is specified but not implemented
+
+`docs/superpowers/specs/2026-08-03-structured-gate-generator-design.md` calls
+for syncing run artifacts off the vast.ai box, whose `workspace_is_volume` is
+`false` -- nothing survives recycle or destroy. Resume protects against
+contention and preemption, but only if checkpoints leave the machine.
+
+Still needed: sync `summary.json`, logs and `run_metadata.json` on the
+`eval_every` cadence, and pull `best_generator.pt` after each arm. Deferred
+because it is an operational concern with no natural home in this codebase
+and no test that would prove it works. A shell script beside
+`data/sample_sift1m_100k.sh` is the likely shape.

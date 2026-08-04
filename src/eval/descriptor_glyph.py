@@ -73,3 +73,57 @@ def shared_scale(descriptors: np.ndarray, percentile: float = 99.0) -> float:
     if reference <= 0.0:
         return 0.0
     return 1.0 / reference
+
+
+def glyph_segments(
+    cells: np.ndarray,
+    origin: tuple,
+    pitch: float,
+    scale: float,
+):
+    """Ray endpoints for one glyph, split by sign of the bin value.
+
+    Returns `(pos_x, pos_y, neg_x, neg_y)` as NaN-separated coordinate arrays
+    ready to hand to a Plotly line trace: each ray contributes cell centre,
+    tip, then NaN. Zero-length rays are omitted, so an all-zero descriptor
+    yields empty arrays.
+
+    Negative bins land in `neg_*` at magnitude `|value|` rather than being
+    clamped to zero. Real SIFT bins are gradient-magnitude histogram counts
+    and cannot be negative, so a negative bin is an impossible value, not a
+    small distributional error; the caller draws these in a warning colour.
+    """
+    cells = np.asarray(cells, dtype=np.float64)
+    if cells.shape != (CELL_ROWS, CELL_COLS, ORIENTATION_BINS):
+        raise ValueError(
+            f"expected cells of shape (4, 4, 8), got {cells.shape}"
+        )
+
+    origin_x, origin_y = float(origin[0]), float(origin[1])
+    max_length = pitch / 2.0
+    angles = np.arange(ORIENTATION_BINS) * (2.0 * np.pi / ORIENTATION_BINS)
+    unit_x = np.cos(angles)
+    unit_y = np.sin(angles)
+
+    pos_x, pos_y, neg_x, neg_y = [], [], [], []
+    for row in range(CELL_ROWS):
+        # Row 0 at the top, and cells straddle the origin, so the grid reads
+        # like an image and `origin` is the centre of the whole glyph.
+        centre_y = origin_y + ((CELL_ROWS - 1) / 2.0 - row) * pitch
+        for col in range(CELL_COLS):
+            centre_x = origin_x + (col - (CELL_COLS - 1) / 2.0) * pitch
+            for bin_ in range(ORIENTATION_BINS):
+                value = cells[row, col, bin_]
+                length = min(abs(value) * scale, 1.0) * max_length
+                if length <= 0.0:
+                    continue
+                xs, ys = (pos_x, pos_y) if value > 0 else (neg_x, neg_y)
+                xs.extend((centre_x, centre_x + unit_x[bin_] * length, np.nan))
+                ys.extend((centre_y, centre_y + unit_y[bin_] * length, np.nan))
+
+    return (
+        np.array(pos_x, dtype=np.float64),
+        np.array(pos_y, dtype=np.float64),
+        np.array(neg_x, dtype=np.float64),
+        np.array(neg_y, dtype=np.float64),
+    )

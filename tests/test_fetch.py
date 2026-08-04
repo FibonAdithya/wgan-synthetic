@@ -29,6 +29,19 @@ def test_registry_dims_match_the_names_upstream_publishes():
     assert SOURCES["openai"].dim == 1536
 
 
+def test_registry_urls_match_the_upstream_slugs():
+    expected = {
+        "sift": "sift-128-euclidean",
+        "gist": "gist-960-euclidean",
+        "deep": "deep-image-96-angular",
+        "glove": "glove-100-angular",
+        "nytimes": "nytimes-256-angular",
+        "openai": "dbpedia-openai-1000k-angular",
+    }
+    for name, slug in expected.items():
+        assert SOURCES[name].url == f"http://ann-benchmarks.com/{slug}.hdf5", name
+
+
 def test_sift_and_gist_are_l2_and_the_rest_are_angular():
     assert SOURCES["sift"].metric == "l2"
     assert SOURCES["gist"].metric == "l2"

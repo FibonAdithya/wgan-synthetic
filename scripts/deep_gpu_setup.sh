@@ -19,6 +19,7 @@ ssh "${REMOTE}" bash -s <<REMOTE_SCRIPT
 set -euo pipefail
 if [ -d "${WORK_DIR}/.git" ]; then
     cd "${WORK_DIR}"
+    git checkout --detach
     git fetch /tmp/deep-gan.bundle "${BRANCH}:refs/heads/${BRANCH}" --force
     git checkout --force "${BRANCH}"
 else

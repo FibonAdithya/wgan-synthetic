@@ -210,33 +210,66 @@ class StructuredGateGenerator(nn.Module):
             self.gate_coupling.weight.zero_()
             centre = gate_kernel // 2
             self.gate_coupling.weight[0, 0, centre, centre, centre] = 1.0
-        # Fixed, not learned: a trainable noise kernel could be driven toward
-        # zero, removing gate stochasticity and collapsing the support
-        # distribution -- the failure this class exists to prevent.
-        self.register_buffer(
-            "noise_kernel", self._gaussian_kernel(gate_kernel, noise_kernel_sigma)
-        )
         self.layout = layout
         self.gate_kernel = int(gate_kernel)
         self.noise_kernel_sigma = float(noise_kernel_sigma)
         self.gate_temperature = float(gate_temperature)
         self.logit_clamp = float(logit_clamp)
         self.eps = float(eps)
+        # Fixed, not learned: a trainable noise kernel could be driven toward
+        # zero, removing gate stochasticity and collapsing the support
+        # distribution -- the failure this class exists to prevent.
+        #
+        # Non-persistent: the kernel is a pure function of `gate_kernel` and
+        # `noise_kernel_sigma`, both of which come from the run config. Were it
+        # in the state dict, loading a checkpoint trained at one sigma into a
+        # model configured with another would silently reinstate the old kernel
+        # while `noise_kernel_sigma` still reported the configured value.
+        self.register_buffer(
+            "noise_kernel",
+            self._gaussian_kernel(gate_kernel, noise_kernel_sigma),
+            persistent=False,
+        )
+        self.register_buffer(
+            "noise_scale", self._position_noise_scale(output_dim), persistent=False
+        )
 
     @staticmethod
     def _gaussian_kernel(size: int, sigma: float) -> torch.Tensor:
-        """Separable 3-D Gaussian, normalised so smoothing preserves variance.
+        """Separable 3-D Gaussian, L2-normalised.
 
         Scaling by the L2 norm rather than the sum is deliberate: convolving
         i.i.d. unit-variance noise with weights w gives variance sum(w^2), so
-        an L2-normalised kernel leaves the noise scale -- and therefore the
-        gate's effective temperature -- unchanged.
+        an L2-normalised kernel leaves the noise scale unchanged *where the
+        convolution sees independent inputs*. It does not at the grid edges:
+        replicate padding feeds one draw into several taps, whose coefficients
+        add before squaring, so a corner cell would carry about 64% more noise
+        std than an interior one. `_position_noise_scale` corrects that
+        exactly; this kernel alone does not.
         """
         coords = torch.arange(size, dtype=torch.float32) - (size - 1) / 2.0
         line = torch.exp(-(coords**2) / (2.0 * sigma**2))
         kernel = line[:, None, None] * line[None, :, None] * line[None, None, :]
         kernel = kernel / torch.linalg.vector_norm(kernel)
         return kernel.reshape(1, 1, size, size, size)
+
+    def _position_noise_scale(self, output_dim: int) -> torch.Tensor:
+        """Per-position reciprocal std of the smoothing map, computed exactly.
+
+        Smoothing is linear, so pushing the `output_dim` one-hot basis vectors
+        through it recovers its matrix M, where column j lists the coefficients
+        every input draw contributes to output position j. On i.i.d.
+        unit-variance noise the output std at j is therefore the L2 norm of
+        column j -- padding-induced coefficient sharing included -- and the
+        reciprocal restores unit std at every position, not just the interior.
+        """
+        with torch.no_grad():
+            basis = torch.eye(output_dim)
+            smoothed = F.conv3d(self._pad_grid(basis), self.noise_kernel)
+            column_norms = torch.linalg.vector_norm(
+                smoothed.reshape(output_dim, -1), dim=0
+            )
+        return 1.0 / column_norms
 
     def _sample_gate(self, logits: torch.Tensor) -> torch.Tensor:
         """Sample a hard binary-concrete gate, returned in ``logits.dtype``.
@@ -289,11 +322,18 @@ class StructuredGateGenerator(nn.Module):
         Correlated logits with independent noise still sample near
         independently: the correlation has to be in the draw, not only in the
         mean.
+
+        The per-position rescaling makes the output std exactly 1 at every
+        coordinate for i.i.d. unit-variance input, so smoothing leaves the
+        gate's effective temperature unchanged across the whole grid rather
+        than only in its interior. It is a per-position gain, so the
+        neighbour correlation the smoothing exists to produce survives it.
         """
         batch = noise.shape[0]
         grid = self._pad_grid(noise)
         kernel = self.noise_kernel.to(grid.dtype)
-        return F.conv3d(grid, kernel).reshape(batch, -1)
+        smoothed = F.conv3d(grid, kernel).reshape(batch, -1)
+        return smoothed * self.noise_scale.to(smoothed.dtype)
 
     def _gate_logits(self, h: torch.Tensor) -> torch.Tensor:
         logits = self._couple(self.gate_head(h)) + self.sparsity_head(h)

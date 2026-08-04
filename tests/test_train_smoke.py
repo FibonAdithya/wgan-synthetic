@@ -46,10 +46,14 @@ def make_config(tmp_path, generator_type):
     }
     if generator_type is not None:
         cfg["model"]["generator_type"] = generator_type
+        if generator_type == "structured_gated":
+            # descriptor_dim is 16 here, not SIFT's 128, so the default
+            # (4, 4, 8) layout would not tile the output.
+            cfg["model"]["layout"] = [2, 2, 4]
     return cfg
 
 
-@pytest.mark.parametrize("generator_type", ["mlp", "gated"])
+@pytest.mark.parametrize("generator_type", ["mlp", "gated", "structured_gated"])
 def test_training_loop_runs(tmp_path, generator_type):
     ckpt_path, meta = train(make_config(tmp_path, generator_type))
     assert ckpt_path.exists()

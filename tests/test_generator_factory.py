@@ -107,6 +107,11 @@ def test_structured_and_gated_checkpoints_do_not_interchange():
         dict(BASE_CFG, generator_type="structured_gated"), output_dim=128
     )
     gated = build_generator(dict(BASE_CFG, generator_type="gated"), output_dim=128)
+    # The learned structure is what separates them, not the fixed noise kernel:
+    # that is deliberately non-persistent, so it cannot be what raises here.
+    keys = structured.state_dict().keys()
+    assert "noise_kernel" not in keys
+    assert {"sparsity_head.weight", "gate_coupling.weight"} <= set(keys)
     with pytest.raises(RuntimeError):
         gated.load_state_dict(structured.state_dict())
     with pytest.raises(RuntimeError):

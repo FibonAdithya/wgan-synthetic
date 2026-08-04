@@ -241,11 +241,37 @@ def test_coupling_preserves_shape_and_dtype(gen):
     gen.to(torch.float32)
 
 
-def test_noise_kernel_is_variance_preserving():
-    # Smoothing must not change the noise scale, or it silently shifts the
-    # gate's effective temperature.
+def test_smoothing_preserves_noise_scale_at_every_position():
+    # Behavioural, not a restatement of the kernel's normalisation: an
+    # L2-normalised kernel preserves variance only where the convolution sees
+    # independent inputs. Replicate padding feeds one draw into several taps,
+    # so without the per-position correction the border cells run hotter (the
+    # corners measured 1.64) and carry a different effective gate temperature
+    # from the interior. Every coordinate must come out at std 1.
     generator = build()
-    assert generator.noise_kernel.pow(2).sum().item() == pytest.approx(1.0, abs=1e-6)
+    torch.manual_seed(17)
+    # 60k samples puts the standard error of a per-coordinate std near 0.003,
+    # so a 0.03 tolerance is ~10 sigma -- robust across seeds, while the
+    # uncorrected corner error of 0.64 is 20x outside it.
+    noise = torch.randn(60000, OUTPUT)
+    with torch.no_grad():
+        std = generator._smooth_noise(noise).std(dim=0)
+    assert torch.allclose(std, torch.ones_like(std), atol=0.03)
+
+
+def test_smoothing_correction_is_uniform_across_the_grid():
+    # The failure this pins is border-vs-interior, so compare them directly:
+    # any residual edge effect shows up here even if the global tolerance
+    # above absorbed it.
+    generator = build()
+    torch.manual_seed(18)
+    with torch.no_grad():
+        std = generator._smooth_noise(torch.randn(60000, OUTPUT)).std(dim=0)
+    rows, cols, orient = generator.layout
+    grid = std.reshape(rows, cols, orient)
+    interior = grid[1:-1, 1:-1].mean().item()
+    corners = grid[[0, 0, -1, -1], [0, -1, 0, -1]].mean().item()
+    assert corners == pytest.approx(interior, abs=0.02)
 
 
 def test_noise_kernel_is_not_a_learnable_parameter():
@@ -254,6 +280,26 @@ def test_noise_kernel_is_not_a_learnable_parameter():
     generator = build()
     assert "noise_kernel" in dict(generator.named_buffers())
     assert "noise_kernel" not in dict(generator.named_parameters())
+
+
+def test_noise_buffers_stay_out_of_the_state_dict():
+    # Both are pure functions of `gate_kernel` and `noise_kernel_sigma`, which
+    # come from the run config. Persisting them would let a checkpoint trained
+    # at one sigma silently override a model configured with another, while
+    # `noise_kernel_sigma` kept reporting the configured value.
+    generator = build()
+    keys = generator.state_dict().keys()
+    assert "noise_kernel" not in keys
+    assert "noise_scale" not in keys
+
+
+def test_loading_a_checkpoint_keeps_the_configured_noise_sigma():
+    trained = build(noise_kernel_sigma=0.8)
+    configured = build(noise_kernel_sigma=1.5)
+    expected = configured.noise_kernel.clone()
+    configured.load_state_dict(trained.state_dict())
+    assert configured.noise_kernel_sigma == 1.5
+    assert torch.equal(configured.noise_kernel, expected)
 
 
 def _adjacent_vs_distant_gate_correlation(generator, n=8192, seed=21):

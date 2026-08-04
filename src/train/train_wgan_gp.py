@@ -15,7 +15,7 @@ from torch import Tensor, nn
 from torch.amp import GradScaler, autocast
 from torch.utils.data import DataLoader
 
-from src.data.sift1m_dataset import (
+from src.data.dataset import (
     NumpyTensorDataset,
     PreprocessConfig,
     build_training_data,

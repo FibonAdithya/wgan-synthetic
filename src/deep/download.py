@@ -1,6 +1,6 @@
 """Fetch the DEEP image descriptor set and cut reproducible subsets from it.
 
-Writes .npy deliberately: the existing loader in src/data/sift1m_dataset.py
+Writes .npy deliberately: the existing loader in src/data/dataset.py
 reads .npy and .fvecs, so emitting .npy means neither the loader nor the
 trainer needs to learn about HDF5.
 """

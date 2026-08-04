@@ -29,10 +29,23 @@ from src.train.train_wgan_gp import train
 
 variant = sys.argv[1]
 
+# This is a GPU training service: `device: auto` in the config silently
+# resolves to CPU when CUDA is unavailable, and 30,000 steps on CPU runs for
+# days instead of ~35 minutes, unattended, with nobody watching. A silent
+# downgrade to CPU is never the desired behaviour here, so treat absent CUDA
+# as a hard, loud failure instead of just skipping the VRAM cap below.
+if not torch.cuda.is_available():
+    raise SystemExit(
+        "deep_train_service.sh: torch.cuda.is_available() is False -- no "
+        "GPU visible to this process. Refusing to silently fall back to "
+        "CPU training (30,000 steps would take days instead of ~35 "
+        "minutes). Check `nvidia-smi`, CUDA_VISIBLE_DEVICES, and the torch "
+        "install on this box before retrying."
+    )
+
 # Hard ceiling at 25% of the card, ~20x the measured 71 MiB peak. A runaway
 # allocation then fails this job rather than another agent's.
-if torch.cuda.is_available():
-    torch.cuda.set_per_process_memory_fraction(0.25)
+torch.cuda.set_per_process_memory_fraction(0.25)
 
 with open(f"configs/deep_gan_{variant}.yaml", encoding="utf-8") as handle:
     config = yaml.safe_load(handle)

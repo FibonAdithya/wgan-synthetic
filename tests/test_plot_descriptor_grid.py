@@ -2,7 +2,9 @@ import argparse
 
 import numpy as np
 import pytest
+import yaml
 
+from src.eval import compare_variants as cv
 from src.eval import plot_descriptor_grid as pdg
 
 
@@ -100,3 +102,71 @@ def test_build_figure_omits_the_negative_trace_when_all_bins_are_positive():
     vecs = np.abs(np.random.default_rng(0).random((2, 128))).astype(np.float32)
     fig = pdg.build_figure([("row", vecs, "#000000")])
     assert "negative" not in [t.name for t in fig.data]
+
+
+def test_check_preprocess_accepts_the_current_config_shape():
+    config = {"data": {"preprocess": {"center": False, "whiten": False,
+                                      "l2_normalize": True}}}
+    pdg.check_preprocess(config, "v2")  # must not raise
+
+
+def test_check_preprocess_accepts_a_missing_preprocess_block():
+    """Absent keys mean the dataclass defaults, which are both False."""
+    pdg.check_preprocess({"data": {}}, "v2")
+    pdg.check_preprocess({}, "v2")
+
+
+@pytest.mark.parametrize("flag", ["center", "whiten"])
+def test_check_preprocess_refuses_centering_or_whitening(flag):
+    config = {"data": {"preprocess": {flag: True}}}
+    with pytest.raises(ValueError, match=flag):
+        pdg.check_preprocess(config, "v2")
+
+
+def test_variant_row_renders_from_a_real_checkpoint(
+    tmp_path, write_tiny_gated_run, monkeypatch
+):
+    variant, _ = write_tiny_gated_run(tmp_path, name="v2", descriptor_dim=128)
+    monkeypatch.setattr(cv, "VARIANTS", (variant,))
+    out = pdg.run(_args(tmp_path))
+    text = out.read_text(encoding="utf-8")
+    assert "real-a" in text and "v2" in text
+
+
+def test_variant_row_is_seed_reproducible(tmp_path, write_tiny_gated_run, monkeypatch):
+    """GatedGenerator samples gate noise in eval() too, so this needs a seed."""
+    variant, _ = write_tiny_gated_run(tmp_path, name="v2", descriptor_dim=128)
+    monkeypatch.setattr(cv, "VARIANTS", (variant,))
+    first = pdg.variant_rows(tmp_path, num_samples=4, seed=42)[0][1]
+    second = pdg.variant_rows(tmp_path, num_samples=4, seed=42)[0][1]
+    assert np.array_equal(first, second)
+
+
+def test_missing_checkpoint_is_skipped_and_the_poster_still_renders(
+    tmp_path, capsys, monkeypatch
+):
+    absent = cv.Variant("ghost", "configs/sift_gan_v2.yaml", "runs/ghost")
+    monkeypatch.setattr(cv, "VARIANTS", (absent,))
+    out = pdg.run(_args(tmp_path))
+    assert out.exists()
+    assert "ghost" in capsys.readouterr().out
+
+
+def test_whitened_run_is_refused(tmp_path, write_tiny_gated_run, monkeypatch):
+    variant, _ = write_tiny_gated_run(tmp_path, name="v2", descriptor_dim=128)
+    run_config_path = tmp_path / "runs" / "v2" / "run_config.yaml"
+    config = yaml.safe_load(run_config_path.read_text())
+    config["data"]["preprocess"] = {"center": False, "whiten": True}
+    run_config_path.write_text(yaml.safe_dump(config))
+    monkeypatch.setattr(cv, "VARIANTS", (variant,))
+    with pytest.raises(ValueError, match="whiten"):
+        pdg.run(_args(tmp_path))
+
+
+def test_variant_generating_the_wrong_width_is_refused(
+    tmp_path, write_tiny_gated_run, monkeypatch
+):
+    variant, _ = write_tiny_gated_run(tmp_path, name="v2", descriptor_dim=8)
+    monkeypatch.setattr(cv, "VARIANTS", (variant,))
+    with pytest.raises(ValueError, match="128"):
+        pdg.run(_args(tmp_path))

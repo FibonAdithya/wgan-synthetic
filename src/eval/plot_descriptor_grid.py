@@ -26,8 +26,11 @@ from typing import List, Tuple
 
 import numpy as np
 import plotly.graph_objects as go
+import torch
+import yaml
 
 from src.data.sift1m_dataset import load_descriptors
+from src.eval import compare_variants as cv
 from src.eval import eda_report
 from src.eval.descriptor_glyph import (
     DESCRIPTOR_DIM,
@@ -35,6 +38,8 @@ from src.eval.descriptor_glyph import (
     glyph_segments,
     shared_scale,
 )
+from src.eval.evaluate_distribution import get_device, load_generator
+from src.train.train_wgan_gp import sample_generator
 
 CELL_PITCH = 1.0
 # Roughly one glyph width (4 * CELL_PITCH) plus a gutter, so rows read as
@@ -160,6 +165,74 @@ def write_report(
     return path
 
 
+def check_preprocess(config: dict, name: str) -> None:
+    """Refuse a run whose preprocessing destroys the bin-to-dimension map.
+
+    `center: false, whiten: false` across all four current variant configs is
+    the only reason dimension k still means "cell i, orientation bin j".
+    Centering shifts by a constant and whitening applies a dense linear mix;
+    under either, the glyph becomes a picture of mixed bins that still looks
+    entirely plausible. Better to refuse than to draw a silent lie.
+
+    A missing preprocess block means the `PreprocessConfig` defaults, both of
+    which are False.
+    """
+    preprocess = (config.get("data") or {}).get("preprocess") or {}
+    enabled = [key for key in ("center", "whiten") if bool(preprocess.get(key, False))]
+    if enabled:
+        raise ValueError(
+            f"variant {name} was trained with {' and '.join(enabled)} enabled, so "
+            "its dimensions no longer map to (cell, orientation bin) and the "
+            "glyph would be meaningless. Refusing to plot it."
+        )
+
+
+def variant_rows(
+    root: Path, num_samples: int, seed: int
+) -> List[Tuple[str, np.ndarray, str]]:
+    """Sample every resolvable variant checkpoint into one row each.
+
+    A variant whose artifacts are not on this machine is skipped with a
+    message rather than aborting: checkpoints usually live on the training
+    box, and a partial poster is still worth reading.
+    """
+    found, skipped = cv.resolve_variants(cv.VARIANTS, root)
+    for variant, reason in skipped:
+        print(f"skipping {variant.name}: {reason}")
+    if not found:
+        print("no variant checkpoints resolved; rendering the real rows only")
+
+    rows: List[Tuple[str, np.ndarray, str]] = []
+    for index, variant in enumerate(found):
+        run_dir = root / variant.run_dir
+        config = yaml.safe_load(
+            (run_dir / cv.RUN_CONFIG_NAME).read_text(encoding="utf-8")
+        )
+        check_preprocess(config, variant.name)
+        device = get_device(config["device"])
+        generator = load_generator(config, run_dir / cv.CHECKPOINT_NAME, device)
+        # GatedGenerator samples its gate in eval() mode too, so the seed is
+        # what makes a row reproducible. Keying off the variant name keeps a
+        # row identical whether or not other checkpoints are on this machine.
+        torch.manual_seed(cv.variant_seed(seed, variant.name))
+        samples = sample_generator(
+            generator,
+            num_samples=num_samples,
+            latent_dim=int(config["model"]["latent_dim"]),
+            batch_size=num_samples,
+            device=device,
+        )
+        if samples.shape[1] != DESCRIPTOR_DIM:
+            raise ValueError(
+                f"variant {variant.name} generates {samples.shape[1]}-dimensional "
+                f"vectors; the glyph mapping needs {DESCRIPTOR_DIM}"
+            )
+        rows.append(
+            (variant.name, samples, VARIANT_COLORS[index % len(VARIANT_COLORS)])
+        )
+    return rows
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -203,6 +276,8 @@ def run(args: argparse.Namespace) -> Path:
         ("real-a", row_a, REAL_COLORS[0]),
         ("real-b", row_b, REAL_COLORS[1]),
     ]
+
+    rows.extend(variant_rows(Path(args.root), args.num_samples, args.seed))
 
     fig = build_figure(rows)
     return write_report(fig, Path(args.output_dir), args.plotlyjs, not args.no_png)

@@ -106,3 +106,43 @@ They are honest known gaps, not planned work with an owner or timeline.
    GC closes the file handle and drops the flock as the `with` block unwinds
    via exception. The asserted behaviour (the lock is released) is real, but
    the test does not prove the `finally` clause is what does it.
+
+### The log-ratio EMA target is not checkpointed
+
+`LogRatioTarget` in `src/train/log_ratio.py` holds an EMA of the real
+batches' log-ratio profile, and `--resume` does not restore it: a resumed
+run rebuilds the average from scratch.
+
+This is deliberate, not an oversight. At decay 0.99 the average resettles
+within roughly a hundred steps, so the cost is a brief transient on a 100k
+step run. It is explicitly unlike the generator weight EMA at decay 0.999,
+which `save_checkpoint` does persist and where a silent restart degrades
+`best_generator.pt` with no error.
+
+If `lid_reg_decay` is ever raised toward 0.999, revisit this — the argument
+above stops holding.
+
+### `lid_reg_alpha` cannot be started from `distance_reg_alpha`'s scale
+
+The plan for `configs/sift_gan_v4.yaml` suggests starting `lid_reg_alpha` at
+`0.1`, calling it "v1_5's proven scale" for `distance_reg_alpha`. That analogy
+does not hold and should not be used to pick the starting value.
+
+`distance_reg` is a single scalar, `|dist_real - dist_fake|`. `log_ratio_penalty`
+returns an L1 **sum** over `k - 1` components — 19 of them at the default
+`lid_reg_k=20` — so its magnitude sits on a different scale than
+`distance_reg` and grows with `k`. Measured for calibration (`k=10`, so 9
+terms, 256-point batches): an L1 gap of roughly `1.75` between a 32-D blob and
+a rank-4 blob padded to 32 dimensions, against roughly `0.01` for a batch
+measured against a fresh draw from its own distribution. Neither number is
+anywhere near `distance_reg`'s typical scale, and both would scale up further
+at `k=20`.
+
+Recommend picking `lid_reg_alpha` from a measured `lid_reg` value on a real
+batch at the config's actual `lid_reg_k`, not by analogy to `distance_reg_alpha`.
+
+Design observation, not a change to make now (the plan specifies a `.sum()`
+reduction and that is what shipped): a `.mean()` reduction in
+`log_ratio_penalty` would have made `alpha` invariant to `k`, removing this
+whole caveat. Left as `.sum()` because that is what the ratified plan called
+for.

@@ -319,6 +319,40 @@ off a remote training box:
 When running on a remote box, generating with `--plotlyjs cdn` and gzipping
 before transfer took the three-report set from 5.7MB to 1.5MB.
 
+- Descriptor glyph grid:
+  - `src/eval/plot_descriptor_grid.py`
+  - Every panel above is an aggregate over tens of thousands of vectors. This
+    one instead draws individual SIFT descriptors as glyphs: each 128-value
+    descriptor becomes a 4x4 grid of spatial cells, and each cell an 8-ray
+    star, one ray per orientation bin, using the index convention
+    `index = (row * 4 + col) * 8 + orientation_bin`. Ray length is a shared
+    99th-percentile scale computed across every descriptor in the figure
+    (not per-glyph normalisation, which would make a flat generated
+    descriptor look as structured as a real one), and is clipped so a ray
+    never crosses into a neighbouring cell.
+  - Writes `descriptor_grid.html` into `--output-dir`, plus a `png/`
+    subdirectory unless `--no-png`. The figure has two rows of real
+    descriptors (`real-a`, `real-b`) above one row per resolvable variant
+    checkpoint.
+  - How to read it: real SIFT is sparse and spiky, with most cells dominated
+    by one or two directions. Even, bushy stars mean the generator matched
+    the marginals without the structure. **Red rays are negative bins --
+    impossible for a gradient histogram**, and expected from v0/v1/v1_5,
+    which use the unactivated MLP generator. The real-a/real-b pair is the
+    baseline for how much natural variation to expect before comparing it to
+    a variant row.
+  - It refuses to run against a variant trained with centering or
+    whitening, or one that generates a width other than 128, because either
+    breaks the dimension-to-(cell, bin) mapping the glyph depends on. A
+    variant whose checkpoint or run config is not on this machine is skipped
+    with a printed message, like `compare_variants`.
+
+```bash
+python -m src.eval.plot_descriptor_grid \
+    --real-path data/sift_base.npy \
+    --output-dir runs/descriptor_grid
+```
+
 ---
 
 ## Run artifact structure

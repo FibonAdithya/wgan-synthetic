@@ -16,6 +16,11 @@ The training and generation pipeline assumes:
 
 This contract is implemented in `src/data/sift1m_dataset.py` and saved into training artifacts so sampling/evaluation uses the same transform.
 
+`src/eval/plot_descriptor_grid.py` depends on `center: false` and
+`whiten: false`, since it interprets dimension `(row * 4 + col) * 8 + bin` as
+a specific spatial cell and orientation bin; centering or whitening would
+break that mapping.
+
 ## Example layout
 
 - `data/sift1m_base.fvecs`

@@ -56,6 +56,18 @@ def sample_variant(
     """
     run_dir = Path(run_dir)
     state = load_preprocess_state(run_dir)
+    if state.mean is not None and state.config.l2_normalize:
+        raise ValueError(
+            f"{run_dir} was fitted with both centering and l2_normalize. "
+            "sample_generator L2-normalizes its raw output, and "
+            "invert_preprocess only exactly recovers directions when there "
+            "is no centering step: with a mean subtracted, its relative "
+            "contribution to `(x - mean) / c` varies per generated vector "
+            "(c differs per row), so re-normalizing after inversion yields "
+            "systematically wrong directions with no error otherwise. "
+            "Retrain this variant with `center: false`, or compare it with "
+            "a metric that does not depend on angular exactness."
+        )
     config = yaml.safe_load((run_dir / RUN_CONFIG_NAME).read_text(encoding="utf-8"))
 
     device = get_device(config["device"])

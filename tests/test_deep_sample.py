@@ -13,7 +13,7 @@ from src.data.sift1m_dataset import (
 from src.deep.sample import load_preprocess_state, sample_variant
 
 
-def _write_run(tmp_path: Path, *, whiten: bool) -> Path:
+def _write_run(tmp_path: Path, *, whiten: bool, center: bool = False) -> Path:
     """Build a run directory shaped exactly like one train() writes."""
     run_dir = tmp_path / "run"
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -41,7 +41,11 @@ def _write_run(tmp_path: Path, *, whiten: bool) -> Path:
     rng = np.random.default_rng(0)
     scale = np.linspace(1.0, 0.05, dim).astype(np.float32)
     x = (rng.normal(size=(400, dim)) * scale).astype(np.float32)
-    cfg = PreprocessConfig(center=True, whiten=whiten, l2_normalize=True)
+    # center defaults to False, matching every shipped deep_gan_* config:
+    # sample_variant refuses center=True combined with l2_normalize=True
+    # (finding 1), so a helper representative of real runs must default to
+    # no centering. Pass center=True to build the guard-rejection case.
+    cfg = PreprocessConfig(center=center, whiten=whiten, l2_normalize=True)
     state = _fit_preprocess_state(x_train=x, descriptor_dim=dim, cfg=cfg)
     (run_dir / "run_metadata.json").write_text(
         json.dumps({"preprocess_state": state.to_serializable()}), encoding="utf-8"
@@ -49,7 +53,9 @@ def _write_run(tmp_path: Path, *, whiten: bool) -> Path:
     return run_dir
 
 
-def _write_isotropic_run(tmp_path: Path, *, whiten: bool, suffix: str) -> Path:
+def _write_isotropic_run(
+    tmp_path: Path, *, whiten: bool, suffix: str, center: bool = False
+) -> Path:
     """Build a run whose raw (pre-inversion) generator output is EXACTLY
     flat per-dimension, by construction, for the one test that needs that
     guarantee rather than a statistical likelihood of it.
@@ -107,7 +113,7 @@ def _write_isotropic_run(tmp_path: Path, *, whiten: bool, suffix: str) -> Path:
     rng = np.random.default_rng(0)
     scale = np.linspace(1.0, 0.05, dim).astype(np.float32)
     x = (rng.normal(size=(400, dim)) * scale).astype(np.float32)
-    cfg = PreprocessConfig(center=True, whiten=whiten, l2_normalize=True)
+    cfg = PreprocessConfig(center=center, whiten=whiten, l2_normalize=True)
     state = _fit_preprocess_state(x_train=x, descriptor_dim=dim, cfg=cfg)
     (run_dir / "run_metadata.json").write_text(
         json.dumps({"preprocess_state": state.to_serializable()}), encoding="utf-8"
@@ -118,7 +124,7 @@ def _write_isotropic_run(tmp_path: Path, *, whiten: bool, suffix: str) -> Path:
 def test_load_preprocess_state_round_trips_from_run_metadata(tmp_path: Path):
     state = load_preprocess_state(_write_run(tmp_path, whiten=True))
     assert state.descriptor_dim == 96
-    assert state.mean is not None
+    assert state.mean is None
     assert state.whitening_matrix is not None
 
 
@@ -173,4 +179,17 @@ def test_sample_variant_errors_clearly_when_run_metadata_is_missing(tmp_path: Pa
     run_dir = _write_run(tmp_path, whiten=False)
     (run_dir / "run_metadata.json").unlink()
     with pytest.raises(FileNotFoundError, match="run_metadata.json"):
+        sample_variant(run_dir, num_samples=8)
+
+
+def test_sample_variant_refuses_centered_and_l2_normalized_state(tmp_path: Path):
+    """Pins the guard against finding 1: centering + l2_normalize together
+    breaks the exactness argument invert_preprocess relies on, silently.
+    Every shipped deep_gan_* config uses center=False, so this state is
+    fitted explicitly with center=True to exercise the unsupported
+    combination; sample_variant must raise before it ever touches the
+    checkpoint.
+    """
+    run_dir = _write_run(tmp_path, whiten=False, center=True)
+    with pytest.raises(ValueError, match="center.*l2_normalize|l2_normalize.*center"):
         sample_variant(run_dir, num_samples=8)

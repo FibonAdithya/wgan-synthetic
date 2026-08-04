@@ -25,6 +25,28 @@ def invert_preprocess(x: np.ndarray, state: PreprocessState) -> np.ndarray:
     obtained with a plain matrix inverse. pinv rather than inv, because the
     eps-regularized covariance can still be near-singular on the tail
     dimensions of a PCA-derived set like DEEP.
+
+    Exactness argument (why `sample_variant`'s v2 rung is trustworthy):
+    `sample_generator` L2-normalizes its raw output before this function
+    ever sees it, so what this function inverts is `normalize(x @ W)`. With
+    `state.mean is None`, `invert_preprocess` reduces to
+    `normalize(x @ W) @ W^-1 = x / ||x @ W||` -- the original direction `x`
+    scaled by a single positive per-vector scalar `1 / ||x @ W||`. Since the
+    report compares samples with `preprocess="l2"`, its angular metrics are
+    invariant to that scalar, so directions come back EXACTLY.
+
+    That argument breaks down the moment `state.mean is not None`: the
+    inverse then computes `(normalize(x @ W) - (-mean)) / c` in effect --
+    concretely, `normalize(x @ W) @ W^-1 + mean` -- and the mean's relative
+    contribution to that sum is a different fraction for every input vector
+    (it does not scale with `1 / ||x @ W||` the way the direction term
+    does), so re-normalizing downstream no longer recovers a uniformly
+    scaled version of the original direction. There is no error raised
+    inside this function for that case -- callers that need the exactness
+    guarantee (currently `sample_variant`) are responsible for rejecting
+    `state.mean is not None and state.config.l2_normalize` before calling
+    this, since this function has no way to know whether its input was
+    L2-normalized upstream.
     """
     out = np.asarray(x, dtype=np.float32)
     if state.whitening_matrix is not None:

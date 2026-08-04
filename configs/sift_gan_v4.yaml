@@ -52,9 +52,22 @@ training:
   distance_reg_max_points: 256
   # NOT chosen by analogy to distance_reg_alpha: that penalty is a single
   # scalar, while log_ratio_penalty is an L1 *sum* over lid_reg_k - 1 terms
-  # and so sits on a different scale entirely. Calibrated instead from a
-  # measured lid_reg value on real batches at this k -- see FOLLOWUPS.md.
-  lid_reg_alpha: 0.0  # PLACEHOLDER -- set from calibration before launching
+  # and so sits on a different scale entirely. Measured at this k on real
+  # SIFT batches (tools/probes/lid_reg_scale_probe.py):
+  #
+  #   real vs real (noise floor) : 0.126 +/- 0.080
+  #   untrained v3 vs real       : 0.994 +/- 0.018   -> 7.9x the floor
+  #
+  # For scale, distance_reg's proven setting contributes 0.1 * 0.0074 =
+  # 0.0007 to the generator loss in x100k_improved, i.e. 0.5% of that run's
+  # |adv_loss| = 0.155. The plan's suggested 0.1 would put lid_reg at 0.099
+  # at initialisation -- 64% of the same adv_loss, and still 8% once the gap
+  # decays to the floor. That is a different objective, not a regularizer.
+  #
+  # 0.015 contributes ~2.5% of |adv_loss| at initialisation and ~1.2% at the
+  # floor: a few times firmer than distance_reg's nudge, which suits the
+  # primary mechanism of the arm, without displacing the adversarial signal.
+  lid_reg_alpha: 0.015
   lid_reg_k: 20
   lid_reg_max_points: 256
   num_workers: 0

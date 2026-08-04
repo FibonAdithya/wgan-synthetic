@@ -141,6 +141,34 @@ at `k=20`.
 Recommend picking `lid_reg_alpha` from a measured `lid_reg` value on a real
 batch at the config's actual `lid_reg_k`, not by analogy to `distance_reg_alpha`.
 
+**Resolved (2026-08-04).** Measured on the GPU box at the shipped v4 settings
+(`k=20`, `max_points=256`, `batch=512`, 200k real rows) via
+`tools/probes/lid_reg_scale_probe.py`:
+
+| quantity | value |
+|---|---|
+| real vs real (noise floor) | 0.126 +/- 0.080 |
+| untrained v3 vs real | 0.994 +/- 0.018 |
+| signal-to-floor | 7.9x |
+
+`distance_reg` contributes `0.1 * 0.0074 = 0.0007` to the generator loss in
+`x100k_improved`, 0.5% of that run's `|adv_loss| = 0.155`. At `lid_reg_alpha:
+0.1` the log-ratio penalty would contribute 0.099 at initialisation — **64%**
+of the same `adv_loss`, and still 8% after the gap decays to the floor. The
+analogy was not merely imprecise; it was off by one to two orders of
+magnitude.
+
+`configs/sift_gan_v4.yaml` ships `0.015`, which is ~2.5% of `|adv_loss|` at
+initialisation and ~1.2% at the floor.
+
+Two caveats on that number. The **v2 row was never measured** — the
+`x100k_sparse_clamp4` run is not on the box (recycled; `workspace_is_volume`
+is `false`), so the gap a genuinely-wrong-but-trained generator produces is
+still unknown, and the sizing rests on the untrained-v3 gap instead. And the
+floor's standard deviation is 64% of its mean, so the penalty is noisy at
+convergence; if v4's `lid_reg` trace flattens near 0.126 the term has stopped
+carrying information and `alpha` is doing nothing useful.
+
 Design observation, not a change to make now (the plan specifies a `.sum()`
 reduction and that is what shipped): a `.mean()` reduction in
 `log_ratio_penalty` would have made `alpha` invariant to `k`, removing this

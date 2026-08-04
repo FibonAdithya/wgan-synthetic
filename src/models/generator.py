@@ -203,6 +203,13 @@ class StructuredGateGenerator(nn.Module):
         # One scalar per vector, broadcast across all coordinates. This is the
         # entire over-dispersion mechanism.
         self.sparsity_head = nn.Linear(dims[-1], 1)
+        # Local coupling over the (row, col, orientation) grid. Identity-init
+        # so the module starts as an uncoupled gate and learns structure.
+        self.gate_coupling = nn.Conv3d(1, 1, kernel_size=gate_kernel, bias=False)
+        with torch.no_grad():
+            self.gate_coupling.weight.zero_()
+            centre = gate_kernel // 2
+            self.gate_coupling.weight[0, 0, centre, centre, centre] = 1.0
         self.layout = layout
         self.gate_kernel = int(gate_kernel)
         self.noise_kernel_sigma = float(noise_kernel_sigma)
@@ -233,8 +240,25 @@ class StructuredGateGenerator(nn.Module):
         hard = torch.where(empty, fallback, hard)
         return (hard + soft - soft.detach()).to(logits.dtype)
 
+    def _couple(self, logits: torch.Tensor) -> torch.Tensor:
+        """Mix each gate logit with its neighbours on the descriptor grid.
+
+        Orientation is padded **circularly** -- bin 7 neighbours bin 0, since a
+        gradient direction between two bins deposits in both. The 4x4 spatial
+        grid is not periodic, so its edges replicate: opposite corners of the
+        patch are not neighbours.
+        """
+        batch = logits.shape[0]
+        rows, cols, orient = self.layout
+        pad = self.gate_kernel // 2
+        grid = logits.reshape(batch, 1, rows, cols, orient)
+        # F.pad's tuple runs last-dim-first: (W, W, H, H, D, D).
+        grid = F.pad(grid, (pad, pad, 0, 0, 0, 0), mode="circular")
+        grid = F.pad(grid, (0, 0, pad, pad, pad, pad), mode="replicate")
+        return self.gate_coupling(grid).reshape(batch, -1)
+
     def _gate_logits(self, h: torch.Tensor) -> torch.Tensor:
-        logits = self.gate_head(h) + self.sparsity_head(h)
+        logits = self._couple(self.gate_head(h)) + self.sparsity_head(h)
         return self.logit_clamp * torch.tanh(logits / self.logit_clamp)
 
     def forward(self, z: torch.Tensor) -> torch.Tensor:

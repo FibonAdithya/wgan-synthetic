@@ -183,3 +183,59 @@ def test_low_precision_gate_preserves_input_dtype(gen, dtype):
     assert gate.dtype == dtype
     assert torch.isfinite(gate).all()
     assert (gate.sum(dim=1) > 0).all()
+
+
+def test_coupling_is_identity_at_initialisation():
+    # v3 must start where v2 starts; a random conv would scramble the logits at
+    # step 0 for reasons unrelated to the mechanism under test.
+    generator = build()
+    torch.manual_seed(3)
+    logits = torch.randn(8, OUTPUT)
+    assert torch.allclose(generator._couple(logits), logits, atol=1e-6)
+
+
+def test_orientation_axis_wraps_circularly():
+    # A gradient direction falling between bins 7 and 0 deposits in both, so
+    # the last orientation bin must neighbour the first.
+    generator = build()
+    rows, cols, orient = generator.layout
+    with torch.no_grad():
+        generator.gate_coupling.weight.zero_()
+        # Pick up only the neighbour one step *back* along orientation.
+        generator.gate_coupling.weight[0, 0, 1, 1, 0] = 1.0
+    logits = torch.zeros(1, OUTPUT)
+    logits[0, orient - 1] = 5.0  # last orientation bin of the first cell
+    coupled = generator._couple(logits).reshape(rows, cols, orient)
+    assert coupled[0, 0, 0].item() == pytest.approx(5.0)
+
+
+def test_spatial_edge_replicates_rather_than_wrapping():
+    # The 4x4 grid is not periodic: cell (0,0) and cell (3,3) are opposite
+    # corners of the patch, not neighbours.
+    generator = build()
+    rows, cols, orient = generator.layout
+    with torch.no_grad():
+        generator.gate_coupling.weight.zero_()
+        generator.gate_coupling.weight[0, 0, 0, 1, 1] = 1.0  # one step back in rows
+    logits = torch.zeros(1, OUTPUT)
+    logits[0, ((rows - 1) * cols + 0) * orient + 0] = 7.0  # last row, first cell
+    coupled = generator._couple(logits).reshape(rows, cols, orient)
+    # Row 0 pulls from replicated row 0, not from wrapped row 3.
+    assert coupled[0, 0, 0].item() == pytest.approx(0.0)
+
+
+def test_coupling_receives_gradient(gen):
+    torch.manual_seed(4)
+    gen(torch.randn(32, LATENT)).sum().backward()
+    grad = gen.gate_coupling.weight.grad
+    assert grad is not None
+    assert grad.abs().sum() > 0
+
+
+def test_coupling_preserves_shape_and_dtype(gen):
+    for dtype in (torch.float32, torch.bfloat16):
+        logits = torch.randn(4, OUTPUT, dtype=dtype)
+        coupled = gen.to(dtype)._couple(logits)
+        assert coupled.shape == (4, OUTPUT)
+        assert coupled.dtype == dtype
+    gen.to(torch.float32)

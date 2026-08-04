@@ -6,7 +6,8 @@ import numpy as np
 import pytest
 
 from src.eval import compare_variants, eda_report
-from src.deep.report import DEEP_VARIANTS, build_report_args
+from src.eval.compare_variants import Variant
+from src.deep.report import DEEP_VARIANTS, build_report_args, filter_missing_run_metadata
 
 
 def test_deep_variants_cover_the_whole_ladder():
@@ -68,6 +69,41 @@ def test_report_args_match_eda_report_fields(monkeypatch, tmp_path):
     eda_args = eda_report.parse_args()
 
     assert set(vars(produced)) == set(vars(eda_args))
+
+
+def test_filter_missing_run_metadata_skips_variants_without_it(tmp_path: Path):
+    """Pins finding 4: resolve_variants only checks best_generator.pt and
+    run_config.yaml, but src/deep/sample.py also needs run_metadata.json to
+    invert the fitted preprocess transform. A run dir with the first two but
+    not the third must be moved from `found` to `skipped` before any
+    sampling happens, not fail mid-loop after earlier variants already ran.
+    """
+    has_metadata = Variant("has_metadata", "configs/x.yaml", "run_a")
+    (tmp_path / "run_a").mkdir()
+    (tmp_path / "run_a" / "run_metadata.json").write_text("{}", encoding="utf-8")
+
+    missing_metadata = Variant("missing_metadata", "configs/y.yaml", "run_b")
+    (tmp_path / "run_b").mkdir()
+
+    found, skipped = filter_missing_run_metadata(
+        [has_metadata, missing_metadata], tmp_path
+    )
+
+    assert found == [has_metadata]
+    assert len(skipped) == 1
+    assert skipped[0][0] is missing_metadata
+    assert "run_metadata.json" in skipped[0][1]
+
+
+def test_filter_missing_run_metadata_is_a_no_op_when_all_have_it(tmp_path: Path):
+    variant = Variant("v", "configs/x.yaml", "run_a")
+    (tmp_path / "run_a").mkdir()
+    (tmp_path / "run_a" / "run_metadata.json").write_text("{}", encoding="utf-8")
+
+    found, skipped = filter_missing_run_metadata([variant], tmp_path)
+
+    assert found == [variant]
+    assert skipped == []
 
 
 def test_report_args_pass_through_the_ann_settings():

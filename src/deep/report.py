@@ -20,7 +20,7 @@ from typing import List, Tuple
 
 import numpy as np
 
-from src.deep.sample import sample_variant
+from src.deep.sample import RUN_METADATA_NAME, sample_variant
 from src.eval import eda_report
 from src.eval.compare_variants import Variant, resolve_variants, variant_seed
 
@@ -31,6 +31,33 @@ DEEP_VARIANTS: Tuple[Variant, ...] = (
     Variant("v1", "configs/deep_gan_v1.yaml", "runs/deep_gan_v1"),
     Variant("v2", "configs/deep_gan_v2.yaml", "runs/deep_gan_v2"),
 )
+
+
+def filter_missing_run_metadata(
+    found: List[Variant], root: Path
+) -> Tuple[List[Variant], List[Tuple[Variant, str]]]:
+    """Post-filter `resolve_variants`'s `found` list on run_metadata.json.
+
+    `resolve_variants` is shared with SIFT's compare_variants.py and gates
+    only on best_generator.pt + run_config.yaml -- those are all SIFT
+    sampling needs. The deep sampler (src/deep/sample.py) additionally
+    requires run_metadata.json, which records the fitted preprocess state;
+    without it there is nothing to invert v2's whitening with, and
+    sample_variant raises FileNotFoundError. Left unchecked, that error
+    surfaces only after any earlier variants in the loop have already been
+    sampled -- hundreds of thousands of vectors of wasted work. Catching it
+    here means it is reported alongside the other skips, before sampling
+    starts.
+    """
+    still_found: List[Variant] = []
+    newly_skipped: List[Tuple[Variant, str]] = []
+    for variant in found:
+        run_dir = root / variant.run_dir
+        if not (run_dir / RUN_METADATA_NAME).exists():
+            newly_skipped.append((variant, f"no {RUN_METADATA_NAME} in {run_dir}"))
+        else:
+            still_found.append(variant)
+    return still_found, newly_skipped
 
 
 def generate_samples(
@@ -121,6 +148,8 @@ def main() -> None:
     out_dir = Path(args.output_dir)
 
     found, skipped = resolve_variants(DEEP_VARIANTS, root)
+    found, missing_metadata = filter_missing_run_metadata(found, root)
+    skipped = skipped + missing_metadata
     for variant, reason in skipped:
         print(f"skipping {variant.name}: {reason}")
     if not found:

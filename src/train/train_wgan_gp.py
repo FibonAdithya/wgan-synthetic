@@ -529,8 +529,15 @@ def train(config: Dict, resume: Optional[str] = None) -> Tuple[Path, Dict]:
             z = torch.randn(batch_size, latent_dim, device=device)
             fake = normalize_l2(generator(z))
             adv_loss = -critic(fake).mean()
+            # A single transfer shared by both regularizers below -- but only
+            # when at least one is enabled, so the alpha-zero path still does
+            # not touch real_batch at all.
+            real_for_reg = (
+                real_batch.to(device)
+                if (distance_reg_alpha > 0.0 or lid_reg_alpha > 0.0)
+                else None
+            )
             if distance_reg_alpha > 0.0:
-                real_for_reg = real_batch.to(device)
                 dist_real = batch_pairwise_distance_mean(
                     real_for_reg, max_points=distance_reg_max_points
                 )
@@ -543,13 +550,23 @@ def train(config: Dict, resume: Optional[str] = None) -> Tuple[Path, Dict]:
                 distance_reg = torch.zeros((), device=device, dtype=fake.dtype)
                 g_loss = adv_loss
             if lid_reg_alpha > 0.0:
-                lid_reg = log_ratio_penalty(
-                    fake,
-                    real_batch.to(device),
-                    k=lid_reg_k,
-                    max_points=lid_reg_max_points,
-                    target=lid_reg_target,
-                )
+                # Reduction-heavy pairwise-distance numerics: run this outside
+                # autocast rather than inheriting the enclosing fp16 region.
+                # x @ x.T is autocast-listed to fp16, and the expanded-square
+                # form (sq + sq - 2*xx^T) is the classic catastrophic-
+                # cancellation case; eps=1e-12 is below fp16's smallest
+                # subnormal (~6e-8) so the clamp would silently no-op; and the
+                # EMA would accumulate in fp16 where the ULP at profile
+                # magnitudes ~0.07 is on the same order as the 0.01x update
+                # step, risking quantisation stalls.
+                with autocast("cuda", enabled=False):
+                    lid_reg = log_ratio_penalty(
+                        fake.float(),
+                        real_for_reg,
+                        k=lid_reg_k,
+                        max_points=lid_reg_max_points,
+                        target=lid_reg_target,
+                    )
                 g_loss = g_loss + lid_reg_alpha * lid_reg
             else:
                 lid_reg = torch.zeros((), device=device, dtype=fake.dtype)

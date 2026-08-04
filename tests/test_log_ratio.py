@@ -1,9 +1,8 @@
 import numpy as np
-import pytest
 import torch
 
 from src.eval.ann_difficulty import knn, survivor_mask
-from src.train.log_ratio import batch_log_ratio_profile
+from src.train.log_ratio import LogRatioTarget, batch_log_ratio_profile, log_ratio_penalty
 
 
 def _blob(n=128, d=8, seed=0):
@@ -69,10 +68,25 @@ def test_batch_too_small_returns_none():
     assert batch_log_ratio_profile(_blob(n=2, d=3), k=5) is None
 
 
-def test_max_points_subsamples_without_changing_the_shape():
+def test_max_points_subsamples_and_clamps_k_eff():
+    # Property 1: max_points actually changes the computation. Same seed, same
+    # input, but subsampling picks a different subset of rows, so the profile
+    # must differ from the unsubsampled one -- an implementation that ignored
+    # max_points would produce the identical profile here and fail this
+    # assertion.
     torch.manual_seed(0)
-    profile = batch_log_ratio_profile(_blob(n=512), k=10, max_points=64)
-    assert profile.shape == (9,)
+    full = batch_log_ratio_profile(_blob(n=512), k=10, max_points=0)
+    torch.manual_seed(0)
+    subsampled = batch_log_ratio_profile(_blob(n=512), k=10, max_points=64)
+    assert subsampled.shape == (9,)
+    assert not torch.allclose(subsampled, full)
+
+    # Property 2: max_points clamps k_eff, not just n. With max_points=6 the
+    # subsample has only 6 rows, so k_eff = min(k, 6 - 1) = 5 and the profile
+    # has 4 entries -- an implementation that ignored max_points would instead
+    # clamp against the original n=512 and produce shape (9,).
+    clamped = batch_log_ratio_profile(_blob(n=512), k=10, max_points=6)
+    assert clamped.shape == (4,)
 
 
 def test_gradient_flows_to_the_input():
@@ -95,9 +109,6 @@ def test_gradient_is_finite_when_duplicates_are_present():
 def test_profile_dtype_follows_the_input():
     profile = batch_log_ratio_profile(_blob().to(torch.float64), k=8)
     assert profile.dtype == torch.float64
-
-
-from src.train.log_ratio import LogRatioTarget, log_ratio_penalty
 
 
 def test_target_initialises_to_the_first_profile():

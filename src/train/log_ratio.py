@@ -121,7 +121,14 @@ def log_ratio_penalty(
         real_profile = batch_log_ratio_profile(real, k=k, max_points=max_points)
     if real_profile is None:
         return zero
-    reference = target.update(real_profile.to(fake_profile.dtype))
-    if reference.shape != fake_profile.shape:
+    real_profile = real_profile.to(fake_profile.dtype)
+    # Check the shape match against fake_profile BEFORE updating the EMA: if
+    # this were done after, an odd-length real_profile would already have
+    # reset the accumulated average (LogRatioTarget.update resets on any
+    # shape change) by the time we discover the mismatch and bail out,
+    # discarding the average for nothing. Comparing first means a mismatched
+    # batch never touches the target at all.
+    if real_profile.shape != fake_profile.shape:
         return zero
+    reference = target.update(real_profile)
     return (fake_profile - reference).abs().sum()

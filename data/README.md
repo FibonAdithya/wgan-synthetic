@@ -50,11 +50,18 @@ The deep track expects 96-dimensional descriptors from
 
 Fetch and subset them with:
 
-    python -m src.deep.download --out-dir data
+    python -m src.deep.download --out-dir data --cache-path data/deep-image-96-angular.hdf5
 
-That downloads `deep-image-96-angular.hdf5` once into a shared cache and writes
-`data/deep96_250k.npy` (pipeline smoke runs) and `data/deep96_1m.npy` (the real
-runs). Neither the HDF5 nor the subsets are committed.
+That downloads `deep-image-96-angular.hdf5` once (here, into `data/`) and
+writes `data/deep96_250k.npy` (pipeline smoke runs) and `data/deep96_1m.npy`
+(the real runs). Neither the HDF5 nor the subsets are committed.
+
+`--cache-path` defaults to `/workspace/data-cache/deep-image-96-angular.hdf5`,
+a location that only exists on the GPU box and that a normal machine cannot
+create (`mkdir` under `/workspace` fails with `PermissionError`). Pass
+`--cache-path` explicitly, as above, anywhere else. On the GPU box,
+`scripts/deep_gpu_setup.sh` already passes `--cache-path` pointing at the
+shared cache, so the download there is not repeated per agent.
 
 DEEP vectors arrive already L2-normalized, dense, and signed — the opposite of
 SIFT on every count. The `deep_gan_v2` config additionally PCA-whitens; its

@@ -86,8 +86,8 @@ def descriptor_to_cells(vec: np.ndarray) -> np.ndarray:
     """(128,) -> (4, 4, 8) indexed [row][col][orientation_bin]."""
 
 def shared_scale(descriptors: np.ndarray, percentile: float = 99.0) -> float:
-    """Value -> ray-length factor, from |value| across every descriptor
-    that will be plotted. Returns 0.0 for an all-zero input."""
+    """Value -> ray-length factor, from the non-zero |value| across every
+    descriptor that will be plotted. Returns 0.0 for an all-zero input."""
 
 def glyph_segments(
     cells: np.ndarray,      # (4, 4, 8)
@@ -95,8 +95,10 @@ def glyph_segments(
     pitch: float,           # centre-to-centre cell spacing
     scale: float,           # from shared_scale, identical for every glyph
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """(pos_x, pos_y, neg_x, neg_y): None-separated ray endpoints, split
-    into non-negative and negative bins."""
+    """(pos_x, pos_y, neg_x, neg_y): NaN-separated ray endpoints, split
+    into non-negative and negative bins. NaN is the gap marker rather than
+    None so the arrays stay numeric and directly assertable in tests;
+    Plotly breaks scatter lines on NaN identically."""
 ```
 
 Three decisions live here:
@@ -105,8 +107,12 @@ Three decisions live here:
   `|value| * scale`; the sign only decides which pair the segment lands in, so
   the CLI can colour negative rays as a warning. Nothing is clamped.
 - **One shared scale for the whole figure**, computed once by `shared_scale`
-  from the 99th percentile of `|value|` across every descriptor plotted — real
-  and generated together — and passed unchanged to every `glyph_segments` call.
+  from the 99th percentile of the *non-zero* `|value|` across every descriptor
+  plotted — real and generated together — and passed unchanged to every
+  `glyph_segments` call. Zeros are excluded because real SIFT is sparse: over
+  the raw values the percentile can land inside the run of zeros, yielding a
+  scale of 0.0 and an empty figure. Excluding them also makes the reference
+  mean "a typical meaningful bin".
   Per-glyph normalisation would rescale each glyph to fill its box, making a
   near-flat generated descriptor look as structured as a real one. The
   percentile rather than the max stops one outlier bin shrinking everything
@@ -155,7 +161,8 @@ raises memorisation questions the figure would then have to answer.
 4. Lay all glyphs in one shared axes at `(col * pitch, row * pitch)`. One
    positive-ray trace per row, each with its own colour and legend entry, plus
    a single shared negative-ray trace in red. Row labels as left-margin
-   annotations; a rule between the real block and the variant block.
+   annotations; a rule between the real block and the variant block. The axes
+   are aspect-locked so glyphs stay square, with ticks and grid hidden.
 5. Write `descriptor_grid.html`, plus PNG through the same kaleido path
    `eda_report` uses, unless `--no-png`.
 
@@ -203,6 +210,8 @@ NumPy only, no torch.
   `pitch / 2`, never longer, so it cannot bleed into a neighbouring cell.
 - **`shared_scale` ignores outliers**: a batch of typical descriptors plus one
   with a huge spike gives nearly the same scale as the batch alone.
+- **`shared_scale` ignores zeros**: a sparse batch, mostly zeros, still yields
+  a scale that maps its non-zero values to visible rays.
 - **Edge cases**: the zero vector produces no rays rather than dividing by
   zero; `shared_scale` of all-zero input returns `0.0` without warning;
   lengths 127 and 129 raise `ValueError`.

@@ -56,3 +56,38 @@ constant.
 - `fig_ann_profile`: when `populated` is empty for a column, `continue` leaves a
   bare subplot with no axis titles and no note. Only reachable if every series is
   fully degenerate.
+
+## SIFT configs are out of step with the per-dataset conventions
+
+Two inconsistencies in `configs/sift/v0.yaml` through `v2.yaml`, recorded
+together because they should be decided in one deliberate change rather than
+as a tail on an unrelated commit. Both were left alone during the
+documentation rewrite that found them.
+
+### 1. `output_dir` keeps the flat historical names
+
+The four SIFT configs write to `runs/sift_gan_v0` .. `runs/sift_gan_v2`,
+while the five newer families use `runs/<dataset>/v*` — `runs/deep/v0`,
+`runs/gist/v0`, and so on. Nothing reads these values: no such directory
+exists, and `compare_variants` hard-codes the historical run directories
+(`long_baseline`, `x100k_improved`, `x100k_sparse_clamp4`, …) instead. So
+this only decides where a *future* SIFT training run would land.
+
+### 2. `data.real_path` names a file the fetcher does not produce
+
+All four set `data.real_path: data/sift_base.npy`, the path the trained runs
+used. `python -m src.data.fetch sift` writes `data/sift_250k.npy` and
+`data/sift_1m.npy`, so the obvious quick start — fetch, then train
+`configs/sift/v0.yaml` — fails on a fresh machine with a missing file. The
+five newer families are self-consistent: `configs/deep/v0.yaml` names
+`data/deep_250k.npy`, exactly what `fetch deep` produces. `README.md`
+currently works around this by telling the reader to check the path and edit
+it by hand.
+
+Repointing `real_path` is the part that needs a decision rather than a patch:
+it would redefine what SIFT's `v0` reproduces, since the existing checkpoints
+were trained against `sift_base.npy` and a 250k fetched subset is not the
+same corpus. The alternatives are to have the fetcher also emit a
+`sift_base.npy`, or to accept the redefinition and re-record what each SIFT
+variant means. Either way the run-directory rename above should ride along,
+so the two land as one reviewed change.

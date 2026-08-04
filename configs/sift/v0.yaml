@@ -3,7 +3,7 @@
 # config at 3k steps; there is no x100k run of this variant.
 seed: 42
 device: auto
-output_dir: runs/sift/v0
+output_dir: runs/sift_gan_v0
 
 data:
   real_path: data/sift_base.npy

@@ -24,6 +24,7 @@ from src.device import resolve_device
 from src.models.critic import Critic
 from src.models.generator import build_generator
 from src.train.gpu_lock import claim_gpu, gpu_lock_key
+from src.train.log_ratio import LogRatioTarget, log_ratio_penalty
 
 
 def gpu_preflight(device: torch.device) -> Dict[str, object]:
@@ -414,6 +415,10 @@ def train(config: Dict, resume: Optional[str] = None) -> Tuple[Path, Dict]:
     save_every = int(train_cfg["save_every"])
     distance_reg_alpha = float(train_cfg.get("distance_reg_alpha", 0.0))
     distance_reg_max_points = int(train_cfg.get("distance_reg_max_points", 128))
+    lid_reg_alpha = float(train_cfg.get("lid_reg_alpha", 0.0))
+    lid_reg_k = int(train_cfg.get("lid_reg_k", 20))
+    lid_reg_max_points = int(train_cfg.get("lid_reg_max_points", 256))
+    lid_reg_target = LogRatioTarget()
 
     run_meta = {
         "seed": seed,
@@ -537,6 +542,17 @@ def train(config: Dict, resume: Optional[str] = None) -> Tuple[Path, Dict]:
             else:
                 distance_reg = torch.zeros((), device=device, dtype=fake.dtype)
                 g_loss = adv_loss
+            if lid_reg_alpha > 0.0:
+                lid_reg = log_ratio_penalty(
+                    fake,
+                    real_batch.to(device),
+                    k=lid_reg_k,
+                    max_points=lid_reg_max_points,
+                    target=lid_reg_target,
+                )
+                g_loss = g_loss + lid_reg_alpha * lid_reg
+            else:
+                lid_reg = torch.zeros((), device=device, dtype=fake.dtype)
         scaler_g.scale(g_loss).backward()
         scaler_g.step(optim_g)
         scaler_g.update()
@@ -554,6 +570,7 @@ def train(config: Dict, resume: Optional[str] = None) -> Tuple[Path, Dict]:
                 "wasserstein": wasserstein_val,
                 "adv_loss": float(adv_loss.item()),
                 "distance_reg": float(distance_reg.item()),
+                "lid_reg": float(lid_reg.item()),
             }
             run_meta["metrics"].append(msg)
             print(json.dumps(msg))

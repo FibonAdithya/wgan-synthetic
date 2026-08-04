@@ -88,6 +88,7 @@ cause.
 | `v1` | + generator EMA (`ema_decay: 0.999`) | `configs/sift_gan_v1.yaml` | `long_ema_only`, `x100k_ema_only` |
 | `v1_5` | + distance reg (`distance_reg_alpha: 0.1`, 256 points) | `configs/sift_gan_v1_5.yaml` | `long_improved`, `x100k_improved`, `bench_improved` |
 | `v2` | + gated generator (`generator_type: gated`) | `configs/sift_gan_v2.yaml` | `x100k_sparse_clamp4` |
+| `v3` | + structured gate (`generator_type: structured_gated`) | `configs/sift_gan_v3.yaml` | *(untrained)* |
 
 Run length is an independent axis and is not a variant: `bench_*` are 3k
 generator steps, `long_*` are 30k, `x100k_*` are 100k. The run directory
@@ -112,11 +113,26 @@ flattering while the marginals are plainly wrong. v2's generator multiplies a
 softplus magnitude by a sampled binary gate, producing exact zeros. See
 `src/models/generator.py` (`GatedGenerator`).
 
+### Why v3 exists
+
+v2 produces exact zeros but gets their *distribution* wrong. Its gates are
+sampled independently per coordinate, so the non-zero count per vector is
+Binomial(128, p) with standard deviation about 4.76. Real SIFT measures
+14.45 -- three times as variable -- and its zero pattern is locally
+correlated: +0.32 between adjacent orientation bins and +0.27 between the
+same bin in neighbouring spatial cells. Neither is reachable by tuning v2.
+
+v3 adds a per-vector sparsity level (over-dispersion), a 3x3x3 convolution
+over the (4,4,8) descriptor grid with circular orientation padding (local
+correlation), and fixed smoothing of the gate noise so sampling is
+correlated too. Measurements are in `tools/probes/`; the design is in
+`docs/superpowers/specs/2026-08-03-structured-gate-generator-design.md`.
+
 ### `generator_type`
 
-The architecture axis in the `model` config block, accepting `mlp` (default)
-and `gated`. It sits underneath the variant numbering: v0, v1 and v1_5 all
-use `mlp` and differ only in training settings.
+The architecture axis in the `model` config block, accepting `mlp` (default),
+`gated`, and `structured_gated`. It sits underneath the variant numbering:
+v0, v1 and v1_5 all use `mlp` and differ only in training settings.
 
 Checkpoints do not record `generator_type` — the architecture is rebuilt from
 the run config at load time. A checkpoint is therefore only loadable

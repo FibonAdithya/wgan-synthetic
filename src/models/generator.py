@@ -328,4 +328,13 @@ def build_generator(model_cfg: Mapping[str, Any], output_dim: int) -> nn.Module:
             gate_temperature=float(model_cfg.get("gate_temperature", 0.5)),
             logit_clamp=float(model_cfg.get("logit_clamp", 10.0)),
         )
+    if kind == "structured_gated":
+        return StructuredGateGenerator(
+            **common,
+            gate_temperature=float(model_cfg.get("gate_temperature", 0.5)),
+            logit_clamp=float(model_cfg.get("logit_clamp", 10.0)),
+            layout=tuple(model_cfg.get("layout", (4, 4, 8))),
+            gate_kernel=int(model_cfg.get("gate_kernel", 3)),
+            noise_kernel_sigma=float(model_cfg.get("noise_kernel_sigma", 0.8)),
+        )
     raise ValueError(f"Unknown generator_type: {kind}")

@@ -64,6 +64,10 @@ the profile shows the sparsity it was built to fix.
 |---|---|---|---|---|
 | `v0` | plain WGAN-GP | `configs/gist/v0.yaml` | — | not trained |
 
+Train `v0`:
+
+    python -m src.train.train_wgan_gp --config configs/gist/v0.yaml
+
 ## Gate
 
 Pass bands are per statistic, not a combined score, because the four fail in

@@ -46,8 +46,14 @@ The SIFT ladder lives in `configs/sift/`; every other family has a single
 in one report:
 
     python -m src.eval.compare_variants \
-        --real-path data/sift_250k.npy \
+        --real-path data/sift_base.npy \
         --output-dir runs/eda_variants
+
+`data/sift_base.npy` is what the four trained SIFT checkpoints were actually
+trained against, not the fetcher's `data/sift_250k.npy` subset — those are
+different corpora. See `FOLLOWUPS.md` ("`data.real_path` names a file the
+fetcher does not produce") for why the SIFT configs still point at
+`sift_base.npy` rather than a fetched subset.
 
 ## What this project provides
 
@@ -66,18 +72,20 @@ in one report:
    - `source .venv/bin/activate`
    - `pip install -r requirements.txt`
 2. Fetch a dataset (see `data/README.md`):
-   - `python -m src.data.fetch sift`
+   - `python -m src.data.fetch <dataset>` — `<dataset>` is one of `sift`,
+     `gist`, `deep`, `glove`, `nytimes`, `openai`.
 3. Train:
-   - `python -m src.train.train_wgan_gp --config configs/sift/v0.yaml`
+   - `python -m src.train.train_wgan_gp --config configs/<dataset>/v0.yaml`
    - Check `data.real_path` in the config points at a file you have. The five
      newer families name the fetcher's output (`data/deep_250k.npy` and so
      on); the SIFT ladder configs still name `data/sift_base.npy`, the path
-     the trained runs used, so edit it if you fetched instead.
+     the trained runs used, so edit it if you fetched instead. See
+     `FOLLOWUPS.md` for the open question of reconciling that.
 4. Evaluate:
-   - `python -m src.eval.evaluate_distribution --real-path <path_to_real.npy_or_fvecs> --checkpoint runs/wgan_sift1m/best_generator.pt --config runs/wgan_sift1m/run_config.yaml --output-dir runs/wgan_sift1m/eval`
+   - `python -m src.eval.evaluate_distribution --real-path <path_to_real.npy_or_fvecs> --checkpoint runs/x100k_improved/best_generator.pt --config runs/x100k_improved/run_config.yaml --output-dir runs/x100k_improved/eval`
    - `python -m src.eval.evaluate_file_to_file --real-path <path_to_real.npy_or_fvecs> --synthetic-path <path_to_synthetic.npy_or_fvecs> --output-dir runs/file_eval`
 5. Sample:
-   - `python -m src.sample.generate --checkpoint runs/wgan_sift1m/best_generator.pt --config runs/wgan_sift1m/run_config.yaml --num-samples 1000000 --output-path runs/wgan_sift1m/synthetic.npy`
+   - `python -m src.sample.generate --checkpoint runs/x100k_improved/best_generator.pt --config runs/x100k_improved/run_config.yaml --num-samples 1000000 --output-path runs/x100k_improved/synthetic.npy`
 
 ## Notes
 

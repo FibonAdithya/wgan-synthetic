@@ -13,6 +13,11 @@ Fetches `nytimes-256-angular` into the shared cache and writes
 `data/nytimes_250k.npy` and `data/nytimes_1m.npy`. The HDF5 is large and
 immutable; the fetcher downloads it once and is safe to run concurrently.
 
+The `_1m` name is the requested size, not a guarantee: if the upstream
+corpus holds fewer than 1,000,000 rows, the fetcher caps the subset at
+whatever the corpus actually has and prints a notice saying so — it does not
+silently write a smaller file under a `_1m` name with nothing to flag it.
+
 | | |
 |---|---|
 | Dimension | `256` |
@@ -51,6 +56,10 @@ Fill the real column with:
 
 Read the four values out of runs/nytimes/profile/summary.json (written by the command above).
 
+`ann_difficulty.py` currently measures everything under L2, including this
+family's `angular` corpus, so these numbers will need re-measuring once
+angular distance support lands (phase (c)).
+
 ## Model family
 
 `mlp` today, `spherical` when phase (b) lands.
@@ -60,6 +69,10 @@ Read the four values out of runs/nytimes/profile/summary.json (written by the co
 | Variant | Delta | Config | Run | Status |
 |---|---|---|---|---|
 | `v0` | plain WGAN-GP | `configs/nytimes/v0.yaml` | — | not trained |
+
+Train `v0`:
+
+    python -m src.train.train_wgan_gp --config configs/nytimes/v0.yaml
 
 ## Gate
 

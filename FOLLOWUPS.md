@@ -91,3 +91,16 @@ same corpus. The alternatives are to have the fetcher also emit a
 `sift_base.npy`, or to accept the redefinition and re-record what each SIFT
 variant means. Either way the run-directory rename above should ride along,
 so the two land as one reviewed change.
+
+## Phase (c) prerequisite: re-measure the angular families' real profiles
+
+`ann_difficulty.py` currently measures everything under L2, including for
+the four `angular` families (`deep`, `glove`, `nytimes`, `openai`) — see
+"`data.metric`" in `PROJECT_DOCUMENTATION.md`. Once `ann_difficulty.py` reads
+`data.metric` and measures under the corpus's own distance (phase (c)), any
+"Measured profile" numbers already filled in on those four families' pages
+(`docs/datasets/deep.md`, `glove.md`, `nytimes.md`, `openai.md`) will be
+L2-measured figures sitting next to figures measured under the metric the
+corpus is actually searched with, and will need re-measuring so the report
+stays internally comparable. Each of those four pages now says as much in
+its "Measured profile" section.

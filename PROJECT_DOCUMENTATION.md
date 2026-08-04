@@ -490,7 +490,14 @@ Current promoted default run:
 
 ---
 
-## Workflow for a new user
+## Workflow for a new user (historical SIFT walkthrough)
+
+This walkthrough predates the multi-dataset reframe and only ever covered
+SIFT. For any of the six families, including SIFT, `README.md`'s quick start
+(fetch, then train `configs/<dataset>/v0.yaml`) is the current path; this
+section is kept because steps 4-7 below (sampling, file-to-file eval, CDF
+plot, t-SNE) are still accurate once you have a checkpoint, and are spelled
+out here in more detail than the README.
 
 ## 1) Environment setup
 
@@ -500,16 +507,26 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## 2) Put dataset in place
-
-- Expected path by default config:
-  - `data/sift_base.fvecs`
-
-## 3) Train with default config
+## 2) Fetch the dataset
 
 ```bash
-.venv/bin/python -m src.train.train_wgan_gp --config configs/wgan_gp_sift1m_real.yaml
+python -m src.data.fetch sift
 ```
+
+Writes `data/sift_250k.npy` and `data/sift_1m.npy`. See `data/README.md` for
+what the fetcher does and `docs/datasets/sift.md` for the family's specifics.
+
+## 3) Train with the SIFT `v0` config
+
+```bash
+.venv/bin/python -m src.train.train_wgan_gp --config configs/sift/v0.yaml
+```
+
+`configs/sift/v0.yaml` names `data/sift_base.npy` as `data.real_path` — the
+corpus the trained checkpoints in this repo actually used, not the fetched
+`data/sift_250k.npy` subset above. Point `real_path` at whichever file you
+have, per `FOLLOWUPS.md` ("`data.real_path` names a file the fetcher does not
+produce").
 
 ## 4) Generate synthetic dataset
 

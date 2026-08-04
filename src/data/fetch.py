@@ -166,7 +166,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--cache-dir",
         type=str,
-        default="/workspace/data-cache",
+        default="data/cache",
         help="Where the shared read-only HDF5 files live. Each is downloaded once.",
     )
     parser.add_argument("--out-dir", type=str, default="data")
@@ -196,6 +196,11 @@ def main() -> None:
         )
         shape = np.load(out, mmap_mode="r").shape
         print(f"subset: {out} {shape}")
+        if shape[0] < rows:
+            print(
+                f"note: requested {rows} rows but the corpus only has "
+                f"{shape[0]}; {out} holds {shape[0]} rows, not {rows}."
+            )
         if shape[1] != source.dim:
             raise ValueError(
                 f"{source.name}: expected dim {source.dim}, file has {shape[1]}. "

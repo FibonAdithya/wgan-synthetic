@@ -52,6 +52,10 @@ Fill the real column with:
 
 Read the four values out of runs/glove/profile/summary.json (written by the command above).
 
+`ann_difficulty.py` currently measures everything under L2, including this
+family's `angular` corpus, so these numbers will need re-measuring once
+angular distance support lands (phase (c)).
+
 ## Model family
 
 `mlp` today, `spherical` when phase (b) lands.
@@ -61,6 +65,10 @@ Read the four values out of runs/glove/profile/summary.json (written by the comm
 | Variant | Delta | Config | Run | Status |
 |---|---|---|---|---|
 | `v0` | plain WGAN-GP | `configs/glove/v0.yaml` | — | not trained |
+
+Train `v0`:
+
+    python -m src.train.train_wgan_gp --config configs/glove/v0.yaml
 
 ## Gate
 

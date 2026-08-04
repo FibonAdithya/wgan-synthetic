@@ -4,7 +4,7 @@ import h5py
 import numpy as np
 import pytest
 
-from src.data.fetch import SOURCES, Source, fetch, subset, subset_name
+from src.data.fetch import SOURCES, Source, fetch, main, parse_args, subset, subset_name
 
 
 def test_registry_covers_exactly_the_six_families():
@@ -164,3 +164,49 @@ def test_fetch_gives_up_on_a_stalled_concurrent_downloader(tmp_path: Path, monke
 def test_subset_reads_the_requested_split(fake_hdf5: Path, tmp_path: Path):
     out = subset(fake_hdf5, tmp_path / "t.npy", num_rows=5, key="test")
     assert np.load(out).shape == (5, 96)
+
+
+def test_cache_dir_default_is_relative_not_a_workspace_absolute_path(monkeypatch):
+    """A machine that is not the GPU box has no /workspace; an absolute default
+
+    there raises PermissionError at dest.parent.mkdir() for every other reader.
+    The property that matters is that the default is relative to the repo, so
+    it lands under the working directory instead.
+    """
+    monkeypatch.setattr("sys.argv", ["fetch.py", "sift"])
+    args = parse_args()
+    assert not Path(args.cache_dir).is_absolute()
+
+
+def test_main_prints_a_clamp_notice_when_the_corpus_is_smaller_than_requested(
+    fake_hdf5: Path, tmp_path: Path, monkeypatch, capsys
+):
+    """fake_hdf5 has 500 rows; requesting more than that must be visible, not
+
+    silently clamped, since a per-dataset locked N (e.g. nytimes_1m) promises
+    a row count in its filename that the corpus may not actually hold.
+    """
+    cache_dir = tmp_path / "cache"
+    out_dir = tmp_path / "out"
+    monkeypatch.setattr(
+        "src.data.fetch.SOURCES",
+        {"deep": Source(name="deep", url="http://example.invalid/fake.hdf5", dim=96, metric="angular")},
+    )
+    monkeypatch.setattr("src.data.fetch.fetch", lambda url, dest: fake_hdf5)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "fetch.py",
+            "deep",
+            "--cache-dir",
+            str(cache_dir),
+            "--out-dir",
+            str(out_dir),
+            "--rows",
+            "1000",
+        ],
+    )
+    main()
+    captured = capsys.readouterr()
+    assert "requested 1000 rows" in captured.out
+    assert "only has 500" in captured.out

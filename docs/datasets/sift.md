@@ -68,6 +68,10 @@ exact zeros and quantized lattice that a dense MLP generator cannot.
 | `v1_5` | + distance reg (`alpha: 0.1`, 256 points) | `configs/sift/v1_5.yaml` | `runs/x100k_improved` | trained |
 | `v2` | + gated generator | `configs/sift/v2.yaml` | `runs/x100k_sparse_clamp4` | trained |
 
+Train `v0` (or any rung, by swapping the config):
+
+    python -m src.train.train_wgan_gp --config configs/sift/v0.yaml
+
 Run directory names predate the per-dataset scheme and are kept as-is, since
 the artifacts under them are already named that way. Run length is an
 independent axis, not a variant: `bench_*` are 3k generator steps, `long_*`

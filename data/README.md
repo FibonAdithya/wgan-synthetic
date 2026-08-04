@@ -22,6 +22,18 @@ copying subsets between machines. The HDF5 download is atomic and
 single-flight, so several agents on one box can run the command concurrently
 without racing.
 
+`--cache-dir` (default `data/cache`) is where the downloaded HDF5 itself
+lives — a single large, immutable file per family, separate from the `.npy`
+subsets cut from it. On a multi-user box it is worth pointing at a shared
+location (e.g. `--cache-dir /shared/ann-cache`) so the multi-gigabyte
+download happens once for everyone instead of once per user.
+
+If a family's corpus holds fewer rows than requested (NYTimes is the one
+case among the six where this is plausible), the fetcher clamps to what
+exists and prints a notice naming the requested count, the actual count, and
+the file it wrote — check for that notice rather than assuming a filename
+like `nytimes_1m.npy` always holds exactly 1,000,000 rows.
+
 ## Preprocessing contract
 
 The training and generation pipeline assumes:

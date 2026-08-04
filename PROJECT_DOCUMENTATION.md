@@ -89,19 +89,21 @@ cause.
 | `v1_5` | + distance reg (`distance_reg_alpha: 0.1`, 256 points) | `configs/sift_gan_v1_5.yaml` | `long_improved`, `x100k_improved`, `bench_improved` |
 | `v2` | + gated generator (`generator_type: gated`) | `configs/sift_gan_v2.yaml` | `x100k_sparse_clamp4` |
 | `v3` | + structured gate (`generator_type: structured_gated`) | `configs/sift_gan_v3.yaml` | *(untrained)* |
+| `v4` | + log-ratio regularizer (`lid_reg_alpha > 0`) | `configs/sift_gan_v4.yaml` | *(untrained)* |
 
 Run length is an independent axis and is not a variant: `bench_*` are 3k
 generator steps, `long_*` are 30k, `x100k_*` are 100k. The run directory
 names predate this scheme and are kept as-is because the artifacts under
 them are already named that way.
 
-The four `sift_gan_*` configs above are the variant definitions, all at 30k
-steps. Two further configs are run-length or ablation arms of them, not
+The `sift_gan_*` configs above are the variant definitions, all at 30k
+steps. Further configs are run-length or ablation arms of them, not
 variants of their own:
 
 | Config | What it is |
 |---|---|
 | `configs/x100k_gated.yaml` | v2 at 100k steps with `logit_clamp: 10.0`, the value the design called for. Untrained — the v2 run that exists (`x100k_sparse_clamp4`) used 4.0, which is what `sift_gan_v2.yaml` reproduces. Kept so the clamp comparison can be run. |
+| `configs/x100k_structured.yaml` | v3 at 100k steps — the arm the experiment plan calls for. Sole delta from `sift_gan_v3.yaml` is run length and logging cadence. |
 | `configs/wgan_gp_sift1m_smoke_improved.yaml` | 200-step smoke test on synthetic data (`synthetic_if_missing: true`), with EMA, the distance regularizer, `num_workers` and the collapse monitor all switched on, so the new training-loop paths get exercised without the dataset. Small model, unrelated hyperparameters to the variants above — not a variant and not for evaluation. Output lands in `runs/wgan_sift1m_smoke_improved`. |
 
 ### Why v2 exists
@@ -127,6 +129,40 @@ over the (4,4,8) descriptor grid with circular orientation padding (local
 correlation), and fixed smoothing of the gate noise so sampling is
 correlated too. Measurements are in `tools/probes/`; the design is in
 `docs/superpowers/specs/2026-08-03-structured-gate-generator-design.md`.
+
+`noise_kernel_sigma` is calibrated, not tuned during training: the noise
+kernel is deliberately fixed (a learnable one could be driven to zero,
+killing gate stochasticity), so the value has to be right up front. Sweeping
+sigma against the measured correlation profile puts it at `0.65`, which
+reproduces +0.329 at separation 1 and +0.271 at offset 8 against the real
++0.317 and +0.275.
+
+### Why v4 exists
+
+v3 bets that the right architecture reaches SIFT's local geometry without
+being driven there. Nothing in the objective sees local structure: the critic
+is pointwise (`128 -> 1`) and judges each vector alone, and v1_5's distance
+regularizer matches one global scalar. A generator can satisfy both while
+getting neighbourhood geometry wrong.
+
+v4 hedges that bet. Within each minibatch it computes every point's `k`
+nearest neighbours *among the other points in that batch* and matches the
+mean log-ratio profile `p_i = mean[log(r_i / r_k)]`, penalising
+`alpha * ||p_fake - p_real||_1` on the generator loss. `p` is exactly the
+sufficient statistic the Hill estimator collapses to a scalar
+(`LID = -1 / mean_i(p_i)`), so matching it moves LID — but it is bounded and
+smooth where LID's `-1/x` blows up, and being a `(k-1)`-vector it constrains
+the neighbourhood's *shape*, not just its scale. The real-side target is an
+EMA (decay 0.99) rather than a fresh per-batch estimate, which is the same
+cost at lower gradient variance. See `src/train/log_ratio.py`.
+
+**v3 and v4 are not judged the same way.** v3 trains on none of the
+read-out metrics, so if it hits the LID gate that is genuine independent
+evidence. v4 trains on LID's sufficient statistic, so its `lid_median` is a
+*fitted* number and hitting the gate is close to tautological. The real
+question for v4 is what comes with it: `hubness_skew`, `ivf_gini` and
+`relative_contrast` are untouched by the penalty and stay independent under
+both arms. Any write-up of a v4 result must lead with those.
 
 ### `generator_type`
 
@@ -154,6 +190,33 @@ Default (current promoted config):
 - `num_gen_steps: 3000`
 - `batch_size: 512`
 - `distance_reg_alpha: 0.0` (disabled by default)
+
+### Generator regularizers
+
+Both are off by default, so v0–v3 behaviour is unchanged when they are absent.
+
+| Config key | Default | Meaning |
+|---|---|---|
+| `training.distance_reg_alpha` | `0.0` | Weight on `\|mean pairwise distance real − fake\|`, a single global scalar. |
+| `training.distance_reg_max_points` | `128` | Batch subsample the distance matrix is computed on. |
+| `training.lid_reg_alpha` | `0.0` | Weight on the local log-ratio penalty (v4). Off means the term is never computed and the real batch is never even transferred. |
+| `training.lid_reg_k` | `20` | Neighbour depth; the profile has `k − 1` entries. |
+| `training.lid_reg_max_points` | `256` | Batch subsample the within-batch neighbour search runs on. |
+
+Both terms are logged per step alongside `wasserstein` and `adv_loss`, as
+`distance_reg` and `lid_reg`.
+
+`lid_reg_alpha` **cannot be set by analogy to `distance_reg_alpha`.**
+`distance_reg` is one scalar; `log_ratio_penalty` is an L1 *sum* over `k − 1`
+components — 19 of them at the default `k` — so it sits on a different scale
+and grows with `k`. Pick it from a measured `lid_reg` value on real batches at
+the config's actual `lid_reg_k`. See `FOLLOWUPS.md`.
+
+Degenerate batches are dropped rather than clamped, matching
+`src.eval.ann_difficulty.survivor_mask`: a query whose nearest neighbour sits
+at distance zero (duplicates, entirely plausible under mode collapse) or whose
+neighbours all tie contributes nothing, and the penalty is exactly zero when no
+query survives on either side.
 
 Training entrypoint:
 

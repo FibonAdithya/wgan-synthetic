@@ -239,3 +239,56 @@ def test_coupling_preserves_shape_and_dtype(gen):
         assert coupled.shape == (4, OUTPUT)
         assert coupled.dtype == dtype
     gen.to(torch.float32)
+
+
+def test_noise_kernel_is_variance_preserving():
+    # Smoothing must not change the noise scale, or it silently shifts the
+    # gate's effective temperature.
+    generator = build()
+    assert generator.noise_kernel.pow(2).sum().item() == pytest.approx(1.0, abs=1e-6)
+
+
+def test_noise_kernel_is_not_a_learnable_parameter():
+    # A learned noise kernel could be driven to zero, killing gate
+    # stochasticity and collapsing the support distribution.
+    generator = build()
+    assert "noise_kernel" in dict(generator.named_buffers())
+    assert "noise_kernel" not in dict(generator.named_parameters())
+
+
+def _adjacent_vs_distant_gate_correlation(generator, n=8192, seed=21):
+    """Correlation between neighbouring vs far-apart gates, logits held flat.
+
+    Takes any generator exposing `_sample_gate`, so v2 and v3 can be compared
+    on identical terms.
+    """
+    torch.manual_seed(seed)
+    with torch.no_grad():
+        gate = generator._sample_gate(torch.zeros(n, OUTPUT))
+    g = gate - gate.mean(dim=0, keepdim=True)
+    sd = g.std(dim=0, keepdim=True).clamp(min=1e-8)
+    g = g / sd
+    corr = (g.T @ g) / n
+    idx = torch.arange(OUTPUT)
+    sep = (idx[:, None] - idx[None, :]).abs()
+    off_diagonal = ~torch.eye(OUTPUT, dtype=torch.bool)
+    adjacent = corr[(sep == 1) & off_diagonal].mean().item()
+    distant = corr[(sep >= 16) & off_diagonal].mean().item()
+    return adjacent, distant
+
+
+def test_gate_noise_is_spatially_correlated():
+    # With logits flat at zero the gate is pure noise, so any correlation
+    # between neighbouring coordinates comes from the smoothing.
+    adjacent, distant = _adjacent_vs_distant_gate_correlation(build())
+    assert adjacent > 0.05
+    assert adjacent > distant + 0.04
+
+
+def test_v2_gate_noise_is_uncorrelated():
+    # The contrast: v2 samples every coordinate independently, so neighbours
+    # are no more alike than distant coordinates.
+    torch.manual_seed(0)
+    v2 = GatedGenerator(latent_dim=LATENT, output_dim=OUTPUT, hidden_dims=HIDDEN)
+    adjacent, distant = _adjacent_vs_distant_gate_correlation(v2)
+    assert abs(adjacent - distant) < 0.03

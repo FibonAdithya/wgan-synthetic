@@ -210,12 +210,33 @@ class StructuredGateGenerator(nn.Module):
             self.gate_coupling.weight.zero_()
             centre = gate_kernel // 2
             self.gate_coupling.weight[0, 0, centre, centre, centre] = 1.0
+        # Fixed, not learned: a trainable noise kernel could be driven toward
+        # zero, removing gate stochasticity and collapsing the support
+        # distribution -- the failure this class exists to prevent.
+        self.register_buffer(
+            "noise_kernel", self._gaussian_kernel(gate_kernel, noise_kernel_sigma)
+        )
         self.layout = layout
         self.gate_kernel = int(gate_kernel)
         self.noise_kernel_sigma = float(noise_kernel_sigma)
         self.gate_temperature = float(gate_temperature)
         self.logit_clamp = float(logit_clamp)
         self.eps = float(eps)
+
+    @staticmethod
+    def _gaussian_kernel(size: int, sigma: float) -> torch.Tensor:
+        """Separable 3-D Gaussian, normalised so smoothing preserves variance.
+
+        Scaling by the L2 norm rather than the sum is deliberate: convolving
+        i.i.d. unit-variance noise with weights w gives variance sum(w^2), so
+        an L2-normalised kernel leaves the noise scale -- and therefore the
+        gate's effective temperature -- unchanged.
+        """
+        coords = torch.arange(size, dtype=torch.float32) - (size - 1) / 2.0
+        line = torch.exp(-(coords**2) / (2.0 * sigma**2))
+        kernel = line[:, None, None] * line[None, :, None] * line[None, None, :]
+        kernel = kernel / torch.linalg.vector_norm(kernel)
+        return kernel.reshape(1, 1, size, size, size)
 
     def _sample_gate(self, logits: torch.Tensor) -> torch.Tensor:
         """Sample a hard binary-concrete gate, returned in ``logits.dtype``.
@@ -229,7 +250,7 @@ class StructuredGateGenerator(nn.Module):
             else logits
         )
         u = torch.rand_like(sample_logits).clamp(self.eps, 1.0 - self.eps)
-        logistic = torch.log(u) - torch.log1p(-u)
+        logistic = self._smooth_noise(torch.log(u) - torch.log1p(-u))
         soft = torch.sigmoid((sample_logits + logistic) / self.gate_temperature)
         hard = (soft > 0.5).to(soft.dtype)
         # Preserve the unit-norm contract even if every gate in a row closes.
@@ -256,6 +277,22 @@ class StructuredGateGenerator(nn.Module):
         grid = F.pad(grid, (pad, pad, 0, 0, 0, 0), mode="circular")
         grid = F.pad(grid, (0, 0, pad, pad, pad, pad), mode="replicate")
         return self.gate_coupling(grid).reshape(batch, -1)
+
+    def _smooth_noise(self, noise: torch.Tensor) -> torch.Tensor:
+        """Correlate i.i.d. noise over the descriptor grid.
+
+        Correlated logits with independent noise still sample near
+        independently: the correlation has to be in the draw, not only in the
+        mean.
+        """
+        batch = noise.shape[0]
+        rows, cols, orient = self.layout
+        pad = self.gate_kernel // 2
+        grid = noise.reshape(batch, 1, rows, cols, orient)
+        grid = F.pad(grid, (pad, pad, 0, 0, 0, 0), mode="circular")
+        grid = F.pad(grid, (0, 0, pad, pad, pad, pad), mode="replicate")
+        kernel = self.noise_kernel.to(grid.dtype)
+        return F.conv3d(grid, kernel).reshape(batch, -1)
 
     def _gate_logits(self, h: torch.Tensor) -> torch.Tensor:
         logits = self._couple(self.gate_head(h)) + self.sparsity_head(h)

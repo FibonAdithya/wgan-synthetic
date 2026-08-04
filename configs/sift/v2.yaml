@@ -5,7 +5,7 @@
 # used num_gen_steps: 100000 and log_every/eval_every/save_every: 500/2000/5000.
 seed: 42
 device: auto
-output_dir: runs/sift_gan_v2
+output_dir: runs/sift/v2
 
 data:
   real_path: data/sift_base.npy

@@ -4,7 +4,7 @@
 # steps; runs/x100k_improved is the same config at 100k steps.
 seed: 42
 device: auto
-output_dir: runs/sift_gan_v1_5
+output_dir: runs/sift/v1_5
 
 data:
   real_path: data/sift_base.npy

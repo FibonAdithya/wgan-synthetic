@@ -1,12 +1,85 @@
-# WGAN SIFT1M Synthetic Data Project Documentation
+# WGAN ANN-difficulty Synthetic Data Project Documentation
 
 ## Goal
 
-Train a Wasserstein GAN with gradient penalty (WGAN-GP) to generate synthetic 128D vectors that match the distributional and neighborhood structure of SIFT1M descriptors.
+Train Wasserstein GANs with gradient penalty (WGAN-GP) to produce synthetic
+corpora that reproduce the *nearest-neighbour search difficulty* of six
+benchmark families, so ANN algorithms can be developed and stressed without
+the real corpora. A synthetic set succeeds when an index finds it as hard,
+and hard in the same way, as the real set. It does not succeed by having
+matching marginals.
+
+The gate is ANN-difficulty parity on four statistics, measured per dataset at
+that dataset's canonical N and k: LID (local intrinsic dimensionality),
+relative contrast, hubness skew (k-occurrence), and IVF cell-balance Gini.
+The distributional metrics below — `mmd_rbf`, `cov_fro`, `pairwise_hist_l1`
+and the per-dimension marginals — are diagnostics. They explain why a gate
+failed; they do not decide whether it passed.
+
+They cannot decide it because they measure the wrong part of the distance
+distribution. MMD, covariance error and the pairwise-distance histogram are
+dominated by the bulk of that distribution, around the median, while ANN
+difficulty is set by its far-left tail: the gap between a query's 1st and
+k-th neighbour relative to the typical distance. An RBF kernel at median
+bandwidth is nearly flat across that tail, so a large relative error there
+barely moves the metric. Hubness is worse still — k-occurrence is a property
+of the *directed* k-NN graph, and no symmetric two-sample statistic over
+unordered distances constrains it at all. A generator is a smooth pushforward
+of a Gaussian and tends to add a full-rank noise floor: globally invisible in
+the covariance, locally it inflates LID toward the ambient dimension and
+collapses relative contrast toward 1.
+
+The full argument, including the failure modes that pass a marginals check in
+both directions, is in
+`docs/superpowers/specs/2026-08-04-multi-dataset-ann-emulation-design.md`.
 
 Primary deliverable:
 
-- A trained generator checkpoint (`best_generator.pt`) and associated run metadata/config to reproducibly synthesize vectors at scale.
+- Per dataset family, a trained generator checkpoint (`best_generator.pt`)
+  and associated run metadata/config to reproducibly synthesize vectors at
+  scale, together with the ANN-difficulty report that shows the synthetic set
+  clears that family's gate.
+
+---
+
+## Datasets
+
+Six benchmark families. Each has its own page under `docs/datasets/`,
+carrying its structure, canonical N and k, measured profile, ladder and gate
+bands; the pages are the source of truth for anything family-specific.
+
+| Family | Dim | Metric | Structure | Model family | Page |
+|---|---|---|---|---|---|
+| `sift` | 128 | `l2` | non-negative uint8, heavy exact-zero mass, ties common | `gated` | `docs/datasets/sift.md` |
+| `gist` | 960 | `l2` | non-negative dense float, little zero mass, high ambient dim | `mlp` | `docs/datasets/gist.md` |
+| `deep` | 96 | `angular` | dense signed unit-norm image embeddings | `mlp` today, `spherical` when built | `docs/datasets/deep.md` |
+| `glove` | 100 | `angular` | dense signed word vectors, strong density gradient | `mlp` today, `spherical` when built | `docs/datasets/glove.md` |
+| `nytimes` | 256 | `angular` | dense signed document embeddings, strong topic clusters | `mlp` today, `spherical` when built | `docs/datasets/nytimes.md` |
+| `openai` | 1536 | `angular` | unit-norm text embeddings, very high ambient dim, low intrinsic dim | `mlp` today, `spherical` when built | `docs/datasets/openai.md` |
+
+### Fetching
+
+`src/data/fetch.py` holds a single source registry with one entry per family,
+each naming an ann-benchmarks HDF5 mirror, the dimension and the search
+metric. Running
+
+```bash
+python -m src.data.fetch <dataset>
+```
+
+downloads that family's HDF5 into a shared cache once and cuts two
+reproducible random subsets out of it, writing `data/<dataset>_250k.npy` and
+`data/<dataset>_1m.npy`. The download is atomic — the body goes to a sibling
+`.part` file and is `os.replace`d into position, so a concurrent reader sees
+either nothing or a complete file — and single-flight, since the `.part` file
+doubles as an exclusive lock and a second caller waits rather than starting
+its own multi-gigabyte fetch. An existing destination is left alone; these
+files are large and immutable. Subsets are drawn with a seeded RNG, so the
+same seed gives the same rows.
+
+All six come from ann-benchmarks HDF5 so the module handles one container
+format. Descriptor sets obtained another way — corpus-texmex `.fvecs`, say —
+are read directly by the loader and do not come through here.
 
 ---
 
@@ -38,11 +111,11 @@ Optional generator regularizer (implemented):
 Accepted input formats:
 
 - `.fvecs` (Faiss style vectors)
-- `.npy` with shape `[N, 128]`
+- `.npy` with shape `[N, D]`, where `D` is the family's dimension
 
 Implemented in:
 
-- `src/data/sift1m_dataset.py`
+- `src/data/dataset.py`
 
 Preprocessing options:
 
@@ -53,6 +126,20 @@ Preprocessing options:
 Training/eval split:
 
 - Configurable holdout (`data.holdout_fraction`, default `0.05`)
+
+### `data.metric`
+
+A field in the `data` block, not under `data.preprocess`, taking `l2` or
+`angular` and defaulting to `l2`. It records the distance the real corpus is
+searched under — a property of the family, which is why it sits beside
+`real_path` and `descriptor_dim` rather than among the transforms.
+
+It is not a preprocessing instruction. `l2_normalize` is set independently,
+and an `angular` corpus is not thereby normalized nor an `l2` one left alone;
+the two settings answer different questions. The value is validated at load
+time against the two accepted strings and is otherwise inert today: nothing
+consumes it yet. Reading it in `src/eval/ann_difficulty.py`, so difficulty is
+measured under the metric the corpus is actually searched with, is phase (c).
 
 ---
 
@@ -65,7 +152,13 @@ Implemented in:
 
 Both are MLPs with Linear + LeakyReLU blocks.
 
-Current default config (`configs/wgan_gp_sift1m_real.yaml`):
+The models are dimension-agnostic. `data.descriptor_dim`, `model.latent_dim`
+and both hidden-dim lists come from the config, so a 960d GIST config and a
+1536d OpenAI config build the same architecture at a different width with no
+code change.
+
+The numbers below are what SIFT's configs use (`configs/sift/v0.yaml`), not a
+repo-wide constant:
 
 - `latent_dim: 128`
 - Generator hidden dims: `[512, 1024, 1024]`
@@ -76,31 +169,39 @@ No sigmoid on critic output.
 
 ---
 
-## Model variants
+## Model variants: the per-dataset ladder
 
-Four variants were trained. Each is exactly one config change from the one
-above it, so a difference visible in an EDA overlay attributes to a single
-cause.
+Every family has its own ladder, numbered independently from `v0`. Each rung
+is exactly one config change from the one above it, so a difference visible
+in an EDA overlay attributes to a single cause. Because the ladders are
+independent, a variant number means nothing across families: SIFT's `v2` and
+a future GIST `v2` are unrelated, and only ever compare within one dataset.
+Each family's ladder and its status live in its page under `docs/datasets/`;
+SIFT
+is the only family with trained rungs today, and the other five have a `v0`
+baseline config only.
+
+The SIFT ladder:
 
 | Variant | Delta from previous | Config | Runs |
 |---|---|---|---|
-| `v0` | plain WGAN-GP | `configs/sift_gan_v0.yaml` | `long_baseline`, `bench_baseline` |
-| `v1` | + generator EMA (`ema_decay: 0.999`) | `configs/sift_gan_v1.yaml` | `long_ema_only`, `x100k_ema_only` |
-| `v1_5` | + distance reg (`distance_reg_alpha: 0.1`, 256 points) | `configs/sift_gan_v1_5.yaml` | `long_improved`, `x100k_improved`, `bench_improved` |
-| `v2` | + gated generator (`generator_type: gated`) | `configs/sift_gan_v2.yaml` | `x100k_sparse_clamp4` |
+| `v0` | plain WGAN-GP | `configs/sift/v0.yaml` | `long_baseline`, `bench_baseline` |
+| `v1` | + generator EMA (`ema_decay: 0.999`) | `configs/sift/v1.yaml` | `long_ema_only`, `x100k_ema_only` |
+| `v1_5` | + distance reg (`distance_reg_alpha: 0.1`, 256 points) | `configs/sift/v1_5.yaml` | `long_improved`, `x100k_improved`, `bench_improved` |
+| `v2` | + gated generator (`generator_type: gated`) | `configs/sift/v2.yaml` | `x100k_sparse_clamp4` |
 
 Run length is an independent axis and is not a variant: `bench_*` are 3k
 generator steps, `long_*` are 30k, `x100k_*` are 100k. The run directory
 names predate this scheme and are kept as-is because the artifacts under
 them are already named that way.
 
-The four `sift_gan_*` configs above are the variant definitions, all at 30k
+The four `configs/sift/` configs above are the variant definitions, all at 30k
 steps. Two further configs are run-length or ablation arms of them, not
 variants of their own:
 
 | Config | What it is |
 |---|---|
-| `configs/x100k_gated.yaml` | v2 at 100k steps with `logit_clamp: 10.0`, the value the design called for. Untrained — the v2 run that exists (`x100k_sparse_clamp4`) used 4.0, which is what `sift_gan_v2.yaml` reproduces. Kept so the clamp comparison can be run. |
+| `configs/x100k_gated.yaml` | v2 at 100k steps with `logit_clamp: 10.0`, the value the design called for. Untrained — the v2 run that exists (`x100k_sparse_clamp4`) used 4.0, which is what `configs/sift/v2.yaml` reproduces. Kept so the clamp comparison can be run. |
 | `configs/wgan_gp_sift1m_smoke_improved.yaml` | 200-step smoke test on synthetic data (`synthetic_if_missing: true`), with EMA, the distance regularizer, `num_workers` and the collapse monitor all switched on, so the new training-loop paths get exercised without the dataset. Small model, unrelated hyperparameters to the variants above — not a variant and not for evaluation. Output lands in `runs/wgan_sift1m_smoke_improved`. |
 
 ### Why v2 exists
@@ -117,6 +218,13 @@ softplus magnitude by a sampled binary gate, producing exact zeros. See
 The architecture axis in the `model` config block, accepting `mlp` (default)
 and `gated`. It sits underneath the variant numbering: v0, v1 and v1_5 all
 use `mlp` and differ only in training settings.
+
+A third value, `spherical`, is planned and not built. It is phase (b) of the
+multi-dataset design: a generator whose output is unit-norm by construction
+rather than by a normalization applied afterwards, for the four `angular`
+families. Until it exists, `deep`, `glove`, `nytimes` and `openai` all start
+their ladders on `mlp`, and any dataset page naming `spherical` is describing
+the intended rung, not a trained one.
 
 Checkpoints do not record `generator_type` — the architecture is rebuilt from
 the run config at load time. A checkpoint is therefore only loadable
@@ -163,6 +271,43 @@ Applied in:
 
 ## Evaluation stack
 
+## ANN difficulty — the gate
+
+Implemented in `src/eval/ann_difficulty.py` and surfaced as panels in the EDA
+report. This is the decision procedure: whether a synthetic set would
+*behave* like the real one under nearest-neighbour search. Everything under
+"Metrics" below is diagnostic and explains a failure here.
+
+Four statistics, compared real against synthetic:
+
+- LID median (local intrinsic dimensionality)
+- relative contrast
+- hubness skew (k-occurrence)
+- IVF cell-balance Gini
+
+Pass is a documented relative band per statistic, recorded in that family's
+page under `docs/datasets/`, not a single combined score. The four fail in
+different directions — a smoothed generator inflates LID and collapses
+contrast, a collapsed one does the reverse — and one number would hide which
+broke. Bands start wide and tighten as a family's ladder shows what is
+achievable; a family with no trained ladder records its bands as unset.
+
+Canonical N and k are locked per dataset and written into its page. These are
+self-queried subsample statistics with no absolute meaning: they are
+comparable only within one report at one N and k, and are not comparable with
+published figures, which are measured on the full corpus against the real
+query set. Without a locked pair, a gate result from last month cannot be
+read against today's.
+
+`ann_difficulty.py` currently computes everything under L2, including for the
+four `angular` families. Reading `data.metric` and measuring under the
+corpus's own distance is phase (c) of the multi-dataset design; until it
+lands, angular-family numbers are internally consistent within a report but
+are not the distance the corpus is searched with.
+
+The knobs (`--ann-k`, `--ann-hub-k`, `--ann-max-rows`, `--ivf-nlist`) are
+documented under "Visualization tools" with the EDA report that exposes them.
+
 ## Checkpoint-based eval
 
 - Script: `src/eval/evaluate_distribution.py`
@@ -177,6 +322,10 @@ Applied in:
 
 ## Metrics
 
+Diagnostics, not the gate. A synthetic set can score well on all of these and
+still be far easier or harder to search than the real one; their use is to
+localize a difficulty mismatch once the gate above has flagged it.
+
 - `mean_l2`, `var_l2`
 - `cov_fro`
 - `mmd_rbf`
@@ -186,7 +335,7 @@ Applied in:
 
 ### Metric definitions
 
-Let `X = {x_i}` be real samples and `Y = {y_j}` be synthetic samples, with vectors in `R^128`.
+Let `X = {x_i}` be real samples and `Y = {y_j}` be synthetic samples, with vectors in `R^D` for the dataset's dimension `D`.
 
 - `mean_l2` (lower is better)
   - Per-dimension mean mismatch:
@@ -256,20 +405,20 @@ Memory-safe note:
     offline) plus a `summary.json` and best-effort PNGs.
   - Panels: local intrinsic dimensionality and relative contrast (ANN
     difficulty), hubness (k-occurrence), IVF cell balance, pooled value
-    distribution, per-dimension marginals with a dropdown over all 128 dims,
-    per-dim mean/std/zero-rate profiles, pairwise distances, within-set kNN
-    distances, PCA spectrum, correlation heatmaps, and a Wasserstein-1
-    ranking of the worst-matching dimensions.
-  - The ANN-difficulty panels (`src/eval/ann_difficulty.py`) ask whether a
-    synthetic set would *behave* like SIFT under nearest-neighbour search,
-    not just look like it: `--ann-k` (default 100) sets the neighbour depth
+    distribution, per-dimension marginals with a dropdown over every
+    dimension, per-dim mean/std/zero-rate profiles, pairwise distances,
+    within-set kNN distances, PCA spectrum, correlation heatmaps, and a
+    Wasserstein-1 ranking of the worst-matching dimensions.
+  - The ANN-difficulty panels carry the gate described above; their knobs
+    are set here. `--ann-k` (default 100) sets the neighbour depth
     for LID and relative contrast, `--ann-hub-k` (default 10) the depth for
     the hubness k-occurrence count, `--ann-max-rows` (default 20000) the
     equal-N truncation every set is cut to so the metrics stay comparable
     across series, and `--ivf-nlist` (default 256) the cluster count for the
     IVF cell-balance panel. These numbers are self-queried subsample
-    statistics, not published SIFT1M figures, and are only comparable across
-    the series in one report.
+    statistics, not published benchmark figures, and are only comparable
+    across the series in one report; each family's locked values are in its
+    page under `docs/datasets/`.
   - `--synthetic-path` is optional; without it the report is pure dataset EDA.
     With it, every panel overlays the two so mismatch is visible by eye.
   - `--preprocess l2` (default) matches the training contract, since generator
@@ -278,9 +427,9 @@ Memory-safe note:
     sets. A weak critic yields flattering Wasserstein estimates over samples
     whose marginals are plainly wrong -- most visibly SIFT's heavy exact-zero
     mass, which smooth generators do not reproduce.
-  - `src/eval/compare_variants.py` drives this across all four variants at
-    once, labelling the overlays `v0`/`v1`/`v1_5`/`v2` to match the variant
-    table. It resolves each variant's `best_generator.pt` and
+  - `src/eval/compare_variants.py` drives this across all four SIFT variants
+    at once, labelling the overlays `v0`/`v1`/`v1_5`/`v2` to match the SIFT
+    ladder. It resolves each variant's `best_generator.pt` and
     `run_config.yaml`, samples the generator, and calls the report in
     process. Variants whose checkpoints are not on the local machine are
     skipped with a message, so a partial comparison still produces a report.

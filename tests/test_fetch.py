@@ -4,7 +4,42 @@ import h5py
 import numpy as np
 import pytest
 
-from src.deep.download import DEEP_URL, fetch, subset
+from src.data.fetch import SOURCES, Source, fetch, subset, subset_name
+
+
+def test_registry_covers_exactly_the_six_families():
+    assert set(SOURCES) == {"sift", "gist", "deep", "glove", "nytimes", "openai"}
+
+
+def test_every_source_declares_a_known_metric_and_a_positive_dim():
+    for name, src in SOURCES.items():
+        assert isinstance(src, Source), name
+        assert src.metric in {"l2", "angular"}, name
+        assert src.dim > 0, name
+        assert src.url.endswith(".hdf5"), name
+        assert src.name == name
+
+
+def test_registry_dims_match_the_names_upstream_publishes():
+    assert SOURCES["sift"].dim == 128
+    assert SOURCES["gist"].dim == 960
+    assert SOURCES["deep"].dim == 96
+    assert SOURCES["glove"].dim == 100
+    assert SOURCES["nytimes"].dim == 256
+    assert SOURCES["openai"].dim == 1536
+
+
+def test_sift_and_gist_are_l2_and_the_rest_are_angular():
+    assert SOURCES["sift"].metric == "l2"
+    assert SOURCES["gist"].metric == "l2"
+    for name in ("deep", "glove", "nytimes", "openai"):
+        assert SOURCES[name].metric == "angular"
+
+
+def test_subset_name_labels_thousands_and_millions():
+    assert subset_name("sift", 250_000) == "sift_250k"
+    assert subset_name("deep", 1_000_000) == "deep_1m"
+    assert subset_name("glove", 2_000_000) == "glove_2m"
 
 
 @pytest.fixture
@@ -58,7 +93,7 @@ def test_fetch_leaves_no_partial_file_when_the_download_fails(
     def exploding_urlopen(*args, **kwargs):
         raise Boom("network down")
 
-    monkeypatch.setattr("src.deep.download.urlopen", exploding_urlopen)
+    monkeypatch.setattr("src.data.fetch.urlopen", exploding_urlopen)
     with pytest.raises(Boom):
         fetch("http://example.invalid/x.hdf5", dest)
     assert not dest.exists()
@@ -74,7 +109,7 @@ def test_fetch_skips_the_download_when_the_destination_already_exists(
     def exploding_urlopen(*args, **kwargs):
         raise AssertionError("fetch must not download over an existing file")
 
-    monkeypatch.setattr("src.deep.download.urlopen", exploding_urlopen)
+    monkeypatch.setattr("src.data.fetch.urlopen", exploding_urlopen)
     assert fetch("http://example.invalid/x.hdf5", dest) == dest
     assert dest.read_bytes() == b"already here"
 
@@ -94,13 +129,13 @@ def test_fetch_waits_for_a_concurrent_downloader_instead_of_duplicating_it(
     def exploding_urlopen(*args, **kwargs):
         raise AssertionError("must not download while another fetch holds the lock")
 
-    monkeypatch.setattr("src.deep.download.urlopen", exploding_urlopen)
+    monkeypatch.setattr("src.data.fetch.urlopen", exploding_urlopen)
 
     def finish_the_other_download(_seconds):
         dest.write_bytes(b"complete")
         lock.unlink()
 
-    monkeypatch.setattr("src.deep.download.time.sleep", finish_the_other_download)
+    monkeypatch.setattr("src.data.fetch.time.sleep", finish_the_other_download)
     assert fetch("http://example.invalid/x.hdf5", dest) == dest
     assert dest.read_bytes() == b"complete"
 
@@ -108,10 +143,11 @@ def test_fetch_waits_for_a_concurrent_downloader_instead_of_duplicating_it(
 def test_fetch_gives_up_on_a_stalled_concurrent_downloader(tmp_path: Path, monkeypatch):
     dest = tmp_path / "deep.hdf5"
     dest.with_suffix(dest.suffix + ".part").write_bytes(b"")
-    monkeypatch.setattr("src.deep.download.time.sleep", lambda _s: None)
+    monkeypatch.setattr("src.data.fetch.time.sleep", lambda _s: None)
     with pytest.raises(TimeoutError, match="in-flight download"):
         fetch("http://example.invalid/x.hdf5", dest, timeout_seconds=0.0)
 
 
-def test_deep_url_points_at_the_angular_variant():
-    assert DEEP_URL.endswith("deep-image-96-angular.hdf5")
+def test_subset_reads_the_requested_split(fake_hdf5: Path, tmp_path: Path):
+    out = subset(fake_hdf5, tmp_path / "t.npy", num_rows=5, key="test")
+    assert np.load(out).shape == (5, 96)

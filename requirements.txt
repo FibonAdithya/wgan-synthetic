@@ -4,7 +4,7 @@ pyyaml
 tqdm
 scikit-learn
 scipy
-# HDF5 reader for the DEEP dataset, used only by src/deep/download.py.
+# HDF5 reader for the ann-benchmarks mirrors, used only by src/data/fetch.py.
 h5py
 plotly
 # Static PNG export in src/eval/eda_report.py. Kaleido v1 drives a headless

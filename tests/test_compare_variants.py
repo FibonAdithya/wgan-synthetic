@@ -37,8 +37,8 @@ def _make_run_dir(root, name, with_checkpoint=True, with_config=True):
 
 def test_resolve_skips_variants_with_no_checkpoint(tmp_path):
     variants = (
-        cv.Variant("v0", "configs/sift_gan_v0.yaml", "runs/a"),
-        cv.Variant("v1", "configs/sift_gan_v1.yaml", "runs/b"),
+        cv.Variant("v0", "configs/sift/v0.yaml", "runs/a"),
+        cv.Variant("v1", "configs/sift/v1.yaml", "runs/b"),
     )
     _make_run_dir(tmp_path / "runs", "a")
     _make_run_dir(tmp_path / "runs", "b", with_checkpoint=False)
@@ -51,7 +51,7 @@ def test_resolve_skips_variants_with_no_checkpoint(tmp_path):
 
 
 def test_resolve_skips_variants_with_no_run_config(tmp_path):
-    variants = (cv.Variant("v0", "configs/sift_gan_v0.yaml", "runs/a"),)
+    variants = (cv.Variant("v0", "configs/sift/v0.yaml", "runs/a"),)
     _make_run_dir(tmp_path / "runs", "a", with_config=False)
 
     found, skipped = cv.resolve_variants(variants, root=tmp_path)
@@ -61,7 +61,7 @@ def test_resolve_skips_variants_with_no_run_config(tmp_path):
 
 
 def test_resolve_reports_a_missing_run_dir(tmp_path):
-    variants = (cv.Variant("v0", "configs/sift_gan_v0.yaml", "runs/nope"),)
+    variants = (cv.Variant("v0", "configs/sift/v0.yaml", "runs/nope"),)
 
     found, skipped = cv.resolve_variants(variants, root=tmp_path)
 
@@ -71,8 +71,8 @@ def test_resolve_reports_a_missing_run_dir(tmp_path):
 
 def test_resolve_finds_everything_when_present(tmp_path):
     variants = (
-        cv.Variant("v0", "configs/sift_gan_v0.yaml", "runs/a"),
-        cv.Variant("v2", "configs/sift_gan_v2.yaml", "runs/b"),
+        cv.Variant("v0", "configs/sift/v0.yaml", "runs/a"),
+        cv.Variant("v2", "configs/sift/v2.yaml", "runs/b"),
     )
     _make_run_dir(tmp_path / "runs", "a")
     _make_run_dir(tmp_path / "runs", "b")
@@ -119,7 +119,7 @@ def _write_tiny_gated_run(tmp_path, name="tiny_gated"):
     }
     (run_dir / "run_config.yaml").write_text(yaml.safe_dump(run_config))
 
-    variant = cv.Variant(name, "configs/sift_gan_v2.yaml", f"runs/{name}")
+    variant = cv.Variant(name, "configs/sift/v2.yaml", f"runs/{name}")
     return variant, descriptor_dim
 
 

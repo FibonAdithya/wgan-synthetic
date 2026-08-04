@@ -4,7 +4,6 @@ from pathlib import Path
 
 import numpy as np
 import torch
-import yaml
 
 from src.eval import compare_variants as cv
 from src.eval import eda_report

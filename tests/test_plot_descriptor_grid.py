@@ -170,3 +170,122 @@ def test_variant_generating_the_wrong_width_is_refused(
     monkeypatch.setattr(cv, "VARIANTS", (variant,))
     with pytest.raises(ValueError, match="128"):
         pdg.run(_args(tmp_path))
+
+
+def test_write_report_survives_a_png_export_failure(tmp_path, monkeypatch, capsys):
+    """kaleido needs a Chrome binary; on a headless box `export_pngs` raises.
+    The HTML must still exist and the run must not raise -- mirrors
+    `eda_report.run`'s try/except around the same call."""
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError("Kaleido requires Google Chrome to be installed.")
+
+    monkeypatch.setattr(pdg.eda_report, "export_pngs", _boom)
+    vecs = np.abs(np.random.default_rng(0).random((2, 128))).astype(np.float32)
+    fig = pdg.build_figure([("row", vecs, "#000000")])
+    out = pdg.write_report(fig, tmp_path / "out", "cdn", write_png=True)
+    assert out.exists()
+    assert "Chrome" in capsys.readouterr().out
+
+
+def test_check_finite_accepts_a_clean_array():
+    pdg.check_finite(np.zeros((2, 128), dtype=np.float32), "source")  # no raise
+
+
+def test_check_finite_refuses_nan():
+    arr = np.zeros((2, 128), dtype=np.float32)
+    arr[0, 5] = np.nan
+    with pytest.raises(ValueError, match="1 non-finite"):
+        pdg.check_finite(arr, "some-source")
+
+
+def test_check_finite_refuses_inf_and_names_the_source():
+    arr = np.zeros((2, 128), dtype=np.float32)
+    arr[1, 3] = np.inf
+    with pytest.raises(ValueError, match="some-source"):
+        pdg.check_finite(arr, "some-source")
+
+
+def test_run_refuses_real_data_containing_nan(tmp_path):
+    # A distinct filename from _write_real's default: _args() below calls
+    # _write_real(tmp_path) again to build its base namespace, which would
+    # otherwise overwrite this file's NaN back to clean data at the same path.
+    x = np.random.default_rng(0).random((64, 128)).astype(np.float32)
+    x[x < 0.8] = 0.0
+    x[:, 0] = 1.0
+    x[0, 1] = np.nan
+    path = tmp_path / "real_with_nan.npy"
+    np.save(path, x)
+    with pytest.raises(ValueError, match="non-finite"):
+        pdg.run(_args(tmp_path, real_path=str(path)))
+
+
+def test_variant_row_with_nan_output_is_refused(
+    tmp_path, write_tiny_gated_run, monkeypatch
+):
+    """A generator that produces a non-finite value must not invent a
+    spurious red 'negative' trace for the affected variant."""
+    variant, _ = write_tiny_gated_run(tmp_path, name="v2", descriptor_dim=128)
+
+    def _nan_sampler(generator, num_samples, latent_dim, batch_size, device):
+        out = np.zeros((num_samples, 128), dtype=np.float32)
+        out[0, 0] = np.nan
+        return out
+
+    monkeypatch.setattr(cv, "VARIANTS", (variant,))
+    monkeypatch.setattr(pdg, "sample_generator", _nan_sampler)
+    with pytest.raises(ValueError, match="non-finite"):
+        pdg.run(_args(tmp_path))
+
+
+def test_variant_colour_is_keyed_by_identity_not_resolved_position(
+    tmp_path, write_tiny_gated_run, monkeypatch
+):
+    """v1 must keep its colour whether or not v0's checkpoint is present --
+    the same machine-dependence `cv.variant_seed` guards against for
+    sampling."""
+    v0, _ = write_tiny_gated_run(tmp_path, name="v0", descriptor_dim=128)
+    v1, _ = write_tiny_gated_run(tmp_path, name="v1", descriptor_dim=128)
+    monkeypatch.setattr(cv, "VARIANTS", (v0, v1))
+
+    both = pdg.variant_rows(tmp_path, num_samples=4, seed=42)
+    v1_color_with_v0_present = next(c for n, _, c in both if n == "v1")
+
+    # Remove v0's checkpoint so it is skipped, and confirm v1's colour holds.
+    import shutil
+
+    shutil.rmtree(tmp_path / "runs" / "v0")
+    only_v1 = pdg.variant_rows(tmp_path, num_samples=4, seed=42)
+    v1_color_alone = next(c for n, _, c in only_v1 if n == "v1")
+
+    assert v1_color_with_v0_present == v1_color_alone
+
+
+def test_variant_colour_fallback_for_a_name_absent_from_cv_variants():
+    assert pdg.variant_color("mystery") == pdg.VARIANT_COLORS[
+        len(cv.VARIANTS) % len(pdg.VARIANT_COLORS)
+    ]
+
+
+def test_ray_scale_is_shared_across_rows_not_computed_per_row():
+    """A regression to per-glyph normalisation would pass the rest of the
+    suite while silently destroying the real-vs-generated comparison the
+    figure exists to make. Every bin in `big` is identical so the shared
+    scale gives every ray in a row the same length; if `small` were
+    normalised on its own (per-row) rather than against `big`'s scale, its
+    rays would come out the same length as `big`'s instead of 10x shorter."""
+    big = np.full((1, 128), 0.05, dtype=np.float32)
+    small = (big * 0.1).astype(np.float32)
+
+    fig = pdg.build_figure([("big", big, "#000000"), ("small", small, "#111111")])
+    big_trace = next(t for t in fig.data if t.name == "big")
+    small_trace = next(t for t in fig.data if t.name == "small")
+
+    def _ray_length(trace):
+        # First segment: (centre_x, centre_y), (tip_x, tip_y), NaN.
+        dx = trace.x[1] - trace.x[0]
+        dy = trace.y[1] - trace.y[0]
+        return float(np.hypot(dx, dy))
+
+    ratio = _ray_length(big_trace) / _ray_length(small_trace)
+    assert ratio == pytest.approx(10.0, rel=1e-6)

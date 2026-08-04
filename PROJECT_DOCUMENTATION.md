@@ -343,12 +343,20 @@ before transfer took the three-report set from 5.7MB to 1.5MB.
     a variant row.
   - It refuses to run against a variant trained with centering or
     whitening, or one that generates a width other than 128, because either
-    breaks the dimension-to-(cell, bin) mapping the glyph depends on. A
-    variant whose checkpoint or run config is not on this machine is skipped
-    with a printed message, like `compare_variants`.
+    breaks the dimension-to-(cell, bin) mapping the glyph depends on. It also
+    refuses a real or generated array containing NaN or inf, since either
+    would draw a spurious or blank glyph rather than a true picture of the
+    descriptor. A variant whose checkpoint or run config is not on this
+    machine is skipped with a printed message, like `compare_variants`.
+  - Flags: `--num-samples` (default 8) sets descriptors per row; `--seed`
+    (default 42); `--root` (default `.`), the repo root that variant config
+    and run paths resolve against; `--plotlyjs` (default `inline`), same
+    meaning as in `eda_report`. PNG export follows the same best-effort
+    stance as `eda_report`: without a Chrome install the HTML report is still
+    written and the export is skipped with a printed message.
 
 ```bash
-python -m src.eval.plot_descriptor_grid \
+.venv/bin/python -m src.eval.plot_descriptor_grid \
     --real-path data/sift_base.npy \
     --output-dir runs/descriptor_grid
 ```

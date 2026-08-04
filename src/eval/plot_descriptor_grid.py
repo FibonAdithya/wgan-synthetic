@@ -60,6 +60,27 @@ def l2_normalize(x: np.ndarray, eps: float = 1.0e-8) -> np.ndarray:
     return arr / np.maximum(norms, eps)
 
 
+def check_finite(arr: np.ndarray, source: str) -> None:
+    """Refuse a descriptor array holding NaN or inf.
+
+    `glyph_segments` routes a NaN bin into the negative-ray arrays (`value >
+    0` is False for NaN) without tripping its zero-length guard (`NaN <= 0.0`
+    is also False), so a single NaN bin invents a red "negative" trace for an
+    otherwise well-behaved row. `inf` is worse: it survives the `> 0.0`
+    filter in `shared_scale`, and `np.percentile` returns NaN, blanking the
+    whole figure. Refusing loudly here matches this module's stance on
+    centering/whitening and a wrong width -- all three are silent-lie risks,
+    not something to paper over by dropping a few rows.
+    """
+    bad = int(np.size(arr) - np.count_nonzero(np.isfinite(arr)))
+    if bad:
+        raise ValueError(
+            f"{source} contains {bad} non-finite value(s) (NaN or inf); "
+            "refusing to plot, since a non-finite bin would draw a "
+            "spurious or blank glyph"
+        )
+
+
 def pick_real_rows(
     real: np.ndarray, num_samples: int, seed: int
 ) -> Tuple[np.ndarray, np.ndarray]:
@@ -161,7 +182,10 @@ def write_report(
     path = out_dir / REPORT_NAME
     path.write_text(html, encoding="utf-8")
     if write_png:
-        eda_report.export_pngs([("descriptor grid", "", fig)], out_dir)
+        try:
+            eda_report.export_pngs([("descriptor grid", "", fig)], out_dir)
+        except Exception as exc:  # kaleido needs a Chrome binary
+            print(f"skipping PNG export: {exc}")
     return path
 
 
@@ -187,6 +211,22 @@ def check_preprocess(config: dict, name: str) -> None:
         )
 
 
+def variant_color(name: str) -> str:
+    """Colour a variant by its identity in `cv.VARIANTS`, not by position in
+    the machine-dependent resolved list.
+
+    `variant_rows` only sees the subset of `cv.VARIANTS` whose checkpoint is
+    on this machine, so indexing `found` directly would make v1's colour
+    depend on whether v0's checkpoint happens to be present -- the same
+    machine-dependence `cv.variant_seed` exists to prevent for sampling. A
+    name absent from `cv.VARIANTS` falls back to a colour past the known
+    ones rather than raising.
+    """
+    names = [variant.name for variant in cv.VARIANTS]
+    index = names.index(name) if name in names else len(names)
+    return VARIANT_COLORS[index % len(VARIANT_COLORS)]
+
+
 def variant_rows(
     root: Path, num_samples: int, seed: int
 ) -> List[Tuple[str, np.ndarray, str]]:
@@ -203,7 +243,7 @@ def variant_rows(
         print("no variant checkpoints resolved; rendering the real rows only")
 
     rows: List[Tuple[str, np.ndarray, str]] = []
-    for index, variant in enumerate(found):
+    for variant in found:
         run_dir = root / variant.run_dir
         config = yaml.safe_load(
             (run_dir / cv.RUN_CONFIG_NAME).read_text(encoding="utf-8")
@@ -227,9 +267,8 @@ def variant_rows(
                 f"variant {variant.name} generates {samples.shape[1]}-dimensional "
                 f"vectors; the glyph mapping needs {DESCRIPTOR_DIM}"
             )
-        rows.append(
-            (variant.name, samples, VARIANT_COLORS[index % len(VARIANT_COLORS)])
-        )
+        check_finite(samples, f"variant {variant.name}")
+        rows.append((variant.name, samples, variant_color(variant.name)))
     return rows
 
 
@@ -269,8 +308,13 @@ def run(args: argparse.Namespace) -> Path:
             f"the glyph mapping is only defined for {DESCRIPTOR_DIM}-dimensional "
             f"descriptors; {args.real_path} holds {real.shape[1]}-dimensional ones"
         )
-    real = l2_normalize(real)
+    check_finite(real, str(args.real_path))
+    # Select the handful of rows we plot before normalising, not after --
+    # selection is purely index-based, so normalising the other ~1M rows we
+    # never look at is wasted memory and time.
     row_a, row_b = pick_real_rows(real, args.num_samples, args.seed)
+    row_a = l2_normalize(row_a)
+    row_b = l2_normalize(row_b)
 
     rows: List[Tuple[str, np.ndarray, str]] = [
         ("real-a", row_a, REAL_COLORS[0]),

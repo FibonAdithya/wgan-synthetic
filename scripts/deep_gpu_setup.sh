@@ -26,7 +26,14 @@ else
     git clone -b "${BRANCH}" /tmp/deep-gan.bundle "${WORK_DIR}"
 fi
 cd "${WORK_DIR}"
-/venv/main/bin/pip install -q -r requirements.txt
+# Do NOT "pip install -r requirements.txt" here: /venv/main is a shared
+# interpreter other agents on this box are actively using, and requirements.txt
+# is unpinned (numpy, torch, plotly, ...) -- a resolver run against the whole
+# file can silently upgrade a neighbour's torch mid-run. h5py is the only
+# package this branch actually adds beyond what the box already has (it
+# backs src/deep/download.py's HDF5 reader), so install just that one
+# package and nothing else.
+/venv/main/bin/pip install -q h5py
 mkdir -p "${CACHE_DIR}"
 REMOTE_SCRIPT
 

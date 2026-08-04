@@ -69,3 +69,59 @@ def batch_log_ratio_profile(
     kept = r2[survivors].clamp(min=eps).sqrt()
     ratio = (kept[:, :-1] / kept[:, -1:]).clamp(min=eps, max=1.0)
     return torch.log(ratio).mean(dim=0)
+
+
+class LogRatioTarget:
+    """EMA of the real batches' log-ratio profile.
+
+    The real distribution is fixed, so a fresh per-minibatch estimate only
+    adds variance to the gradient. Averaging costs nothing and is much
+    quieter. At decay 0.99 the average settles within about a hundred steps,
+    which is why it is deliberately *not* checkpointed: unlike the generator
+    weight EMA at decay 0.999, losing it on resume costs a brief transient
+    rather than a thousand-step average.
+    """
+
+    def __init__(self, decay: float = 0.99):
+        if not 0.0 <= decay < 1.0:
+            raise ValueError(f"decay must be in [0, 1), got {decay}")
+        self.decay = float(decay)
+        self.value: Optional[Tensor] = None
+
+    def update(self, profile: Tensor) -> Tensor:
+        observed = profile.detach()
+        # A short final batch clamps k_eff and shortens the profile; a stale
+        # target of the wrong length would broadcast silently.
+        if self.value is None or self.value.shape != observed.shape:
+            self.value = observed.clone()
+        else:
+            self.value.mul_(self.decay).add_(observed, alpha=1.0 - self.decay)
+        return self.value
+
+
+def log_ratio_penalty(
+    fake: Tensor,
+    real: Tensor,
+    k: int,
+    max_points: int,
+    target: LogRatioTarget,
+) -> Tensor:
+    """L1 gap between the fake profile and the EMA of the real one.
+
+    Zero when either side is degenerate -- an all-duplicate or all-tied batch
+    yields no usable queries, and a penalty invented from nothing would push
+    the generator in an arbitrary direction at exactly the moment it is
+    collapsing.
+    """
+    zero = torch.zeros((), device=fake.device, dtype=fake.dtype)
+    fake_profile = batch_log_ratio_profile(fake, k=k, max_points=max_points)
+    if fake_profile is None:
+        return zero
+    with torch.no_grad():
+        real_profile = batch_log_ratio_profile(real, k=k, max_points=max_points)
+    if real_profile is None:
+        return zero
+    reference = target.update(real_profile.to(fake_profile.dtype))
+    if reference.shape != fake_profile.shape:
+        return zero
+    return (fake_profile - reference).abs().sum()

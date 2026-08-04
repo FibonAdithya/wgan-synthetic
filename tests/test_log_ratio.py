@@ -95,3 +95,79 @@ def test_gradient_is_finite_when_duplicates_are_present():
 def test_profile_dtype_follows_the_input():
     profile = batch_log_ratio_profile(_blob().to(torch.float64), k=8)
     assert profile.dtype == torch.float64
+
+
+from src.train.log_ratio import LogRatioTarget, log_ratio_penalty
+
+
+def test_target_initialises_to_the_first_profile():
+    target = LogRatioTarget(decay=0.9)
+    first = torch.tensor([-1.0, -0.5])
+    assert torch.equal(target.update(first), first)
+
+
+def test_target_moves_toward_later_profiles():
+    target = LogRatioTarget(decay=0.5)
+    target.update(torch.tensor([0.0, 0.0]))
+    updated = target.update(torch.tensor([-1.0, -1.0]))
+    assert torch.allclose(updated, torch.tensor([-0.5, -0.5]))
+
+
+def test_target_is_detached_from_the_graph():
+    # The target is a fixed reference, not something the generator can move by
+    # gradient. Keeping it attached would let the penalty be minimised by
+    # dragging the target instead of the samples.
+    target = LogRatioTarget()
+    profile = torch.tensor([-1.0, -0.5], requires_grad=True)
+    assert not target.update(profile).requires_grad
+
+
+def test_target_resets_when_the_profile_length_changes():
+    # k_eff shrinks on a short final batch; a stale target of the wrong length
+    # would otherwise raise or broadcast silently.
+    target = LogRatioTarget()
+    target.update(torch.tensor([-1.0, -0.5, -0.2]))
+    assert target.update(torch.tensor([-1.0, -0.5])).shape == (2,)
+
+
+def test_penalty_is_near_zero_for_samples_from_one_distribution():
+    torch.manual_seed(0)
+    a, b = torch.randn(256, 8), torch.randn(256, 8)
+    penalty = log_ratio_penalty(a, b, k=10, max_points=0, target=LogRatioTarget())
+    assert penalty.item() < 0.05
+
+
+def test_penalty_grows_when_local_structure_differs():
+    # A 2-D blob and a 32-D blob have very different local geometry; the
+    # penalty must see what mean pairwise distance alone cannot.
+    torch.manual_seed(1)
+    real = torch.randn(256, 32)
+    same = log_ratio_penalty(
+        torch.randn(256, 32), real, k=10, max_points=0, target=LogRatioTarget()
+    )
+    low_dim = torch.randn(256, 2)
+    low_dim = torch.cat([low_dim, torch.zeros(256, 30)], dim=1)
+    different = log_ratio_penalty(
+        low_dim, real, k=10, max_points=0, target=LogRatioTarget()
+    )
+    assert different.item() > same.item() * 3.0
+
+
+def test_penalty_is_zero_when_either_side_is_degenerate():
+    torch.manual_seed(2)
+    real = torch.randn(64, 8)
+    collapsed = torch.ones(64, 8)
+    penalty = log_ratio_penalty(
+        collapsed, real, k=6, max_points=0, target=LogRatioTarget()
+    )
+    assert penalty.item() == 0.0
+    assert torch.isfinite(penalty)
+
+
+def test_penalty_gradient_reaches_the_fake_batch():
+    torch.manual_seed(3)
+    fake = torch.randn(128, 8, requires_grad=True)
+    real = torch.randn(128, 8)
+    log_ratio_penalty(fake, real, k=8, max_points=0, target=LogRatioTarget()).backward()
+    assert fake.grad is not None
+    assert fake.grad.abs().sum() > 0

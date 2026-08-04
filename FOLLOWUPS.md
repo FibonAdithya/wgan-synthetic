@@ -106,3 +106,18 @@ They are honest known gaps, not planned work with an owner or timeline.
    GC closes the file handle and drops the flock as the `with` block unwinds
    via exception. The asserted behaviour (the lock is released) is real, but
    the test does not prove the `finally` clause is what does it.
+
+### The log-ratio EMA target is not checkpointed
+
+`LogRatioTarget` in `src/train/log_ratio.py` holds an EMA of the real
+batches' log-ratio profile, and `--resume` does not restore it: a resumed
+run rebuilds the average from scratch.
+
+This is deliberate, not an oversight. At decay 0.99 the average resettles
+within roughly a hundred steps, so the cost is a brief transient on a 100k
+step run. It is explicitly unlike the generator weight EMA at decay 0.999,
+which `save_checkpoint` does persist and where a silent restart degrades
+`best_generator.pt` with no error.
+
+If `lid_reg_decay` is ever raised toward 0.999, revisit this — the argument
+above stops holding.

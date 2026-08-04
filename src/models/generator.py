@@ -261,22 +261,27 @@ class StructuredGateGenerator(nn.Module):
         hard = torch.where(empty, fallback, hard)
         return (hard + soft - soft.detach()).to(logits.dtype)
 
-    def _couple(self, logits: torch.Tensor) -> torch.Tensor:
-        """Mix each gate logit with its neighbours on the descriptor grid.
+    def _pad_grid(self, x: torch.Tensor) -> torch.Tensor:
+        """Reshape to descriptor grid and apply padding for convolutions.
 
         Orientation is padded **circularly** -- bin 7 neighbours bin 0, since a
         gradient direction between two bins deposits in both. The 4x4 spatial
         grid is not periodic, so its edges replicate: opposite corners of the
         patch are not neighbours.
         """
-        batch = logits.shape[0]
+        batch = x.shape[0]
         rows, cols, orient = self.layout
         pad = self.gate_kernel // 2
-        grid = logits.reshape(batch, 1, rows, cols, orient)
+        grid = x.reshape(batch, 1, rows, cols, orient)
         # F.pad's tuple runs last-dim-first: (W, W, H, H, D, D).
         grid = F.pad(grid, (pad, pad, 0, 0, 0, 0), mode="circular")
         grid = F.pad(grid, (0, 0, pad, pad, pad, pad), mode="replicate")
-        return self.gate_coupling(grid).reshape(batch, -1)
+        return grid
+
+    def _couple(self, logits: torch.Tensor) -> torch.Tensor:
+        """Mix each gate logit with its neighbours on the descriptor grid."""
+        grid = self._pad_grid(logits)
+        return self.gate_coupling(grid).reshape(logits.shape[0], -1)
 
     def _smooth_noise(self, noise: torch.Tensor) -> torch.Tensor:
         """Correlate i.i.d. noise over the descriptor grid.
@@ -286,11 +291,7 @@ class StructuredGateGenerator(nn.Module):
         mean.
         """
         batch = noise.shape[0]
-        rows, cols, orient = self.layout
-        pad = self.gate_kernel // 2
-        grid = noise.reshape(batch, 1, rows, cols, orient)
-        grid = F.pad(grid, (pad, pad, 0, 0, 0, 0), mode="circular")
-        grid = F.pad(grid, (0, 0, pad, pad, pad, pad), mode="replicate")
+        grid = self._pad_grid(noise)
         kernel = self.noise_kernel.to(grid.dtype)
         return F.conv3d(grid, kernel).reshape(batch, -1)
 

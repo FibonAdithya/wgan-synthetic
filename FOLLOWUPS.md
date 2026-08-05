@@ -142,17 +142,21 @@ first. Either move v2's run into the main checkout, or let `Variant` carry an
 absolute run dir.
 ## DEEP ladder results rest on one seed per rung (PR #6)
 
-`docs/datasets/deep.md` reports three trained rungs, and the gaps that
-separate them are small: v1 and v2 differ by 0.002 on IVF gini and 0.10 on
-LID. All three ran once, at `seed: 42`. There is no variance estimate in this
-data, so none of the per-metric orderings can be distinguished from
-run-to-run noise, and v1's hubness-skew gap of 0.000022 is one draw rather
-than a demonstrated property of the spectrum regularizer.
+`docs/datasets/deep.md` reports three trained rungs at `seed: 42`. The ladder
+was run twice — once at `latent_dim: 128` (inherited from SIFT, since
+corrected) and once at 96 — which gives two draws rather than one, and the
+comparison is not reassuring: `v0`'s IVF gini gap moved tenfold and its
+hubness gap doubled under a change the target's effective rank of 65 says
+should barely bind. Several of those swings exceed the differences between
+rungs.
 
-Two or three more seeds per rung (~35 min each on the RTX 4060) would settle
-whether any of it is real. Until then the page's ordering claims should be
-read as provisional, and the family's gate bands stay unset because there is
-nothing to set them against.
+Two claims survive both draws (`v2` closest on LID, `v1` closest on hubness
+skew by two orders of magnitude); the IVF gini ordering does not survive at
+all and should not be used to rank rungs. Two draws is still two.
+
+Three or four seeds per rung (~35 min each on the RTX 4060) would settle it,
+and are a prerequisite for setting this family's gate bands — a band fitted to
+either existing draw would be fitted to noise.
 
 Resolved in passing: the `summary.json` those numbers were read out of is now
 committed as `docs/datasets/deep_ladder_summary.json`, so the table is

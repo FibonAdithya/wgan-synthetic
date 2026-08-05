@@ -63,10 +63,10 @@ locked here so a gate result stays readable against an older one.
 
 | Statistic | Real | Synthetic (closest rung) |
 |---|---|---|
-| LID median | 17.561218 | 16.908998 (`v2`) |
-| Relative contrast | 1.832256 | 1.867279 (`v2`) |
-| Hubness skew | 1.940139 | 1.940117 (`v1`) |
-| IVF cell-balance Gini | 0.304576 | 0.299153 (`v2`) |
+| LID median | 17.561218 | 16.935708 (`v2`) |
+| Relative contrast | 1.832256 | 1.864716 (`v2`) |
+| Hubness skew | 1.940139 | 1.939737 (`v1`) |
+| IVF cell-balance Gini | 0.304576 | 0.302923 (`v0`) |
 
 Measured over 50,000 vectors per set at `preprocess: l2`, `seed: 42`,
 `nlist: 256`. The full report output these came from is committed as
@@ -120,28 +120,55 @@ whitened coordinates.
 
 ### Results
 
-All three rungs at 30,000 steps, `seed: 42`, on 1M real DEEP vectors
-(RTX 4060, ~35 min each). Gap to real, primary statistics:
+All three rungs at 30,000 steps, `seed: 42`, `latent_dim: 96`, on 1M real DEEP
+vectors (RTX 4060, ~35 min each). Gap to real, primary statistics:
 
 | rung | ΔLID | Δhubness skew | ΔIVF gini |
 |---|---:|---:|---:|
-| `v0` | 0.709438 | 0.022070 | 0.016539 |
-| `v1` | 0.756583 | **0.000022** | 0.007528 |
-| `v2` | **0.652220** | 0.100187 | **0.005423** |
+| `v0` | 0.836308 | 0.045223 | **0.001653** |
+| `v1` | 0.748235 | **0.000402** | 0.007974 |
+| `v2` | **0.625510** | 0.041541 | 0.006477 |
 
-`v2` is closest on LID and IVF gini; `v1` is closest on hubness skew. The
-baseline `v0` is closest on none, so the added machinery does move the ladder
-toward real DEEP — but no rung sweeps, and whitening makes hubness skew
-markedly worse than either other rung.
+### How much of this is noise
 
-**One run per rung at a single seed.** The gaps above cannot be separated from
-run-to-run seed variance, and `v1`'s near-exact hubness match is one draw, not
-a demonstrated property of the regularizer. Reading any ordering here as
-settled would be over-reading the data; see FOLLOWUPS.md.
+An earlier draft of this ladder ran the same three configs at
+`latent_dim: 128`, inherited from the SIFT ladder. Correcting that to 96 gave
+a near-replicate: three runs, same seed, same data, same everything except a
+latent width the target's effective rank of 65 says should barely bind. The
+two sets can therefore be read as two draws, which is the only variance
+estimate this family has.
+
+Gap to real, 128 → 96:
+
+| rung | ΔLID | Δhubness skew | ΔIVF gini |
+|---|---|---|---|
+| `v0` | 0.709 → 0.836 | 0.022 → 0.045 | 0.017 → 0.002 |
+| `v1` | 0.757 → 0.748 | 0.000022 → 0.000402 | 0.0075 → 0.0080 |
+| `v2` | 0.652 → 0.626 | 0.100 → 0.042 | 0.0054 → 0.0065 |
+
+**Some of these swings are larger than the differences between rungs.** `v0`'s
+IVF gini improved tenfold and its hubness gap doubled; `v2`'s hubness gap
+halved. Nothing about the change should have produced that, which puts a
+floor under how finely these numbers can be read.
+
+What survives both draws:
+
+- **`v2` is closest on LID** in both (0.652, 0.626). Holds.
+- **`v1` is closest on hubness skew** in both, by two orders of magnitude
+  (0.000022, 0.000402). Holds, and is the one result the spectrum regularizer
+  can plausibly claim.
+- **IVF gini reorders completely** — `v0` went from worst (0.017) to best
+  (0.002), `v2` from best to middle. No ordering here is supported.
+
+So the honest reading is narrower than "v2 wins two of three": `v2` helps LID,
+`v1` helps hubness skew, and the IVF gini column should not be used to rank
+rungs at all. Two draws is still two, and neither is a seed sweep.
 
 ## Gate
 
 Pass bands are per statistic, not a combined score, because the four fail in
-different directions. Still unset: with one seed per rung there is no variance
-estimate to set a band against, and the numbers will move again when phase (c)
-re-measures this family under angular distance.
+different directions. Still unset, and the two draws above show why: the IVF
+gini gap moved tenfold for `v0` under a change that should barely have bound,
+so a band set from either draw alone would be fitted to noise. Setting them
+needs a real seed sweep, and the numbers move again when phase (c) re-measures
+this family under angular distance.

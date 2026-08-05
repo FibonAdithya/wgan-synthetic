@@ -958,7 +958,13 @@ Imports: `from __future__ import annotations`, `from collections.abc import Sequ
 
 - [ ] **Step 2: Remove from `eda_report.py` and import back**
 
-Delete those blocks; add `from src.eval.eda import glyphs`. In `run()`, line 1060 becomes `glyphs.glyph_rows(series, EdaConfig.from_args(args).glyph_samples, args.seed)` — no, use the config object already built in Task 2: `glyphs.glyph_rows(series, cfg.glyph_samples, cfg.seed)`. The `getattr(args, "glyph_samples", ...)` guard is gone; `EdaConfig.from_args` now owns it. Line 1061's `GLYPH_SECTION_TITLE` and line 1083's `fig_descriptor_glyphs` become `glyphs.`-prefixed.
+Delete those blocks; add `from src.eval.eda import glyphs`. In `run()`, the `glyph_rows(...)` call at line 1060 becomes:
+
+```python
+    rows = glyphs.glyph_rows(series, cfg.glyph_samples, cfg.seed)
+```
+
+using the `cfg` local Task 2 introduced. The `getattr(args, "glyph_samples", GLYPH_SAMPLES_DEFAULT)` guard disappears from this call site — `EdaConfig.from_args` owns it now, which is what Task 1's `test_missing_glyph_samples_falls_back_to_the_default` pins. `GLYPH_SECTION_TITLE` (line 1061) and `fig_descriptor_glyphs` (line 1083) become `glyphs.`-prefixed, and `eda_report.py` no longer imports `GLYPH_SAMPLES_DEFAULT`.
 
 - [ ] **Step 3: Move the glyph tests**
 

@@ -479,9 +479,15 @@ Memory-safe note:
     at once, labelling the overlays `v0`/`v1`/`v1_5`/`v2` to match the SIFT
     ladder. It resolves each variant's `best_generator.pt` and
     `run_config.yaml`, samples the generator, and calls the report in
-    process. Variants whose checkpoints are not on the local machine are
-    skipped with a message, so a partial comparison still produces a report.
-    Each variant's latents are seeded from `--seed` and its own name, so a
+    process. The variant set is a manifest — `configs/eval/<dataset>.yaml`,
+    selected by `--dataset` and defaulting to `sift`, or `--variants-manifest`
+    for a path of your own — so a clone that holds different runs points the
+    tool at them instead of editing source, and a new family is added by
+    dropping in a manifest rather than editing this module.
+    A variant whose checkpoint is not on the local machine aborts the run up
+    front, naming the missing path and the training command behind it;
+    `--allow-missing` restores the older behaviour of skipping it so a
+    partial comparison still produces a report. Each variant's latents are seeded from `--seed` and its own name, so a
     variant's samples do not change depending on which other variants were
     present. `--num-samples` defaults to `--max-vectors`, since the report
     subsamples to that; raise it only to keep a larger `.npy` under

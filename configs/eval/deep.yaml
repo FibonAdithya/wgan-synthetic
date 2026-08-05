@@ -1,0 +1,31 @@
+# Which trained DEEP variants `src.eval.compare_variants` overlays, and where
+# their artifacts live. Selected with `--dataset deep`.
+#
+# Same contract as configs/eval/sift.yaml: `runs/` is gitignored, so the
+# directories below exist only on a box that trained them. A fresh clone must
+# copy those runs in, edit this file, or pass `--variants-manifest` to name
+# runs it actually has.
+#
+# Order is meaningful: the report legend reads as a progression, and each
+# entry is one config delta from the previous.
+#
+# v2 trains in a PCA-whitened space, so its samples only mean anything after
+# `compare_variants.invert_samples` maps them back. That step is applied to
+# every family, driven by what each run's own run_metadata.json recorded, so
+# nothing here has to declare it.
+#
+# Fields per entry:
+#   name       report label, sample filename stem; must be unique
+#   config     the config the variant is defined by, relative to --root
+#   run_dir    directory holding best_generator.pt and run_config.yaml,
+#              relative to --root
+variants:
+  - name: v0
+    config: configs/deep/v0.yaml
+    run_dir: runs/deep/v0
+  - name: v1
+    config: configs/deep/v1.yaml
+    run_dir: runs/deep/v1
+  - name: v2
+    config: configs/deep/v2.yaml
+    run_dir: runs/deep/v2

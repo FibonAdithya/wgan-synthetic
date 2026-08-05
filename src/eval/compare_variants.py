@@ -5,13 +5,22 @@ drives it across a family's named variants so the comparison does not have to
 be retyped. Each variant is one config delta from the one before it, so a
 difference visible in the report attributes to a single cause.
 
-Which family is selected with `--dataset`; the ladders live in `LADDERS`
-below. Everything else here is family-agnostic, including the inversion of a
-whitened training space -- see `invert_samples`.
+Which family is selected with `--dataset`. Everything else here is
+family-agnostic, including the inversion of a whitened training space -- see
+`invert_samples`.
 
-A variant whose checkpoint is not on this machine is skipped with a message
-rather than aborting: checkpoints usually live on the training box, and a
-partial comparison is still worth reading.
+Which variants a family contains is a manifest, not a literal in this file:
+`--dataset <name>` reads `configs/eval/<name>.yaml`, and `--variants-manifest`
+overrides that with any path. `runs/` is gitignored, so the run directories a
+manifest names exist only on the machine that trained them, and anyone else
+has to be able to say where their own runs live without editing source.
+
+A variant whose artifacts are missing aborts the run before any sampling
+starts, naming the path and what would produce it. Pass `--allow-missing` to
+fall back to the older behaviour of skipping it with a message and reporting
+on whatever is present -- checkpoints usually live on the training box, and a
+partial comparison is still worth reading once you have decided it is partial
+on purpose.
 
 Example:
     python -m src.eval.compare_variants --dataset sift \
@@ -47,37 +56,91 @@ class Variant:
     run_dir: str
 
 
-# Ordered so the report legend reads as a progression. Each entry is one
-# config delta from the previous. Run directories point at the longest run of
-# each variant that exists; v0 was never taken to 100k steps.
-SIFT_VARIANTS: tuple[Variant, ...] = (
-    Variant("v0", "configs/sift/v0.yaml", "runs/long_baseline"),
-    Variant("v1", "configs/sift/v1.yaml", "runs/x100k_ema_only"),
-    Variant("v1_5", "configs/sift/v1_5.yaml", "runs/x100k_improved"),
-    Variant("v2", "configs/sift/v2.yaml", "runs/x100k_sparse_clamp4"),
-)
-
-# v2 trains in a PCA-whitened space, so its samples only mean anything after
-# `invert_samples` maps them back -- which is why that step lives in
-# `generate_samples` rather than in a deep-specific sampler.
-DEEP_VARIANTS: tuple[Variant, ...] = (
-    Variant("v0", "configs/deep/v0.yaml", "runs/deep/v0"),
-    Variant("v1", "configs/deep/v1.yaml", "runs/deep/v1"),
-    Variant("v2", "configs/deep/v2.yaml", "runs/deep/v2"),
-)
-
-LADDERS: dict[str, tuple[Variant, ...]] = {
-    "sift": SIFT_VARIANTS,
-    "deep": DEEP_VARIANTS,
-}
-
-# Retained under its historical name: `VARIANTS` is what the SIFT-era callers
-# and docs refer to.
-VARIANTS: tuple[Variant, ...] = SIFT_VARIANTS
-
 CHECKPOINT_NAME = "best_generator.pt"
 RUN_CONFIG_NAME = "run_config.yaml"
 RUN_METADATA_NAME = "run_metadata.json"
+
+# Repo root, so the default manifest is found regardless of the working
+# directory the module is imported from. src/eval/compare_variants.py -> repo.
+REPO_ROOT = Path(__file__).resolve().parents[2]
+MANIFEST_DIR = "configs/eval"
+DEFAULT_DATASET = "sift"
+DEFAULT_MANIFEST = f"{MANIFEST_DIR}/{DEFAULT_DATASET}.yaml"
+
+
+def manifest_for_dataset(dataset: str) -> Path:
+    """Where a family's variant manifest lives.
+
+    One manifest per family rather than one file listing every family: the
+    ladders are numbered independently per family and are edited by whoever
+    owns that family, so a shared file would make two agents contend for one
+    set of lines.
+    """
+    return REPO_ROOT / MANIFEST_DIR / f"{dataset}.yaml"
+
+
+def known_datasets() -> tuple[str, ...]:
+    """Family names that ship a manifest, for `--dataset`'s choices.
+
+    Read off disk rather than hard-coded so adding `configs/eval/<name>.yaml`
+    is the whole of adding a family here -- the literal list this replaces is
+    exactly what went stale when DEEP arrived.
+    """
+    directory = REPO_ROOT / MANIFEST_DIR
+    if not directory.is_dir():
+        return (DEFAULT_DATASET,)
+    return tuple(sorted(p.stem for p in directory.glob("*.yaml")))
+
+
+def load_variants(path: Path) -> tuple[Variant, ...]:
+    """Read a variant manifest, rejecting anything a later stage would trip on.
+
+    Validation is strict and up front because every failure mode here costs a
+    caller the whole sampling pass otherwise: a duplicate name would have two
+    variants overwrite each other's `<name>.npy`, and a missing key would
+    surface as a `KeyError` several hundred thousand vectors in.
+    """
+    if not path.is_file():
+        raise SystemExit(
+            f"no variant manifest at {path}. Pass --variants-manifest, or "
+            f"restore the default one at {DEFAULT_MANIFEST}."
+        )
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not isinstance(doc, dict) or not isinstance(doc.get("variants"), list):
+        raise SystemExit(
+            f"{path} must be a YAML mapping with a 'variants' list; see "
+            f"{DEFAULT_MANIFEST} for the shape."
+        )
+    entries = doc["variants"]
+    if not entries:
+        raise SystemExit(f"{path} lists no variants; there is nothing to compare.")
+
+    variants: list[Variant] = []
+    seen: set[str] = set()
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            raise SystemExit(f"{path}: variant {index} is not a mapping.")
+        missing = [key for key in ("name", "config", "run_dir") if not entry.get(key)]
+        if missing:
+            raise SystemExit(
+                f"{path}: variant {index} is missing {', '.join(missing)}; "
+                "every entry needs name, config and run_dir."
+            )
+        name = str(entry["name"])
+        if name in seen:
+            raise SystemExit(
+                f"{path}: duplicate variant name {name!r}. Names label the "
+                "report and name the sample file, so they must be unique."
+            )
+        seen.add(name)
+        variants.append(Variant(name, str(entry["config"]), str(entry["run_dir"])))
+    return tuple(variants)
+
+
+# The default set, ordered so the report legend reads as a progression. Loaded
+# at import so `plot_descriptor_grid` and the tests keep a module-level
+# `VARIANTS` to reach for; `--variants-manifest` overrides it per invocation.
+VARIANTS: tuple[Variant, ...] = load_variants(manifest_for_dataset(DEFAULT_DATASET))
 
 
 def resolve_variants(
@@ -230,6 +293,40 @@ def invert_samples(x: np.ndarray, state: PreprocessState | None) -> np.ndarray:
     return invert_preprocess(x, state)
 
 
+def describe_missing(
+    skipped: Sequence[tuple[Variant, str]], manifest: Path, root: Path
+) -> str:
+    """Explain every unresolvable variant and what would produce its artifacts.
+
+    Spelled out rather than summarised because the reader is as likely to be
+    an agent on a fresh clone as a human who knows the history: `runs/` is
+    gitignored, so the default manifest's directories are on the training box
+    and nowhere else, and "no run directory" on its own gives no way forward.
+    """
+    lines = [
+        f"{len(skipped)} variant(s) named by {manifest} have no usable "
+        "artifacts under this root:",
+        "",
+    ]
+    for variant, reason in skipped:
+        lines.append(f"  {variant.name}: {reason}")
+        lines.append(
+            "      train it with: python -m src.train.train_wgan_gp "
+            f"--config {variant.config_path}"
+        )
+    lines.extend(
+        [
+            "",
+            "Training writes to the output_dir named inside each config, which is"
+            " not the run_dir above -- the manifest points at historical runs."
+            " So: copy those runs under the tree given by --root"
+            f" ({root}), or edit the manifest (or pass --variants-manifest) to"
+            " name runs you do have.",
+        ]
+    )
+    return "\n".join(lines)
+
+
 def variant_seed(base_seed: int, name: str) -> int:
     """Derive a per-variant seed that does not depend on run order.
 
@@ -282,9 +379,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--dataset",
         type=str,
-        default="sift",
-        choices=sorted(LADDERS),
-        help="Which family's ladder to compare. Defaults to sift.",
+        default=DEFAULT_DATASET,
+        choices=known_datasets(),
+        help=(
+            f"Which family's ladder to compare, read from {MANIFEST_DIR}/"
+            f"<dataset>.yaml. Defaults to {DEFAULT_DATASET}. Ignored when "
+            "--variants-manifest names a file directly."
+        ),
     )
     parser.add_argument("--real-path", type=str, required=True)
     parser.add_argument(
@@ -296,6 +397,24 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default=".",
         help="Repo root that variant config and run paths resolve against.",
+    )
+    parser.add_argument(
+        "--variants-manifest",
+        type=str,
+        default=None,
+        help=(
+            "YAML manifest listing the variants to compare (name, config, "
+            "run_dir). Overrides --dataset; without it the manifest is "
+            f"{MANIFEST_DIR}/<dataset>.yaml in the repo this module lives in."
+        ),
+    )
+    parser.add_argument(
+        "--allow-missing",
+        action="store_true",
+        help=(
+            "Report on the variants that resolved instead of stopping when one "
+            "has no checkpoint on this machine."
+        ),
     )
     parser.add_argument(
         "--num-samples",
@@ -401,15 +520,28 @@ def main() -> None:
     root = Path(args.root)
     out_dir = Path(args.output_dir)
 
+    manifest = (
+        Path(args.variants_manifest)
+        if args.variants_manifest is not None
+        else manifest_for_dataset(args.dataset)
+    )
+    variants = load_variants(manifest)
+
     # Resolve before creating anything, so an aborted run leaves no empty tree.
-    found, skipped = resolve_variants(LADDERS[args.dataset], root)
+    found, skipped = resolve_variants(variants, root)
+    if skipped and not args.allow_missing:
+        raise SystemExit(
+            describe_missing(skipped, manifest, root)
+            + "\n\nPass --allow-missing to report on the variants that did"
+            " resolve instead of stopping here."
+        )
     for variant, reason in skipped:
         print(f"skipping {variant.name}: {reason}")
     if not found:
         raise SystemExit(
-            f"No {args.dataset} variant has both a checkpoint and a run config "
-            "on this machine. Copy them from the training box, or pass --root "
-            "at the tree holding them."
+            describe_missing(skipped, manifest, root)
+            + "\n\nNo variant resolved, so there is nothing to report on even"
+            " with --allow-missing."
         )
 
     samples_dir = out_dir / "samples"

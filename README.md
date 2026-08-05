@@ -57,6 +57,15 @@ in one report:
         --real-path data/sift_base.npy \
         --output-dir runs/eda_variants
 
+Which variants that overlays, and where each one's trained run lives, is
+`configs/eval/<dataset>.yaml` — `configs/eval/sift.yaml` by default, or
+`--dataset deep` for the DEEP ladder, or `--variants-manifest <path>` for a
+file of your own. `runs/` is gitignored, so a fresh clone has none of the run
+directories a manifest names: the command above will stop and tell you which
+paths are missing and what would produce them. Copy the runs in, edit the
+manifest to name runs you do have, or pass `--allow-missing` to report on
+whichever variants resolved.
+
 `data/sift_base.npy` is what the four trained SIFT checkpoints were actually
 trained against, not the fetcher's `data/sift_250k.npy` subset — those are
 different corpora. See `FOLLOWUPS.md` ("`data.real_path` names a file the

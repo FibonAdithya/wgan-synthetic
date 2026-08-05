@@ -46,10 +46,10 @@ class Variant:
 # config delta from the previous. Run directories point at the longest run of
 # each variant that exists; v0 was never taken to 100k steps.
 VARIANTS: Tuple[Variant, ...] = (
-    Variant("v0", "configs/sift_gan_v0.yaml", "runs/long_baseline"),
-    Variant("v1", "configs/sift_gan_v1.yaml", "runs/x100k_ema_only"),
-    Variant("v1_5", "configs/sift_gan_v1_5.yaml", "runs/x100k_improved"),
-    Variant("v2", "configs/sift_gan_v2.yaml", "runs/x100k_sparse_clamp4"),
+    Variant("v0", "configs/sift/v0.yaml", "runs/long_baseline"),
+    Variant("v1", "configs/sift/v1.yaml", "runs/x100k_ema_only"),
+    Variant("v1_5", "configs/sift/v1_5.yaml", "runs/x100k_improved"),
+    Variant("v2", "configs/sift/v2.yaml", "runs/x100k_sparse_clamp4"),
 )
 
 CHECKPOINT_NAME = "best_generator.pt"

@@ -1,15 +1,15 @@
-# Variant v1_5 -- v1 plus the pairwise-distance regularizer. Sole delta
-# from v1: training.distance_reg_alpha (and the point budget it needs).
-# Matches runs/long_improved; runs/bench_improved is the same config at 3k
-# steps; runs/x100k_improved is the same config at 100k steps.
+# NYTIMES v0 -- plain WGAN-GP baseline. Every dataset's ladder starts here
+# so each later rung is one attributable delta. Untrained: this config
+# defines the starting point, it does not record a result.
 seed: 42
 device: auto
-output_dir: runs/sift_gan_v1_5
+output_dir: runs/nytimes/v0
 
 data:
-  real_path: data/sift_base.npy
+  real_path: data/nytimes_250k.npy
   format: npy
-  descriptor_dim: 128
+  metric: angular
+  descriptor_dim: 256
   holdout_fraction: 0.05
   synthetic_if_missing: false
   synthetic_num_vectors: 100000
@@ -19,10 +19,11 @@ data:
     l2_normalize: true
 
 model:
-  latent_dim: 128
+  latent_dim: 256
   generator_hidden_dims: [512, 1024, 1024]
   critic_hidden_dims: [1024, 512, 256]
   negative_slope: 0.2
+  generator_type: mlp
 
 training:
   batch_size: 512
@@ -32,8 +33,7 @@ training:
   lr_d: 1.0e-4
   betas: [0.0, 0.9]
   lambda_gp: 5.0
-  ema_decay: 0.999
-  distance_reg_alpha: 0.1
+  distance_reg_alpha: 0.0
   distance_reg_max_points: 256
   num_workers: 0
   amp: false

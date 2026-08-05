@@ -4,6 +4,8 @@ pyyaml
 tqdm
 scikit-learn
 scipy
+# HDF5 reader for the ann-benchmarks mirrors, used only by src/data/fetch.py.
+h5py
 plotly
 # Static PNG export in src/eval/eda_report.py. Kaleido v1 drives a headless
 # Chrome; run `plotly_get_chrome` once if no browser is installed. The HTML

@@ -11,7 +11,7 @@ import yaml
 from sklearn.metrics.pairwise import rbf_kernel
 from sklearn.neighbors import NearestNeighbors
 
-from src.data.sift1m_dataset import (
+from src.data.dataset import (
     PreprocessState,
     apply_preprocess,
     load_descriptors,

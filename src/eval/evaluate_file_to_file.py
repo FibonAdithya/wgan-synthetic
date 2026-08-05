@@ -6,7 +6,7 @@ from pathlib import Path
 
 import numpy as np
 
-from src.data.sift1m_dataset import load_descriptors, train_holdout_split
+from src.data.dataset import load_descriptors, train_holdout_split
 from src.eval.evaluate_distribution import (
     ann_proxy_recall,
     covariance_fro,

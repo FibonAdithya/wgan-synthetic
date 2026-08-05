@@ -63,7 +63,7 @@ def compute_embedding(
             init="pca",
             learning_rate="auto",
             random_state=seed,
-            n_iter=1000,
+            max_iter=1000,
             verbose=0,
         )
         return model.fit_transform(x).astype(np.float32, copy=False)

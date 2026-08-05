@@ -14,6 +14,13 @@ plotly==6.9.0
 # Chrome; run `plotly_get_chrome` once if no browser is installed. The HTML
 # report is produced without it -- pass --no-png to skip export entirely.
 kaleido==1.3.0
+# Bitmap drawing for src/eval/plot_distance_cdf_pillow.py and
+# src/eval/plot_embedding_clusters.py. Both already imported it; it was simply
+# missing here, so on a clean install those two modules raised ImportError.
+# Note what is deliberately still absent: matplotlib. The glyph-grid plan
+# records that decision, and src/eval/plot_distance_cdf.py -- the one module
+# that imports it -- draws the same figure as the Pillow version above.
+pillow==12.3.0
 # Test suite. Run from the repo root:
 #   python3 -m pytest
 # or `make check` to run lint and formatting alongside it.

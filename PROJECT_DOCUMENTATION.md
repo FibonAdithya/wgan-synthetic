@@ -696,6 +696,31 @@ produce").
   - run metadata
   together for reproducible sampling/evaluation.
 
+### What is currently guaranteed
+
+- `set_seed` seeds Python's `random`, numpy, and torch (CPU and all CUDA
+  devices) at the top of `train()`.
+- The training `DataLoader` is built by `build_dataloader`, which gives the
+  shuffling sampler a `torch.Generator` seeded from the run seed, and seeds each
+  worker process via `worker_init_fn` from `seed + worker_id`. Batch order is
+  therefore a function of the seed alone: **the same config and seed sees the
+  data in the same order regardless of `training.num_workers`**, so a machine
+  configured with a different worker count is not a source of run-to-run drift.
+  `tests/test_dataloader_reproducibility.py` pins this by comparing runs at
+  `num_workers=0` and `num_workers=2`.
+
+### What is *not* guaranteed
+
+- CUDA kernel-level determinism. We deliberately do **not** set
+  `torch.use_deterministic_algorithms(True)` or
+  `torch.backends.cudnn.deterministic`: they cost throughput on the single
+  shared GPU, and some kernels have no deterministic implementation and would
+  hard-error rather than degrade. Two runs of the same config on GPU can
+  therefore still differ slightly.
+- Because of that, the seed-to-seed noise floor should be measured before any
+  small overlay difference between two ladder rungs is read as caused by the
+  config change between them.
+
 ---
 
 ## Tuning guidance (no model size increase)

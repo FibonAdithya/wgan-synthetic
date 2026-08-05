@@ -44,7 +44,7 @@ def query_cdf_quantiles(
     num_queries: int,
     num_targets: int,
     rng: np.random.Generator,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     q_idx = sampled_indices(x.shape[0], num_queries, rng)
     t_idx = sampled_indices(x.shape[0], num_targets, rng)
     queries = x[q_idx]

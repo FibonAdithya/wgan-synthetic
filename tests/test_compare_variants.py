@@ -166,6 +166,7 @@ def test_report_args_match_eda_report_fields(monkeypatch, tmp_path):
         bins=8,
         top_divergent=4,
         seed=42,
+        glyph_samples=eda_report.GLYPH_SAMPLES_DEFAULT,
         no_png=True,
         plotlyjs="cdn",
     )

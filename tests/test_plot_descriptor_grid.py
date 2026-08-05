@@ -98,6 +98,23 @@ def test_build_figure_puts_negative_rays_in_their_own_trace():
     assert len(negative.x) == 3  # one ray: centre, tip, NaN
 
 
+def test_figure_discloses_the_floor_when_negative_rays_are_drawn():
+    """A floored ray's length is not its magnitude. Saying so on the figure
+    matches this module's refusal to draw anything the reader would misread."""
+    vecs = np.zeros((1, 128), dtype=np.float32)
+    vecs[0, 0] = 1.0
+    vecs[0, 8] = -1.0e-4
+    fig = pdg.build_figure([("row", vecs, "#000000")])
+    assert "minimum length" in fig.layout.title.text.lower()
+
+
+def test_figure_omits_the_floor_note_when_there_are_no_negatives():
+    """The caveat describes rays that exist; without them it is just noise."""
+    vecs = np.abs(np.random.default_rng(0).random((2, 128))).astype(np.float32)
+    fig = pdg.build_figure([("row", vecs, "#000000")])
+    assert "minimum length" not in fig.layout.title.text.lower()
+
+
 def test_build_figure_omits_the_negative_trace_when_all_bins_are_positive():
     vecs = np.abs(np.random.default_rng(0).random((2, 128))).astype(np.float32)
     fig = pdg.build_figure([("row", vecs, "#000000")])

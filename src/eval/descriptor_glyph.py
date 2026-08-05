@@ -32,6 +32,15 @@ CELL_COLS = 4
 ORIENTATION_BINS = 8
 DESCRIPTOR_DIM = CELL_ROWS * CELL_COLS * ORIENTATION_BINS  # 128
 
+# Minimum length of a negative ray, as a fraction of the half-cell it may fill.
+# Trained generators put their negatives around 0.003 against a scale reference
+# near 0.26 -- a hundredth of a half-cell, which renders sub-pixel and hides the
+# one defect this figure exists to expose. A negative bin is impossible at any
+# size, so its sign is the finding and its magnitude is a detail; the floor
+# spends legibility on the sign. Kept well below 1.0 so a floored ray still
+# reads as shorter than a genuine large bin.
+NEGATIVE_RAY_FLOOR = 0.35
+
 
 def descriptor_to_cells(vec: np.ndarray) -> np.ndarray:
     """Reshape a descriptor to (4, 4, 8) indexed [row][col][orientation_bin].
@@ -80,6 +89,7 @@ def glyph_segments(
     origin: tuple,
     pitch: float,
     scale: float,
+    negative_floor: float = NEGATIVE_RAY_FLOOR,
 ):
     """Ray endpoints for one glyph, split by sign of the bin value.
 
@@ -88,16 +98,32 @@ def glyph_segments(
     tip, then NaN. Zero-length rays are omitted, so an all-zero descriptor
     yields empty arrays.
 
-    Negative bins land in `neg_*` at magnitude `|value|` rather than being
-    clamped to zero. Real SIFT bins are gradient-magnitude histogram counts
-    and cannot be negative, so a negative bin is an impossible value, not a
-    small distributional error; the caller draws these in a warning colour.
+    Negative bins land in `neg_*` rather than being clamped to zero. Real SIFT
+    bins are gradient-magnitude histogram counts and cannot be negative, so a
+    negative bin is an impossible value, not a small distributional error; the
+    caller draws these in a warning colour.
+
+    A negative ray is drawn at no less than `negative_floor` of the half-cell,
+    because the negatives real generators emit are far too small to see at
+    their true length. This deliberately breaks the length-encodes-magnitude
+    rule, and only for negatives: their sign already makes them impossible, so
+    the length is free to carry visibility instead. Positives keep the honest
+    scale -- flooring those would give every near-zero bin a ray and erase the
+    sparsity that separates a real descriptor from a generated one.
+
+    Draws nothing when `scale` is non-positive: there is no reference to draw
+    against, and the floor is a legibility aid on a real scale rather than a
+    licence to invent rays.
     """
     cells = np.asarray(cells, dtype=np.float64)
     if cells.shape != (CELL_ROWS, CELL_COLS, ORIENTATION_BINS):
         raise ValueError(
             f"expected cells of shape (4, 4, 8), got {cells.shape}"
         )
+
+    empty = np.array([], dtype=np.float64)
+    if scale <= 0.0:
+        return (empty, empty.copy(), empty.copy(), empty.copy())
 
     origin_x, origin_y = float(origin[0]), float(origin[1])
     max_length = pitch / 2.0
@@ -114,7 +140,10 @@ def glyph_segments(
             centre_x = origin_x + (col - (CELL_COLS - 1) / 2.0) * pitch
             for bin_ in range(ORIENTATION_BINS):
                 value = cells[row, col, bin_]
-                length = min(abs(value) * scale, 1.0) * max_length
+                fraction = min(abs(value) * scale, 1.0)
+                if value < 0.0:
+                    fraction = max(fraction, negative_floor)
+                length = fraction * max_length
                 if length <= 0.0:
                     continue
                 xs, ys = (pos_x, pos_y) if value > 0 else (neg_x, neg_y)

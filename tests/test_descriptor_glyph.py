@@ -178,6 +178,50 @@ def test_zero_scale_draws_nothing():
     assert len(px) == 0 and len(nx) == 0
 
 
+def test_zero_scale_draws_no_negative_rays_either():
+    """The floor is a legibility aid on a real scale, not a licence to draw
+    rays when there is no scale to draw them against."""
+    cells = dg.descriptor_to_cells(np.full(128, -1.0))
+    px, _, nx, _ = dg.glyph_segments(cells, (0.0, 0.0), 2.0, scale=0.0)
+    assert len(px) == 0 and len(nx) == 0
+
+
+def test_a_tiny_negative_bin_is_floored_to_a_visible_length():
+    """Real generators put negatives three orders of magnitude below the
+    scale reference, which renders sub-pixel. Sign is the defect, not size."""
+    cells = _one_hot(0, 0, 0, value=-0.001)
+    _, _, nx, ny = dg.glyph_segments(cells, (0.0, 0.0), pitch=2.0, scale=1.0)
+    (start, end) = _segments(nx, ny)[0]
+    length = float(np.hypot(end[0] - start[0], end[1] - start[1]))
+    assert length == pytest.approx(dg.NEGATIVE_RAY_FLOOR * 1.0)  # max_length = 1.0
+
+
+def test_a_tiny_positive_bin_is_not_floored():
+    """Real SIFT sparsity is signal. Flooring positives too would make every
+    near-zero bin sprout a ray and erase the difference the figure exists for."""
+    cells = _one_hot(0, 0, 0, value=0.001)
+    px, py, _, _ = dg.glyph_segments(cells, (0.0, 0.0), pitch=2.0, scale=1.0)
+    (start, end) = _segments(px, py)[0]
+    length = float(np.hypot(end[0] - start[0], end[1] - start[1]))
+    assert length == pytest.approx(0.001)
+
+
+def test_a_negative_bin_above_the_floor_keeps_its_magnitude():
+    """The floor is a minimum, not a fixed length -- a large negative must
+    still read as larger than a small one."""
+    cells = _one_hot(0, 0, 0, value=-0.8)
+    _, _, nx, ny = dg.glyph_segments(cells, (0.0, 0.0), pitch=2.0, scale=1.0)
+    (start, end) = _segments(nx, ny)[0]
+    length = float(np.hypot(end[0] - start[0], end[1] - start[1]))
+    assert length == pytest.approx(0.8)
+
+
+def test_a_floored_negative_ray_still_fits_inside_its_cell():
+    cells = _one_hot(0, 0, 0, value=-1e-9)
+    _, _, nx, _ = dg.glyph_segments(cells, (0.0, 0.0), pitch=2.0, scale=1.0)
+    assert abs(nx[1] - nx[0]) <= 1.0  # pitch / 2
+
+
 def test_wrong_cell_shape_raises():
     with pytest.raises(ValueError, match="4, 4, 8"):
         dg.glyph_segments(np.zeros((4, 4)), (0.0, 0.0), 2.0, 1.0)

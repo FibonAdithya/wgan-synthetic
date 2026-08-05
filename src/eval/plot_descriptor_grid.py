@@ -32,23 +32,14 @@ import yaml
 from src.data.sift1m_dataset import load_descriptors
 from src.eval import compare_variants as cv
 from src.eval import eda_report
-from src.eval.descriptor_glyph import (
-    DESCRIPTOR_DIM,
-    descriptor_to_cells,
-    glyph_segments,
-    shared_scale,
-)
+from src.eval.descriptor_glyph import DESCRIPTOR_DIM
 from src.eval.evaluate_distribution import get_device, load_generator
 from src.train.train_wgan_gp import sample_generator
 
-CELL_PITCH = 1.0
-# Roughly one glyph width (4 * CELL_PITCH) plus a gutter, so rows read as
-# discrete descriptors rather than one continuous texture.
-GLYPH_PITCH = 5.0
-
-REAL_COLORS = ("#1f77b4", "#17becf")
+# Geometry, the negative-ray treatment and the figure itself come from
+# `eda_report`, which draws the same panel from materialised arrays.
+REAL_COLORS = eda_report.GLYPH_REAL_COLORS
 VARIANT_COLORS = ("#ff7f0e", "#2ca02c", "#9467bd", "#8c564b")
-NEGATIVE_COLOR = "#d62728"
 
 REPORT_NAME = "descriptor_grid.html"
 
@@ -99,72 +90,11 @@ def pick_real_rows(
 def build_figure(rows: List[Tuple[str, np.ndarray, str]]) -> go.Figure:
     """Assemble the glyph grid.
 
-    One positive-ray trace per row so each gets its own colour and legend
-    entry, plus a single shared trace for negative rays across all rows --
-    those mark impossible values and should read as one alarming category,
-    not as a per-row detail.
+    The figure itself lives in `eda_report`, which draws the same panel from
+    already-materialised arrays; this module's job is getting rows out of
+    generator checkpoints. One implementation, so the two cannot drift.
     """
-    scale = shared_scale(np.concatenate([vecs for _, vecs, _ in rows], axis=0))
-
-    fig = go.Figure()
-    neg_x: List[np.ndarray] = []
-    neg_y: List[np.ndarray] = []
-
-    for row_index, (label, vecs, color) in enumerate(rows):
-        pos_x: List[np.ndarray] = []
-        pos_y: List[np.ndarray] = []
-        for col_index in range(vecs.shape[0]):
-            cells = descriptor_to_cells(vecs[col_index])
-            origin = (col_index * GLYPH_PITCH, -row_index * GLYPH_PITCH)
-            gx, gy, nx, ny = glyph_segments(cells, origin, CELL_PITCH, scale)
-            pos_x.append(gx)
-            pos_y.append(gy)
-            neg_x.append(nx)
-            neg_y.append(ny)
-        fig.add_scatter(
-            x=np.concatenate(pos_x) if pos_x else np.array([]),
-            y=np.concatenate(pos_y) if pos_y else np.array([]),
-            mode="lines",
-            name=label,
-            line=dict(color=color, width=1.4),
-            hoverinfo="skip",
-        )
-        fig.add_annotation(
-            x=-GLYPH_PITCH * 0.7,
-            y=-row_index * GLYPH_PITCH,
-            text=label,
-            showarrow=False,
-            xanchor="right",
-            font=dict(size=13),
-        )
-
-    stacked_neg_x = np.concatenate(neg_x) if neg_x else np.array([])
-    if stacked_neg_x.size:
-        fig.add_scatter(
-            x=stacked_neg_x,
-            y=np.concatenate(neg_y),
-            mode="lines",
-            name="negative",
-            line=dict(color=NEGATIVE_COLOR, width=1.8),
-            hoverinfo="skip",
-        )
-
-    # Rule separating the two real rows from the variant rows below them.
-    if len(rows) > 2:
-        fig.add_hline(
-            y=-1.5 * GLYPH_PITCH, line=dict(color="#999999", width=1, dash="dot")
-        )
-
-    axis = dict(showgrid=False, zeroline=False, showticklabels=False)
-    fig.update_layout(
-        title="SIFT descriptor glyphs: real vs generated",
-        xaxis=axis,
-        yaxis=dict(**axis, scaleanchor="x", scaleratio=1),
-        height=180 * len(rows) + 120,
-        plot_bgcolor="white",
-        margin=dict(l=90, r=20, t=60, b=20),
-    )
-    return fig
+    return eda_report.fig_descriptor_glyphs(rows)
 
 
 def write_report(

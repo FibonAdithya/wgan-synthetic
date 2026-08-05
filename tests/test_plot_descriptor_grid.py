@@ -223,18 +223,48 @@ def test_check_finite_refuses_inf_and_names_the_source():
         pdg.check_finite(arr, "some-source")
 
 
-def test_run_refuses_real_data_containing_nan(tmp_path):
+def _clean_real(seed=0, n=64):
+    x = np.random.default_rng(seed).random((n, 128)).astype(np.float32)
+    x[x < 0.8] = 0.0
+    x[:, 0] = 1.0
+    return x
+
+
+def _split_by_whether_plotted(x, num_samples, seed):
+    """Indices of `x` that `pick_real_rows` draws, and those it does not."""
+    row_a, row_b = pdg.pick_real_rows(x, num_samples, seed)
+    plotted = {tuple(v) for v in row_a} | {tuple(v) for v in row_b}
+    drawn = [i for i, v in enumerate(x) if tuple(v) in plotted]
+    skipped = [i for i, v in enumerate(x) if tuple(v) not in plotted]
+    return drawn, skipped
+
+
+def test_run_refuses_nan_in_a_descriptor_it_will_draw(tmp_path):
     # A distinct filename from _write_real's default: _args() below calls
     # _write_real(tmp_path) again to build its base namespace, which would
     # otherwise overwrite this file's NaN back to clean data at the same path.
-    x = np.random.default_rng(0).random((64, 128)).astype(np.float32)
-    x[x < 0.8] = 0.0
-    x[:, 0] = 1.0
-    x[0, 1] = np.nan
+    x = _clean_real()
+    drawn, _ = _split_by_whether_plotted(x, num_samples=4, seed=42)
+    x[drawn[0], 1] = np.nan
     path = tmp_path / "real_with_nan.npy"
     np.save(path, x)
     with pytest.raises(ValueError, match="non-finite"):
         pdg.run(_args(tmp_path, real_path=str(path)))
+
+
+def test_run_ignores_nan_in_a_descriptor_it_will_never_draw(tmp_path):
+    """The figure draws 2 * num_samples of ~1M vectors. Aborting the whole
+    poster over a non-finite value in one of the ~999,984 it will never touch
+    is a refusal that buys nothing -- the guard is about what gets drawn."""
+    x = _clean_real()
+    _, skipped = _split_by_whether_plotted(x, num_samples=4, seed=42)
+    x[skipped[0], 1] = np.nan
+    path = tmp_path / "real_nan_offscreen.npy"
+    np.save(path, x)
+
+    out = pdg.run(_args(tmp_path, real_path=str(path)))
+
+    assert out.exists()
 
 
 def test_variant_row_with_nan_output_is_refused(

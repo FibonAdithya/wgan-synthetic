@@ -244,11 +244,14 @@ def run(args: argparse.Namespace) -> Path:
             f"the glyph mapping is only defined for {DESCRIPTOR_DIM}-dimensional "
             f"descriptors; {args.real_path} holds {real.shape[1]}-dimensional ones"
         )
-    check_finite(real, str(args.real_path))
-    # Select the handful of rows we plot before normalising, not after --
-    # selection is purely index-based, so normalising the other ~1M rows we
-    # never look at is wasted memory and time.
+    # Select the handful of rows we plot before normalising or checking them,
+    # not after -- selection is purely index-based, so touching the other ~1M
+    # rows we never look at is wasted work, and refusing the whole poster over
+    # a non-finite value in one of them buys nothing. The guard is about what
+    # gets drawn.
     row_a, row_b = pick_real_rows(real, args.num_samples, args.seed)
+    check_finite(row_a, str(args.real_path))
+    check_finite(row_b, str(args.real_path))
     row_a = l2_normalize(row_a)
     row_b = l2_normalize(row_b)
 

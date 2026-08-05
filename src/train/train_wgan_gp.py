@@ -440,8 +440,15 @@ def train(config: Dict) -> Tuple[Path, Dict]:
             fake = normalize_l2(generator(z))
             adv_loss = -critic(fake).mean()
             g_loss = adv_loss
+            # Transferred once and shared: both regularizers want the same
+            # batch, and doing it per-branch pays for two host-to-device copies
+            # of a 512x96 tensor on every generator step when both are enabled.
+            real_for_reg = (
+                real_batch.to(device)
+                if distance_reg_alpha > 0.0 or spectrum_reg_alpha > 0.0
+                else None
+            )
             if distance_reg_alpha > 0.0:
-                real_for_reg = real_batch.to(device)
                 dist_real = batch_pairwise_distance_mean(
                     real_for_reg, max_points=distance_reg_max_points
                 )
@@ -453,10 +460,13 @@ def train(config: Dict) -> Tuple[Path, Dict]:
             else:
                 distance_reg = torch.zeros((), device=device, dtype=fake.dtype)
             if spectrum_reg_alpha > 0.0:
-                spectrum_reg = spectrum_distance(real_batch.to(device), fake)
+                spectrum_reg = spectrum_distance(real_for_reg, fake)
                 g_loss = g_loss + spectrum_reg_alpha * spectrum_reg
             else:
-                spectrum_reg = torch.zeros((), device=device, dtype=fake.dtype)
+                # float32, not fake.dtype: spectrum_distance returns float32
+                # even under autocast, so the disabled placeholder should not
+                # be the one value of this metric that is fp16.
+                spectrum_reg = torch.zeros((), device=device, dtype=torch.float32)
         scaler_g.scale(g_loss).backward()
         scaler_g.step(optim_g)
         scaler_g.update()

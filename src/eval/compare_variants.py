@@ -89,13 +89,12 @@ def resolve_variants(
     architecture is rebuilt from it -- the checkpoint records which weights it
     holds ("live"/"ema") but not which generator produced them.
 
-    A run whose config asks for centering or whitening additionally requires
-    run_metadata.json, which is where `train` records the fitted transform.
-    Without it there is nothing to invert that transform with, and the samples
-    would be emitted in the transformed space and silently compared against a
-    real corpus in the original one. Checked here rather than at sampling time
-    so it is reported alongside the other skips, before any of the earlier
-    variants in the loop have generated hundreds of thousands of vectors.
+    A run whose config asks for centering or whitening is checked further, by
+    `_inversion_blocker`: its samples are only meaningful once the fitted
+    transform has been undone, and several things can make that impossible.
+    Checked here rather than at sampling time so every such run is reported
+    alongside the other skips, before any of the earlier variants in the loop
+    have generated hundreds of thousands of vectors.
     """
     found: List[Variant] = []
     skipped: List[Tuple[Variant, str]] = []
@@ -109,16 +108,8 @@ def resolve_variants(
             skipped.append((variant, f"no {CHECKPOINT_NAME} in {run_dir}"))
         elif not run_config.exists():
             skipped.append((variant, f"no {RUN_CONFIG_NAME} in {run_dir}"))
-        elif _needs_inversion(run_config) and not (run_dir / RUN_METADATA_NAME).exists():
-            skipped.append(
-                (
-                    variant,
-                    f"no {RUN_METADATA_NAME} in {run_dir}, but its config "
-                    "centers or whitens -- the fitted transform is recorded "
-                    "there and samples cannot be returned to original "
-                    "coordinates without it",
-                )
-            )
+        elif (blocker := _inversion_blocker(run_config, run_dir)) is not None:
+            skipped.append((variant, blocker))
         else:
             found.append(variant)
     return found, skipped
@@ -135,12 +126,70 @@ def _needs_inversion(run_config: Path) -> bool:
     return bool(preprocess.get("center")) or bool(preprocess.get("whiten"))
 
 
+def _inversion_blocker(run_config: Path, run_dir: Path) -> Optional[str]:
+    """Why this run's samples could not be returned to original coordinates.
+
+    None when there is nothing to undo, or when the fitted transform is on disk
+    and invertible -- so a run that only L2-normalizes never reaches any of the
+    checks below, and the whole SIFT ladder resolves as it always did.
+
+    Deliberately loads the state rather than just stat-ing run_metadata.json.
+    A file that exists but carries no `preprocess_state` key, or one truncated
+    mid-write, both leave `load_preprocess_state` returning None -- which
+    `invert_samples` reads as "nothing was fitted" and passes the samples
+    straight through, writing them out in whitened coordinates with no error
+    raised anywhere. Existence is not the property that matters; being able to
+    reconstruct the transform is.
+
+    The centering rejection is the same rule `invert_samples` enforces, applied
+    early. It is asked of the fitted state rather than the config because the
+    state is what inversion actually consumes.
+    """
+    if not _needs_inversion(run_config):
+        return None
+
+    metadata = Path(run_dir) / RUN_METADATA_NAME
+    if not metadata.exists():
+        return (
+            f"no {RUN_METADATA_NAME} in {run_dir}, but its config centers or "
+            "whitens -- the fitted transform is recorded there and samples "
+            "cannot be returned to original coordinates without it"
+        )
+    try:
+        state = load_preprocess_state(run_dir)
+    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+        return (
+            f"{RUN_METADATA_NAME} in {run_dir} could not be read back into a "
+            f"transform ({exc}), but its config centers or whitens -- samples "
+            "cannot be returned to original coordinates without it"
+        )
+    if state is None:
+        return (
+            f"{RUN_METADATA_NAME} in {run_dir} records no preprocess_state, "
+            "but its config centers or whitens -- samples cannot be returned "
+            "to original coordinates without the fitted transform"
+        )
+    if state.mean is not None and state.config.l2_normalize:
+        return (
+            f"this run was fitted with both centering and l2_normalize, which "
+            f"{__name__}.invert_samples refuses: sample_generator "
+            "L2-normalizes its raw output, and inverting a centered transform "
+            "afterwards yields systematically wrong directions with nothing "
+            "downstream to flag them"
+        )
+    return None
+
+
 def load_preprocess_state(run_dir: Path) -> Optional[PreprocessState]:
     """Read the transform `train` fitted, or None if this run recorded none.
 
     None is the ordinary case for the SIFT ladder and for any run predating
     run_metadata.json; those runs preprocess with L2 normalization alone,
     which is not invertible and does not need to be.
+
+    Callers that require the transform must treat None as a failure rather than
+    as "no transform needed" -- see `_inversion_blocker`, which is where that
+    distinction is drawn.
     """
     path = Path(run_dir) / RUN_METADATA_NAME
     if not path.exists():

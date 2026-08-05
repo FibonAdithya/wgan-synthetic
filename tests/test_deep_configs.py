@@ -4,7 +4,8 @@ from typing import Any, Dict
 import pytest
 import yaml
 
-CONFIG_DIR = Path("configs/deep")
+REPO_ROOT = Path(__file__).resolve().parents[1]
+CONFIG_DIR = REPO_ROOT / "configs" / "deep"
 LADDER = ["v0", "v1", "v2"]
 
 

@@ -8,7 +8,11 @@ REMOTE="${REMOTE:-tig-gpu}"
 WORK_DIR="/workspace/deep-gan"
 CACHE_DIR="/workspace/data-cache"
 BUNDLE="/tmp/deep-gan.bundle"
+# Errors here rather than three lines down: on a detached HEAD this is empty,
+# and `git bundle create <file> ""` fails with a message about revision syntax
+# that says nothing about the actual problem.
 BRANCH="$(git branch --show-current)"
+: "${BRANCH:?not on a branch (detached HEAD) -- check out the branch you want to push before running this}"
 
 echo "==> bundling ${BRANCH}"
 git bundle create "${BUNDLE}" "${BRANCH}"

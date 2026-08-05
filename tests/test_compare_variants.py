@@ -345,6 +345,56 @@ def test_resolve_skips_a_whitened_run_missing_its_metadata(tmp_path):
     assert "run_metadata.json" in skipped[0][1]
 
 
+def test_resolve_skips_a_whitened_run_whose_metadata_omits_the_transform(tmp_path):
+    """A present-but-useless metadata file must skip, exactly like an absent one.
+
+    Checking only that run_metadata.json exists leaves the hole the check was
+    added to close: `load_preprocess_state` returns None for a payload without
+    a `preprocess_state` key, `invert_samples` reads that None as "nothing was
+    fitted" and passes the samples straight through, and the run is written out
+    in whitened coordinates with no error anywhere.
+    """
+    variant = _write_flat_run(tmp_path, "w", whiten=True)
+    (tmp_path / "runs" / "w" / "run_metadata.json").write_text(
+        json.dumps({"seed": 42}), encoding="utf-8"
+    )
+
+    found, skipped = cv.resolve_variants((variant,), root=tmp_path)
+
+    assert found == []
+    assert "run_metadata.json" in skipped[0][1]
+
+
+def test_resolve_skips_a_whitened_run_whose_metadata_is_unparseable(tmp_path):
+    """Truncated JSON is a skip, not a JSONDecodeError raised mid-sampling."""
+    variant = _write_flat_run(tmp_path, "w", whiten=True)
+    (tmp_path / "runs" / "w" / "run_metadata.json").write_text(
+        '{"preprocess_state": ', encoding="utf-8"
+    )
+
+    found, skipped = cv.resolve_variants((variant,), root=tmp_path)
+
+    assert found == []
+    assert "run_metadata.json" in skipped[0][1]
+
+
+def test_resolve_skips_a_centered_run_rather_than_failing_at_sample_time(tmp_path):
+    """The center+l2 refusal belongs with the other skips, not mid-loop.
+
+    `invert_samples` already refuses this combination, but it does so inside
+    `generate_samples` -- after every earlier rung in the ladder has drawn its
+    samples. `resolve_variants` already parses the run config to decide whether
+    inversion is needed, so it can reject the combination there for the same
+    reason the missing-metadata case is rejected there.
+    """
+    variant = _write_flat_run(tmp_path, "c", whiten=True, center=True)
+
+    found, skipped = cv.resolve_variants((variant,), root=tmp_path)
+
+    assert found == []
+    assert "l2_normalize" in skipped[0][1]
+
+
 def test_resolve_does_not_require_metadata_for_an_untransformed_run(tmp_path):
     variant = _write_flat_run(tmp_path, "u", whiten=False)
     (tmp_path / "runs" / "u" / "run_metadata.json").unlink()

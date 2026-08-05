@@ -58,6 +58,22 @@ def test_distance_is_finite_for_a_rank_deficient_batch():
     assert torch.isfinite(spectrum_distance(real, fake)).all()
 
 
+def test_gradient_is_finite_for_a_rank_deficient_batch():
+    """The forward check above says nothing about the backward pass.
+
+    A batch with fewer rows than dimensions gives a covariance whose trailing
+    eigenvalues are zero up to float error, so `_normalized_spectrum` clamps
+    them. Repeated eigenvalues are where eigendecomposition gradients most
+    often go non-finite, and this term is added straight into `g_loss` -- one
+    NaN here poisons every generator weight.
+    """
+    real = _anisotropic(8, 32, 0.1, seed=0)
+    fake = _anisotropic(8, 32, 0.5, seed=1).requires_grad_(True)
+    spectrum_distance(real, fake).backward()
+    assert fake.grad is not None
+    assert torch.isfinite(fake.grad).all()
+
+
 def test_distance_is_finite_under_half_precision_inputs():
     """The term must be safe to enable alongside `amp: true`.
 

@@ -1,4 +1,3 @@
-import numpy as np
 import pytest
 
 from src.data.dataset import PreprocessConfig, PreprocessState
@@ -18,9 +17,7 @@ def test_unknown_metric_is_rejected():
 
 
 def test_metric_survives_serialization_round_trip():
-    state = PreprocessState(
-        descriptor_dim=8, config=PreprocessConfig(metric="angular")
-    )
+    state = PreprocessState(descriptor_dim=8, config=PreprocessConfig(metric="angular"))
     payload = state.to_serializable()
     assert payload["config"]["metric"] == "angular"
     assert PreprocessState.from_serializable(payload).config.metric == "angular"

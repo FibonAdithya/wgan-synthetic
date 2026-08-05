@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Dict, Optional, Tuple
 
 import numpy as np
 import torch
@@ -14,7 +13,9 @@ def _load_fvecs(path: Path) -> np.ndarray:
     if raw.size == 0:
         raise ValueError(f"Empty fvecs file: {path}")
 
-    dim = np.frombuffer(np.array([raw[0]], dtype=np.float32).tobytes(), dtype=np.int32)[0]
+    dim = np.frombuffer(np.array([raw[0]], dtype=np.float32).tobytes(), dtype=np.int32)[
+        0
+    ]
     if dim <= 0:
         raise ValueError(f"Invalid dimension in fvecs header: {dim}")
 
@@ -63,10 +64,10 @@ class PreprocessConfig:
 class PreprocessState:
     descriptor_dim: int
     config: PreprocessConfig
-    mean: Optional[np.ndarray] = None
-    whitening_matrix: Optional[np.ndarray] = None
+    mean: np.ndarray | None = None
+    whitening_matrix: np.ndarray | None = None
 
-    def to_serializable(self) -> Dict:
+    def to_serializable(self) -> dict:
         payload = asdict(self)
         payload["config"] = asdict(self.config)
         payload["mean"] = None if self.mean is None else self.mean.tolist()
@@ -76,7 +77,7 @@ class PreprocessState:
         return payload
 
     @classmethod
-    def from_serializable(cls, payload: Dict) -> "PreprocessState":
+    def from_serializable(cls, payload: dict) -> PreprocessState:
         cfg = PreprocessConfig(**payload["config"])
         mean = payload.get("mean")
         whitening_matrix = payload.get("whitening_matrix")
@@ -188,7 +189,7 @@ def load_descriptors(path: Path, file_format: str = "auto") -> np.ndarray:
 
 def train_holdout_split(
     x: np.ndarray, holdout_fraction: float, seed: int
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     if not (0.0 < holdout_fraction < 1.0):
         raise ValueError(f"holdout_fraction must be in (0,1), got {holdout_fraction}")
 
@@ -214,7 +215,7 @@ class NumpyTensorDataset(Dataset):
 
 
 def build_training_data(
-    descriptor_path: Optional[str],
+    descriptor_path: str | None,
     file_format: str,
     descriptor_dim: int,
     holdout_fraction: float,
@@ -222,10 +223,12 @@ def build_training_data(
     seed: int,
     synthetic_if_missing: bool = False,
     synthetic_num_vectors: int = 100000,
-) -> Tuple[np.ndarray, np.ndarray, PreprocessState]:
+) -> tuple[np.ndarray, np.ndarray, PreprocessState]:
     if descriptor_path is None:
         if not synthetic_if_missing:
-            raise ValueError("descriptor_path is null and synthetic_if_missing is false")
+            raise ValueError(
+                "descriptor_path is null and synthetic_if_missing is false"
+            )
         rng = np.random.default_rng(seed)
         x = rng.normal(size=(synthetic_num_vectors, descriptor_dim)).astype(np.float32)
     else:

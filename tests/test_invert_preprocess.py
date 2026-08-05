@@ -9,7 +9,6 @@ from src.data.dataset import (
 )
 
 
-
 def _sample(n: int = 400, d: int = 96, seed: int = 0) -> np.ndarray:
     """Anisotropic data, so whitening is a non-trivial transform."""
     rng = np.random.default_rng(seed)

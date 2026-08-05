@@ -24,9 +24,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import torch
@@ -50,7 +50,7 @@ class Variant:
 # Ordered so the report legend reads as a progression. Each entry is one
 # config delta from the previous. Run directories point at the longest run of
 # each variant that exists; v0 was never taken to 100k steps.
-SIFT_VARIANTS: Tuple[Variant, ...] = (
+SIFT_VARIANTS: tuple[Variant, ...] = (
     Variant("v0", "configs/sift/v0.yaml", "runs/long_baseline"),
     Variant("v1", "configs/sift/v1.yaml", "runs/x100k_ema_only"),
     Variant("v1_5", "configs/sift/v1_5.yaml", "runs/x100k_improved"),
@@ -60,20 +60,20 @@ SIFT_VARIANTS: Tuple[Variant, ...] = (
 # v2 trains in a PCA-whitened space, so its samples only mean anything after
 # `invert_samples` maps them back -- which is why that step lives in
 # `generate_samples` rather than in a deep-specific sampler.
-DEEP_VARIANTS: Tuple[Variant, ...] = (
+DEEP_VARIANTS: tuple[Variant, ...] = (
     Variant("v0", "configs/deep/v0.yaml", "runs/deep/v0"),
     Variant("v1", "configs/deep/v1.yaml", "runs/deep/v1"),
     Variant("v2", "configs/deep/v2.yaml", "runs/deep/v2"),
 )
 
-LADDERS: Dict[str, Tuple[Variant, ...]] = {
+LADDERS: dict[str, tuple[Variant, ...]] = {
     "sift": SIFT_VARIANTS,
     "deep": DEEP_VARIANTS,
 }
 
 # Retained under its historical name: `VARIANTS` is what the SIFT-era callers
 # and docs refer to.
-VARIANTS: Tuple[Variant, ...] = SIFT_VARIANTS
+VARIANTS: tuple[Variant, ...] = SIFT_VARIANTS
 
 CHECKPOINT_NAME = "best_generator.pt"
 RUN_CONFIG_NAME = "run_config.yaml"
@@ -82,7 +82,7 @@ RUN_METADATA_NAME = "run_metadata.json"
 
 def resolve_variants(
     variants: Sequence[Variant], root: Path
-) -> Tuple[List[Variant], List[Tuple[Variant, str]]]:
+) -> tuple[list[Variant], list[tuple[Variant, str]]]:
     """Split variants into those whose artifacts are on disk and those not.
 
     The run config is required alongside the checkpoint because the generator
@@ -96,8 +96,8 @@ def resolve_variants(
     alongside the other skips, before any of the earlier variants in the loop
     have generated hundreds of thousands of vectors.
     """
-    found: List[Variant] = []
-    skipped: List[Tuple[Variant, str]] = []
+    found: list[Variant] = []
+    skipped: list[tuple[Variant, str]] = []
     for variant in variants:
         run_dir = root / variant.run_dir
         checkpoint = run_dir / CHECKPOINT_NAME
@@ -126,7 +126,7 @@ def _needs_inversion(run_config: Path) -> bool:
     return bool(preprocess.get("center")) or bool(preprocess.get("whiten"))
 
 
-def _inversion_blocker(run_config: Path, run_dir: Path) -> Optional[str]:
+def _inversion_blocker(run_config: Path, run_dir: Path) -> str | None:
     """Why this run's samples could not be returned to original coordinates.
 
     None when there is nothing to undo, or when the fitted transform is on disk
@@ -180,7 +180,7 @@ def _inversion_blocker(run_config: Path, run_dir: Path) -> Optional[str]:
     return None
 
 
-def load_preprocess_state(run_dir: Path) -> Optional[PreprocessState]:
+def load_preprocess_state(run_dir: Path) -> PreprocessState | None:
     """Read the transform `train` fitted, or None if this run recorded none.
 
     None is the ordinary case for the SIFT ladder and for any run predating
@@ -200,7 +200,7 @@ def load_preprocess_state(run_dir: Path) -> Optional[PreprocessState]:
     return PreprocessState.from_serializable(payload["preprocess_state"])
 
 
-def invert_samples(x: np.ndarray, state: Optional[PreprocessState]) -> np.ndarray:
+def invert_samples(x: np.ndarray, state: PreprocessState | None) -> np.ndarray:
     """Map generator output back to the corpus's original coordinates.
 
     A no-op when the run fitted no centering or whitening, which keeps this
@@ -353,7 +353,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def build_report_args(args: argparse.Namespace, specs: List[str]) -> argparse.Namespace:
+def build_report_args(args: argparse.Namespace, specs: list[str]) -> argparse.Namespace:
     """Build the Namespace `eda_report.run` expects from our own parsed args.
 
     Field-for-field parity with `eda_report.parse_args` is load-bearing: if

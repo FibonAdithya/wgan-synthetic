@@ -2,7 +2,7 @@ from types import MappingProxyType
 
 import pytest
 
-from src.models.generator import Generator, GatedGenerator, build_generator
+from src.models.generator import GatedGenerator, Generator, build_generator
 
 BASE_CFG = {
     "latent_dim": 16,

@@ -21,6 +21,7 @@ trace before comparison, so it measures how variance is distributed across
 directions rather than how much there is in total. Overall scale is already
 pinned by the unit-norm constraint.
 """
+
 from __future__ import annotations
 
 import torch

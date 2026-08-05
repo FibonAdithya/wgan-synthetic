@@ -25,9 +25,9 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import plotly.graph_objects as go
@@ -207,7 +207,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def parse_synthetic_spec(spec: str) -> Tuple[str, Path]:
+def parse_synthetic_spec(spec: str) -> tuple[str, Path]:
     """Split a '[LABEL=]PATH' argument into its label and path.
 
     Only the first '=' separates, so paths containing '=' still work when a
@@ -289,7 +289,7 @@ def shared_edges(arrays: Sequence[np.ndarray], bins: int) -> np.ndarray:
 
 
 def overlay_hist_fig(
-    named_values: Sequence[Tuple[str, np.ndarray, str]],
+    named_values: Sequence[tuple[str, np.ndarray, str]],
     bins: int,
     title: str,
     xaxis_title: str,
@@ -389,7 +389,11 @@ def fig_dim_profiles(series: Sequence[Series]) -> go.Figure:
         rows=3,
         cols=1,
         shared_xaxes=True,
-        subplot_titles=("per-dim mean", "per-dim std", "per-dim fraction of exact zeros"),
+        subplot_titles=(
+            "per-dim mean",
+            "per-dim std",
+            "per-dim fraction of exact zeros",
+        ),
         vertical_spacing=0.07,
     )
     for s in series:
@@ -406,7 +410,9 @@ def fig_dim_profiles(series: Sequence[Series]) -> go.Figure:
                 col=1,
             )
     fig.update_xaxes(title_text="dimension", row=3, col=1)
-    fig.update_layout(title="Per-dimension profiles", template="plotly_white", height=760)
+    fig.update_layout(
+        title="Per-dimension profiles", template="plotly_white", height=760
+    )
     return fig
 
 
@@ -415,7 +421,10 @@ def fig_pca_spectrum(series: Sequence[Series]) -> go.Figure:
     fig = make_subplots(
         rows=1,
         cols=2,
-        subplot_titles=("explained variance ratio (log)", "cumulative explained variance"),
+        subplot_titles=(
+            "explained variance ratio (log)",
+            "cumulative explained variance",
+        ),
     )
     for s in series:
         pca = PCA(n_components=min(s.x.shape[1], s.x.shape[0]))
@@ -423,12 +432,23 @@ def fig_pca_spectrum(series: Sequence[Series]) -> go.Figure:
         ratio = pca.explained_variance_ratio_
         comps = np.arange(1, ratio.size + 1)
         fig.add_scatter(
-            x=comps, y=ratio, name=s.name, legendgroup=s.name,
-            line=dict(color=s.color), row=1, col=1,
+            x=comps,
+            y=ratio,
+            name=s.name,
+            legendgroup=s.name,
+            line=dict(color=s.color),
+            row=1,
+            col=1,
         )
         fig.add_scatter(
-            x=comps, y=np.cumsum(ratio), name=s.name, legendgroup=s.name,
-            showlegend=False, line=dict(color=s.color), row=1, col=2,
+            x=comps,
+            y=np.cumsum(ratio),
+            name=s.name,
+            legendgroup=s.name,
+            showlegend=False,
+            line=dict(color=s.color),
+            row=1,
+            col=2,
         )
     fig.update_yaxes(type="log", row=1, col=1)
     fig.update_xaxes(title_text="component", row=1, col=1)
@@ -445,7 +465,7 @@ def fig_correlation(series: Sequence[Series]) -> go.Figure:
     difference is what localizes the error."""
     real = next(s for s in series if s.is_real)
     real_corr = np.corrcoef(real.x, rowvar=False)
-    panels: List[Tuple[str, np.ndarray]] = [("real", real_corr)]
+    panels: list[tuple[str, np.ndarray]] = [("real", real_corr)]
     for s in series:
         if s.is_real:
             continue
@@ -454,8 +474,12 @@ def fig_correlation(series: Sequence[Series]) -> go.Figure:
     fig = make_subplots(rows=1, cols=len(panels), subplot_titles=[p[0] for p in panels])
     for col, (_, mat) in enumerate(panels, start=1):
         fig.add_heatmap(
-            z=mat, colorscale="RdBu", zmid=0.0,
-            showscale=(col == len(panels)), row=1, col=col,
+            z=mat,
+            colorscale="RdBu",
+            zmid=0.0,
+            showscale=(col == len(panels)),
+            row=1,
+            col=col,
         )
     fig.update_layout(
         title="Per-dimension correlation structure",
@@ -466,7 +490,7 @@ def fig_correlation(series: Sequence[Series]) -> go.Figure:
 
 
 def fig_ann_profile(
-    series: Sequence[Series], metrics: Dict[str, "ann_difficulty.AnnMetrics"], bins: int
+    series: Sequence[Series], metrics: dict[str, ann_difficulty.AnnMetrics], bins: int
 ) -> go.Figure:
     """LID and relative contrast side by side, overlaid across sets.
 
@@ -516,7 +540,7 @@ def fig_ann_profile(
 
 
 def fig_ivf_balance(
-    series: Sequence[Series], metrics: Dict[str, "ann_difficulty.AnnMetrics"]
+    series: Sequence[Series], metrics: dict[str, ann_difficulty.AnnMetrics]
 ) -> go.Figure:
     """Lorenz curve of cluster occupancy: how lopsided an IVF partition is.
 
@@ -551,7 +575,7 @@ def fig_ivf_balance(
 
 def fig_dim_divergence(
     series: Sequence[Series], top_k: int
-) -> Tuple[go.Figure, Dict[str, List[Dict]]]:
+) -> tuple[go.Figure, dict[str, list[dict]]]:
     """Rank dimensions by 1-D Wasserstein distance from real, per synthetic set.
 
     Dimensions are ordered by the worst mismatch across all synthetics, so the
@@ -562,9 +586,7 @@ def fig_dim_divergence(
     dim = real.x.shape[1]
 
     dists = {
-        s.name: np.array(
-            [wasserstein1(real.x[:, d], s.x[:, d]) for d in range(dim)]
-        )
+        s.name: np.array([wasserstein1(real.x[:, d], s.x[:, d]) for d in range(dim)])
         for s in synths
     }
     worst_overall = np.max(np.stack(list(dists.values())), axis=0)
@@ -593,7 +615,7 @@ def fig_dim_divergence(
     return fig, worst
 
 
-def fig_descriptor_glyphs(rows: Sequence[Tuple[str, np.ndarray, str]]) -> go.Figure:
+def fig_descriptor_glyphs(rows: Sequence[tuple[str, np.ndarray, str]]) -> go.Figure:
     """Assemble the glyph grid from `(label, vectors, color)` rows.
 
     One positive-ray trace per row so each gets its own colour and legend
@@ -607,12 +629,12 @@ def fig_descriptor_glyphs(rows: Sequence[Tuple[str, np.ndarray, str]]) -> go.Fig
     scale = shared_scale(np.concatenate([vecs for _, vecs, _ in rows], axis=0))
 
     fig = go.Figure()
-    neg_x: List[np.ndarray] = []
-    neg_y: List[np.ndarray] = []
+    neg_x: list[np.ndarray] = []
+    neg_y: list[np.ndarray] = []
 
     for row_index, (label, vecs, color) in enumerate(rows):
-        pos_x: List[np.ndarray] = []
-        pos_y: List[np.ndarray] = []
+        pos_x: list[np.ndarray] = []
+        pos_y: list[np.ndarray] = []
         for col_index in range(vecs.shape[0]):
             cells = descriptor_to_cells(vecs[col_index])
             origin = (col_index * GLYPH_PITCH, -row_index * GLYPH_PITCH)
@@ -678,7 +700,7 @@ def fig_descriptor_glyphs(rows: Sequence[Tuple[str, np.ndarray, str]]) -> go.Fig
 
 def glyph_rows(
     series: Sequence[Series], num_samples: int, seed: int
-) -> List[Tuple[str, np.ndarray, str]]:
+) -> list[tuple[str, np.ndarray, str]]:
     """Pick the descriptors the glyph panel draws, or nothing if it cannot.
 
     The real series contributes two disjoint rows and each synthetic series
@@ -693,7 +715,7 @@ def glyph_rows(
     if num_samples <= 0:
         return []
     rng = np.random.default_rng(seed)
-    rows: List[Tuple[str, np.ndarray, str]] = []
+    rows: list[tuple[str, np.ndarray, str]] = []
     for s in series:
         needed = 2 * num_samples if s.is_real else num_samples
         if s.x.shape[1] != DESCRIPTOR_DIM or s.x.shape[0] < needed:
@@ -721,7 +743,9 @@ def effective_rank(x: np.ndarray) -> float:
     singular values of Roy & Vetterli, so absolute values are not comparable
     with that definition -- only across sets measured here.
     """
-    ratio = PCA(n_components=min(x.shape[1], x.shape[0])).fit(x).explained_variance_ratio_
+    ratio = (
+        PCA(n_components=min(x.shape[1], x.shape[0])).fit(x).explained_variance_ratio_
+    )
     return float(np.exp(-np.sum(ratio * np.log(ratio + 1.0e-12))))
 
 
@@ -732,7 +756,7 @@ def summary_stats(
     seed: int,
     max_rows: int,
     metrics: ann_difficulty.AnnMetrics,
-) -> Dict:
+) -> dict:
     norms = np.linalg.norm(s.x, axis=1)
     stats = {
         "name": s.name,
@@ -770,7 +794,7 @@ def summary_stats(
     return stats
 
 
-def stats_table_html(stats: List[Dict]) -> str:
+def stats_table_html(stats: list[dict]) -> str:
     keys = [k for k in stats[0] if k != "name"]
     header = "".join(f"<th>{s['name']}</th>" for s in stats)
     rows = []
@@ -819,7 +843,7 @@ def plotlyjs_head(mode: str, out_dir: Path) -> str:
 
 
 def build_report(
-    sections: List[Tuple[str, str, go.Figure]],
+    sections: list[tuple[str, str, go.Figure]],
     meta_html: str,
     head_script: str,
 ) -> str:
@@ -836,13 +860,11 @@ def build_report(
         f"{head_script}"
         "</head><body>"
         "<h1>SIFT descriptor EDA</h1>"
-        f"{meta_html}"
-        + "".join(body)
-        + "</body></html>"
+        f"{meta_html}" + "".join(body) + "</body></html>"
     )
 
 
-def export_pngs(sections: List[Tuple[str, str, go.Figure]], out_dir: Path) -> List[str]:
+def export_pngs(sections: list[tuple[str, str, go.Figure]], out_dir: Path) -> list[str]:
     """Static export is best-effort: kaleido v1 shells out to Chrome."""
     png_dir = out_dir / "png"
     png_dir.mkdir(parents=True, exist_ok=True)
@@ -855,16 +877,20 @@ def export_pngs(sections: List[Tuple[str, str, go.Figure]], out_dir: Path) -> Li
     return written
 
 
-def load_series(args: argparse.Namespace) -> List[Series]:
+def load_series(args: argparse.Namespace) -> list[Series]:
     real_x = load_descriptors(Path(args.real_path), file_format=args.real_format)
-    real_x = maybe_l2_normalize(subsample(real_x, args.max_vectors, args.seed), args.preprocess)
+    real_x = maybe_l2_normalize(
+        subsample(real_x, args.max_vectors, args.seed), args.preprocess
+    )
     series = [Series(REAL_NAME, real_x, REAL_COLOR)]
 
     seen = {REAL_NAME}
     for i, spec in enumerate(args.synthetic_path or []):
         label, path = parse_synthetic_spec(spec)
         if label in seen:
-            raise ValueError(f"Duplicate series label {label!r}; use LABEL=PATH to rename")
+            raise ValueError(
+                f"Duplicate series label {label!r}; use LABEL=PATH to rename"
+            )
         seen.add(label)
         x = load_descriptors(path, file_format=args.synthetic_format)
         if x.shape[1] != real_x.shape[1]:
@@ -872,15 +898,17 @@ def load_series(args: argparse.Namespace) -> List[Series]:
                 f"Dimension mismatch for {label!r}: real has {real_x.shape[1]}, "
                 f"got {x.shape[1]}"
             )
-        x = maybe_l2_normalize(subsample(x, args.max_vectors, args.seed), args.preprocess)
+        x = maybe_l2_normalize(
+            subsample(x, args.max_vectors, args.seed), args.preprocess
+        )
         series.append(Series(label, x, SYNTH_PALETTE[i % len(SYNTH_PALETTE)]))
     return series
 
 
 def ann_condition_note(
     series: Sequence[Series],
-    ann_metrics: Dict[str, "ann_difficulty.AnnMetrics"],
-    attrs: Tuple[Tuple[str, str], ...],
+    ann_metrics: dict[str, ann_difficulty.AnnMetrics],
+    attrs: tuple[tuple[str, str], ...],
 ) -> str:
     """State the actual per-series ANN measurement conditions for `attrs`.
 
@@ -931,17 +959,24 @@ def run(args: argparse.Namespace) -> Path:
     }
     stats = [
         summary_stats(
-            s, args.knn, args.num_pairs, args.seed, args.ann_max_rows, ann_metrics[s.name]
+            s,
+            args.knn,
+            args.num_pairs,
+            args.seed,
+            args.ann_max_rows,
+            ann_metrics[s.name],
         )
         for s in series
     ]
 
-    sections: List[Tuple[str, str, go.Figure]] = []
+    sections: list[tuple[str, str, go.Figure]] = []
 
     # First, because it frames everything after it: every other panel is an
     # aggregate that can look healthy while individual descriptors are
     # structurally wrong.
-    rows = glyph_rows(series, getattr(args, "glyph_samples", GLYPH_SAMPLES_DEFAULT), args.seed)
+    rows = glyph_rows(
+        series, getattr(args, "glyph_samples", GLYPH_SAMPLES_DEFAULT), args.seed
+    )
     if rows:
         sections.append(
             (
@@ -981,7 +1016,9 @@ def run(args: argparse.Namespace) -> Path:
             "and it overstates it. Relative contrast sits alongside: values "
             "near 1 mean the nearest neighbour is barely closer than an "
             "arbitrary point, leaving an index little to exploit."
-            + ann_condition_note(series, ann_metrics, (("num_rows", "rows"), ("k", "k")))
+            + ann_condition_note(
+                series, ann_metrics, (("num_rows", "rows"), ("k", "k"))
+            )
             + ann_note_suffix,
             fig_ann_profile(series, ann_metrics, args.bins),
         )
@@ -998,7 +1035,11 @@ def run(args: argparse.Namespace) -> Path:
             + ann_note_suffix,
             overlay_hist_fig(
                 [
-                    (s.name, ann_metrics[s.name].k_occurrence.astype(np.float64), s.color)
+                    (
+                        s.name,
+                        ann_metrics[s.name].k_occurrence.astype(np.float64),
+                        s.color,
+                    )
                     for s in series
                 ],
                 args.bins,
@@ -1055,7 +1096,11 @@ def run(args: argparse.Namespace) -> Path:
             "downstream ANN benchmarking depends on.",
             overlay_hist_fig(
                 [
-                    (s.name, pairwise_distance_sample(s.x, args.num_pairs, args.seed), s.color)
+                    (
+                        s.name,
+                        pairwise_distance_sample(s.x, args.num_pairs, args.seed),
+                        s.color,
+                    )
                     for s in series
                 ],
                 args.bins,
@@ -1074,7 +1119,11 @@ def run(args: argparse.Namespace) -> Path:
             "sample count grows.",
             overlay_hist_fig(
                 [
-                    (s.name, nn_distances(s.x, args.knn, args.seed, args.ann_max_rows), s.color)
+                    (
+                        s.name,
+                        nn_distances(s.x, args.knn, args.seed, args.ann_max_rows),
+                        s.color,
+                    )
                     for s in series
                 ],
                 args.bins,
@@ -1116,7 +1165,7 @@ def run(args: argparse.Namespace) -> Path:
         )
     )
 
-    worst_dims: Dict[str, List[Dict]] = {}
+    worst_dims: dict[str, list[dict]] = {}
     if has_synth:
         div_fig, worst_dims = fig_dim_divergence(series, args.top_divergent)
         sections.append(
@@ -1146,7 +1195,7 @@ def run(args: argparse.Namespace) -> Path:
     report_path = out_dir / "eda_report.html"
     report_path.write_text(html, encoding="utf-8")
 
-    png_paths: List[str] = []
+    png_paths: list[str] = []
     png_error = None
     if not args.no_png:
         try:
@@ -1172,7 +1221,9 @@ def run(args: argparse.Namespace) -> Path:
     }
     if png_error:
         summary["png_error"] = png_error
-    (out_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    (out_dir / "summary.json").write_text(
+        json.dumps(summary, indent=2), encoding="utf-8"
+    )
 
     print(f"Wrote {report_path}")
     if png_paths:

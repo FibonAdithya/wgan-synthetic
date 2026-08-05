@@ -5,8 +5,8 @@ import contextlib
 import json
 import math
 import random
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Dict, Iterator, Tuple
 
 import numpy as np
 import torch
@@ -42,7 +42,9 @@ def get_device(device_cfg: str) -> torch.device:
     return torch.device(device_cfg)
 
 
-def gradient_penalty(critic: Critic, real: Tensor, fake: Tensor, device: torch.device) -> Tensor:
+def gradient_penalty(
+    critic: Critic, real: Tensor, fake: Tensor, device: torch.device
+) -> Tensor:
     batch_size = real.shape[0]
     alpha = torch.rand(batch_size, 1, device=device)
     alpha = alpha.expand_as(real)
@@ -64,7 +66,7 @@ def gradient_penalty(critic: Critic, real: Tensor, fake: Tensor, device: torch.d
     return ((norms - 1.0) ** 2).mean()
 
 
-def tensor_stats(real: np.ndarray, fake: np.ndarray) -> Dict[str, float]:
+def tensor_stats(real: np.ndarray, fake: np.ndarray) -> dict[str, float]:
     # zero_fraction_gap, negative_fraction, per_dim_zero_rate_l1, and
     # nnz_std_gap exist because raw SIFT descriptors carry heavy mass at
     # exactly zero, which a dense MLP generator cannot reproduce and the
@@ -105,10 +107,12 @@ def batch_pairwise_distance_mean(x: Tensor, max_points: int = 128) -> Tensor:
         idx = torch.randperm(n, device=x.device)[:max_points]
         x = x[idx]
     pd = torch.pdist(x, p=2)
-    return pd.mean() if pd.numel() > 0 else torch.zeros((), device=x.device, dtype=x.dtype)
+    return (
+        pd.mean() if pd.numel() > 0 else torch.zeros((), device=x.device, dtype=x.dtype)
+    )
 
 
-def collapse_stats(fake: np.ndarray, max_points: int = 512) -> Dict[str, float]:
+def collapse_stats(fake: np.ndarray, max_points: int = 512) -> dict[str, float]:
     """Lightweight mode-collapse monitor.
 
     A healthy generator spreads samples across the descriptor space; a
@@ -144,7 +148,7 @@ def collapse_stats(fake: np.ndarray, max_points: int = 512) -> Dict[str, float]:
 EMA_BIAS_CORRECTION_EPS = 1.0e-8
 
 
-def init_ema_params(model: torch.nn.Module) -> Dict[str, Tensor]:
+def init_ema_params(model: torch.nn.Module) -> dict[str, Tensor]:
     """Zero-initialised EMA accumulator for the trainable params of `model`.
 
     Zero (rather than "a copy of the initial weights") is what makes the
@@ -160,7 +164,9 @@ def init_ema_params(model: torch.nn.Module) -> Dict[str, Tensor]:
     }
 
 
-def ema_update(ema_params: Dict[str, Tensor], model: torch.nn.Module, decay: float) -> None:
+def ema_update(
+    ema_params: dict[str, Tensor], model: torch.nn.Module, decay: float
+) -> None:
     """In-place exponential moving average of model parameters.
 
     The accumulator is left *uncorrected*; bias correction is applied only
@@ -187,7 +193,7 @@ def ema_bias_correction(decay: float, ema_step: int) -> float:
 
 
 def load_ema_into_model(
-    ema_params: Dict[str, Tensor],
+    ema_params: dict[str, Tensor],
     model: torch.nn.Module,
     decay: float = 0.0,
     ema_step: int = 0,
@@ -210,7 +216,7 @@ def load_ema_into_model(
 @contextlib.contextmanager
 def ema_weights(
     model: torch.nn.Module,
-    ema_params: Dict[str, Tensor],
+    ema_params: dict[str, Tensor],
     decay: float = 0.0,
     ema_step: int = 0,
 ) -> Iterator[None]:
@@ -254,7 +260,9 @@ def save_checkpoint(
     the generator and has no optimiser moments of its own.
     """
     if generator_weights not in ("live", "ema"):
-        raise ValueError(f"generator_weights must be 'live' or 'ema', got {generator_weights!r}")
+        raise ValueError(
+            f"generator_weights must be 'live' or 'ema', got {generator_weights!r}"
+        )
     ckpt = {
         "step": step,
         "generator_weights": generator_weights,
@@ -297,7 +305,7 @@ def sample_generator(
     return np.concatenate(out, axis=0)[:num_samples]
 
 
-def train(config: Dict) -> Tuple[Path, Dict]:
+def train(config: dict) -> tuple[Path, dict]:
     seed = int(config["seed"])
     set_seed(seed)
     device = get_device(config["device"])
@@ -360,7 +368,7 @@ def train(config: Dict) -> Tuple[Path, Dict]:
     # would silently come from an all-zero generator. Reject it up front.
     if use_ema and ema_decay >= 1.0:
         raise ValueError(f"ema_decay must be < 1.0 to accumulate, got {ema_decay}")
-    ema_params: Dict[str, Tensor] = init_ema_params(generator) if use_ema else {}
+    ema_params: dict[str, Tensor] = init_ema_params(generator) if use_ema else {}
     ema_step = 0
 
     amp = bool(train_cfg["amp"] and device.type == "cuda")
@@ -549,8 +557,12 @@ def train(config: Dict) -> Tuple[Path, Dict]:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Train WGAN-GP for SIFT1M-like descriptors.")
-    parser.add_argument("--config", type=str, required=True, help="Path to YAML config.")
+    parser = argparse.ArgumentParser(
+        description="Train WGAN-GP for SIFT1M-like descriptors."
+    )
+    parser.add_argument(
+        "--config", type=str, required=True, help="Path to YAML config."
+    )
     return parser.parse_args()
 
 

@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A second push to a PR makes the first run irrelevant; don't pay for both.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # Matches the development venv. requirements.txt is pinned, so the
+          # interpreter is the only remaining source of drift.
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install CPU-only torch
+        # The default wheel drags in ~2GB of CUDA runtime that no test uses --
+        # the suite pins device: cpu throughout and there is no GPU on the
+        # runner. Same version as requirements.txt, so the next step is a no-op
+        # for torch rather than a reinstall.
+        run: pip install torch==2.13.0 --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run checks
+        run: make check

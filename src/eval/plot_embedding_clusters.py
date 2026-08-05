@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Tuple
 
 import numpy as np
 from PIL import Image, ImageDraw
@@ -17,7 +16,9 @@ def parse_args() -> argparse.Namespace:
         description="Create t-SNE/UMAP embedding visualizations for real and synthetic datasets."
     )
     parser.add_argument("--real-path", type=str, required=True)
-    parser.add_argument("--real-format", type=str, default="auto", choices=["auto", "npy", "fvecs"])
+    parser.add_argument(
+        "--real-format", type=str, default="auto", choices=["auto", "npy", "fvecs"]
+    )
     parser.add_argument("--synthetic-path", type=str, required=True)
     parser.add_argument(
         "--synthetic-format", type=str, default="auto", choices=["auto", "npy", "fvecs"]
@@ -35,7 +36,9 @@ def l2_normalize(x: np.ndarray, eps: float = 1.0e-8) -> np.ndarray:
     return x / np.clip(norm, eps, None)
 
 
-def sample_rows(x: np.ndarray, sample_size: int, rng: np.random.Generator) -> np.ndarray:
+def sample_rows(
+    x: np.ndarray, sample_size: int, rng: np.random.Generator
+) -> np.ndarray:
     if sample_size >= x.shape[0]:
         return x
     idx = rng.choice(x.shape[0], size=sample_size, replace=False)
@@ -90,7 +93,7 @@ def draw_scatter(
     points: np.ndarray,
     title: str,
     output_path: Path,
-    color: Tuple[int, int, int],
+    color: tuple[int, int, int],
 ) -> None:
     width, height = 1200, 900
     margin = 70
@@ -104,7 +107,11 @@ def draw_scatter(
     x_span = max(x_max - x_min, 1.0e-8)
     y_span = max(y_max - y_min, 1.0e-8)
 
-    draw.rectangle([(margin, margin), (width - margin, height - margin)], outline=(0, 0, 0), width=2)
+    draw.rectangle(
+        [(margin, margin), (width - margin, height - margin)],
+        outline=(0, 0, 0),
+        width=2,
+    )
 
     for px, py in points:
         sx = margin + (float(px) - x_min) / x_span * (width - 2 * margin)
@@ -149,7 +156,12 @@ def main() -> None:
     real_path = output_dir / f"{args.method}_sift_real.png"
     synth_path = output_dir / f"{args.method}_synthetic.png"
 
-    draw_scatter(real_emb, f"{args.method.upper()} - SIFT Real ({real_sample.shape[0]} samples)", real_path, (31, 119, 180))
+    draw_scatter(
+        real_emb,
+        f"{args.method.upper()} - SIFT Real ({real_sample.shape[0]} samples)",
+        real_path,
+        (31, 119, 180),
+    )
     draw_scatter(
         synth_emb,
         f"{args.method.upper()} - Synthetic ({synth_sample.shape[0]} samples)",

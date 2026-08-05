@@ -7,14 +7,34 @@ Reviewer: agent, reading the repo cold. Tests were run; no training was run.
 Written to be handed to Dan. It is a review of *agent-readiness*, not of the
 research — the modelling choices are outside what a cold read can judge.
 
+## Note for later readers: this was reviewed against a stale base
+
+Added after the fact. `47a7829` on `infra/parallel-dataset-runner` is 19
+commits behind `main`, so the review's counts and file inventory describe that
+commit, not the project. Specifically:
+
+- The suite is **211 tests** on `main`, not the 139 counted here.
+- `tests/conftest.py` **exists** on `main` — 105 lines, added by
+  "refactor(tests): promote run-dir fixtures to conftest". The review's premise
+  that there is no shared test fixture module is false there.
+- `main` also carries the descriptor-glyph work (`src/eval/descriptor_glyph.py`,
+  `src/eval/plot_descriptor_grid.py` and their tests) and three `FOLLOWUPS.md`
+  entries the review never saw.
+
+The substantive findings below were re-checked against `main` and still hold:
+no `AGENTS.md`, no CI, a gate that is documented but not executable, an
+untested sampling path, and hard-coded run directories. Treat the numbers as a
+snapshot; treat the conclusions as current.
+
 ## Summary
 
 This repo is already doing most of what the imported AI-first workflow document
-(`../tig-cpu/ai-first-development-workflow.md`) recommends for documentation and
-planning, and in places doing it better than that document describes. The gaps
-are concentrated almost entirely in **executable feedback**: there is a great
-deal of prose telling a careful reader what correct means, and almost nothing a
-machine can run to find out.
+recommends for documentation and planning, and in places doing it better than
+that document describes. That document is vendored at
+`docs/ai-first-development-workflow.md`, and every reference to "the imported
+document" below means that file. The gaps are concentrated almost entirely in
+**executable feedback**: there is a great deal of prose telling a careful
+reader what correct means, and almost nothing a machine can run to find out.
 
 That matters more here than in a typical repo, because the next step on the
 roadmap is six agents training six dataset families in parallel. An agent that
@@ -96,9 +116,12 @@ configuration, and **no CI at all** (no `.github/`). `pytest.ini` exists and the
 suite passes, but an agent has to already know to run it, and nothing else is
 checked by anything.
 
-Per the DORA finding in `RESEARCH.md` §1, the bottleneck in AI-assisted work is
-verification capacity, not generation capacity. This repo currently has one
-verification layer (tests, manually invoked) and no gate.
+The binding constraint on AI-assisted work is verification capacity rather than
+generation capacity: an agent can produce far more change than anything here
+can currently check. This repo has one verification layer (tests, manually
+invoked) and no gate. That is the argument the imported document makes for
+cheap deterministic feedback in its §6, and it is the reason this gap ranks
+above the rest of the tooling.
 
 **Fix:** a `Makefile` with `check` running format/lint/tests, wired into a
 single GitHub Actions workflow. Then name it in `AGENTS.md` as the definition of

@@ -27,22 +27,22 @@ AI working notes, kept for provenance and **not** authoritative:
 
 ## Datasets
 
-Each family gets its own ladder of variants and its own gate. Only SIFT has
-been trained so far; the other five have a `v0` baseline config and a
+Each family gets its own ladder of variants and its own gate. SIFT and DEEP
+have trained ladders; the other four have a `v0` baseline config and a
 documented profile waiting to be measured.
 
 | Family | Dim | Metric | Ladder | Page |
 |---|---|---|---|---|
 | `sift` | 128 | `l2` | `v0`–`v2` trained | `docs/datasets/sift.md` |
 | `gist` | 960 | `l2` | `v0` defined, not trained | `docs/datasets/gist.md` |
-| `deep` | 96 | `angular` | `v0` defined, not trained | `docs/datasets/deep.md` |
+| `deep` | 96 | `angular` | `v0`–`v2` trained | `docs/datasets/deep.md` |
 | `glove` | 100 | `angular` | `v0` defined, not trained | `docs/datasets/glove.md` |
 | `nytimes` | 256 | `angular` | `v0` defined, not trained | `docs/datasets/nytimes.md` |
 | `openai` | 1536 | `angular` | `v0` defined, not trained | `docs/datasets/openai.md` |
 
 Variant numbers are per dataset and are comparable only within one family.
-The SIFT ladder lives in `configs/sift/`; every other family has a single
-`v0.yaml` under its own directory in `configs/`. To see all four SIFT variants overlaid on real SIFT
+The SIFT and DEEP ladders live in `configs/sift/` and `configs/deep/`; every
+other family has a single `v0.yaml` under its own directory in `configs/`. To see all four SIFT variants overlaid on real SIFT
 in one report:
 
     python -m src.eval.compare_variants \
@@ -77,7 +77,7 @@ fetcher does not produce") for why the SIFT configs still point at
 3. Train:
    - `python -m src.train.train_wgan_gp --config configs/<dataset>/v0.yaml`
    - Check `data.real_path` in the config points at a file you have. The five
-     newer families name the fetcher's output (`data/deep_250k.npy` and so
+     non-SIFT families name the fetcher's output (`data/deep_1m.npy` and so
      on); the SIFT ladder configs still name `data/sift_base.npy`, the path
      the trained runs used, so edit it if you fetched instead. See
      `FOLLOWUPS.md` for the open question of reconciling that.
@@ -86,6 +86,11 @@ fetcher does not produce") for why the SIFT configs still point at
    - `python -m src.eval.evaluate_file_to_file --real-path <path_to_real.npy_or_fvecs> --synthetic-path <path_to_synthetic.npy_or_fvecs> --output-dir runs/file_eval`
 5. Sample:
    - `python -m src.sample.generate --checkpoint runs/x100k_improved/best_generator.pt --config runs/x100k_improved/run_config.yaml --num-samples 1000000 --output-path runs/x100k_improved/synthetic.npy`
+   - Runs whose config sets `preprocess.whiten` or `preprocess.center` (e.g.
+     `configs/deep/v2.yaml`) must be sampled through
+     `python -m src.eval.compare_variants --dataset <family>` instead, which
+     inverts the fitted transform. `src.sample.generate` does not, and would
+     emit vectors in the transformed space.
 
 ## Notes
 

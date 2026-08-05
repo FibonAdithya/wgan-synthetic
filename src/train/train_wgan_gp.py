@@ -22,6 +22,7 @@ from src.data.dataset import (
 )
 from src.models.critic import Critic
 from src.models.generator import build_generator
+from src.train.spectrum import spectrum_distance
 
 
 def set_seed(seed: int) -> None:
@@ -374,6 +375,7 @@ def train(config: Dict) -> Tuple[Path, Dict]:
     save_every = int(train_cfg["save_every"])
     distance_reg_alpha = float(train_cfg.get("distance_reg_alpha", 0.0))
     distance_reg_max_points = int(train_cfg.get("distance_reg_max_points", 128))
+    spectrum_reg_alpha = float(train_cfg.get("spectrum_reg_alpha", 0.0))
 
     run_meta = {
         "seed": seed,
@@ -437,6 +439,7 @@ def train(config: Dict) -> Tuple[Path, Dict]:
             z = torch.randn(batch_size, latent_dim, device=device)
             fake = normalize_l2(generator(z))
             adv_loss = -critic(fake).mean()
+            g_loss = adv_loss
             if distance_reg_alpha > 0.0:
                 real_for_reg = real_batch.to(device)
                 dist_real = batch_pairwise_distance_mean(
@@ -446,10 +449,14 @@ def train(config: Dict) -> Tuple[Path, Dict]:
                     fake, max_points=distance_reg_max_points
                 )
                 distance_reg = torch.abs(dist_real - dist_fake)
-                g_loss = adv_loss + distance_reg_alpha * distance_reg
+                g_loss = g_loss + distance_reg_alpha * distance_reg
             else:
                 distance_reg = torch.zeros((), device=device, dtype=fake.dtype)
-                g_loss = adv_loss
+            if spectrum_reg_alpha > 0.0:
+                spectrum_reg = spectrum_distance(real_batch.to(device), fake)
+                g_loss = g_loss + spectrum_reg_alpha * spectrum_reg
+            else:
+                spectrum_reg = torch.zeros((), device=device, dtype=fake.dtype)
         scaler_g.scale(g_loss).backward()
         scaler_g.step(optim_g)
         scaler_g.update()
@@ -467,6 +474,7 @@ def train(config: Dict) -> Tuple[Path, Dict]:
                 "wasserstein": wasserstein_val,
                 "adv_loss": float(adv_loss.item()),
                 "distance_reg": float(distance_reg.item()),
+                "spectrum_reg": float(spectrum_reg.item()),
             }
             run_meta["metrics"].append(msg)
             print(json.dumps(msg))

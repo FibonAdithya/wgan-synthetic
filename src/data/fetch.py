@@ -17,12 +17,18 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Tuple
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 import h5py
 import numpy as np
 
 BASE_URL = "http://ann-benchmarks.com"
+
+# ann-benchmarks.com sits behind Cloudflare, which 403s the default
+# "Python-urllib/x.y" User-Agent as a bot-blocking heuristic -- every family
+# below is unreachable without this. A plain browser-like UA is enough to
+# pass; no other headers are required.
+USER_AGENT = "Mozilla/5.0 (compatible; wgan-synthetic-fetch/1.0)"
 
 
 @dataclass(frozen=True)
@@ -114,7 +120,8 @@ def fetch(
         return dest
 
     try:
-        with os.fdopen(fd, "wb") as handle, urlopen(url) as response:
+        request = Request(url, headers={"User-Agent": USER_AGENT})
+        with os.fdopen(fd, "wb") as handle, urlopen(request) as response:
             while True:
                 chunk = response.read(chunk_bytes)
                 if not chunk:

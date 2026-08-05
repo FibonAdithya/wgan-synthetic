@@ -140,3 +140,29 @@ v0/v1/v1_5 are in `/workspace/wgan-synthetic/runs/` while v2 is in
 the four-row comparison needs the run directories collected under one tree
 first. Either move v2's run into the main checkout, or let `Variant` carry an
 absolute run dir.
+## DEEP ladder results rest on one seed per rung (PR #6)
+
+`docs/datasets/deep.md` reports three trained rungs, and the gaps that
+separate them are small: v1 and v2 differ by 0.002 on IVF gini and 0.10 on
+LID. All three ran once, at `seed: 42`. There is no variance estimate in this
+data, so none of the per-metric orderings can be distinguished from
+run-to-run noise, and v1's hubness-skew gap of 0.000022 is one draw rather
+than a demonstrated property of the spectrum regularizer.
+
+Two or three more seeds per rung (~35 min each on the RTX 4060) would settle
+whether any of it is real. Until then the page's ordering claims should be
+read as provisional, and the family's gate bands stay unset because there is
+nothing to set them against.
+
+Related: the `summary.json` those numbers were read out of is not committed —
+the training box has no persistent volume, so the table in
+`docs/datasets/deep.md` is not re-derivable from this repo alone. It is ~8 KB;
+committing it on the next run would make the numbers checkable.
+
+## `src/eval/ann_difficulty.py` is the last consumer that could inherit `--dataset`
+
+`compare_variants` now selects a family's ladder with `--dataset`, and reads
+the search metric off each config as `data.metric`. `ann_difficulty.py` still
+measures everything under L2 (phase (c), above). When it learns to read
+`data.metric`, `compare_variants` is where the value should be threaded
+through from — it already resolves the config for every variant it samples.

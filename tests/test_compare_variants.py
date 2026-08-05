@@ -1,8 +1,10 @@
 import argparse
+import json
 import sys
 from pathlib import Path
 
 import numpy as np
+import pytest
 import torch
 
 from src.eval import compare_variants as cv
@@ -186,3 +188,191 @@ def test_report_args_match_eda_report_fields(monkeypatch, tmp_path):
     eda_args = eda_report.parse_args()
 
     assert set(vars(report_args)) == set(vars(eda_args))
+
+
+# --- Preprocess inversion -------------------------------------------------
+#
+# A run trained with `whiten: true` produces samples in the whitened space.
+# These pin that `generate_samples` maps them back, that a run which cannot be
+# mapped back is skipped before any sampling happens, and that the one
+# silently-wrong configuration is refused outright.
+
+from src.data.dataset import PreprocessConfig, _fit_preprocess_state  # noqa: E402
+
+
+def _fit_state(dim=96, whiten=False, center=False, l2_normalize=True, seed=0):
+    """Fit a transform on deliberately anisotropic data.
+
+    The decaying per-dimension scale is what makes whitening a non-trivial
+    transform, and is the pattern the inversion test looks for coming back.
+    """
+    rng = np.random.default_rng(seed)
+    scale = np.linspace(1.0, 0.05, dim).astype(np.float32)
+    x = (rng.normal(size=(400, dim)) * scale).astype(np.float32)
+    cfg = PreprocessConfig(center=center, whiten=whiten, l2_normalize=l2_normalize)
+    return _fit_preprocess_state(x_train=x, descriptor_dim=dim, cfg=cfg)
+
+
+def _write_flat_run(tmp_path, name, *, whiten, center=False):
+    """A run whose raw (pre-inversion) output is EXACTLY flat per-dimension.
+
+    Not merely plausibly flat. Routed through an ordinarily-initialized
+    generator, an untrained network's per-dimension output variance is itself
+    uneven purely from weight init, and that unevenness can rival the
+    anisotropy the inversion is supposed to restore -- making the assertion
+    below a coin flip on RNG entropy rather than a property of the code.
+
+    So: `generator_hidden_dims: []` gives a single `Linear(latent_dim, dim)`
+    with no activation between it and the latent noise, and its weight rows
+    are set to unit L2 norm. For z ~ N(0, I), Var(output_i) = ||W_i||^2 = 1
+    for every i, exactly and independent of any seed. A spread appearing
+    after inversion can then only come from the inversion itself.
+    """
+    dim, latent = 96, 16
+    run_dir = tmp_path / "runs" / name
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    model_cfg = {
+        "latent_dim": latent,
+        "generator_hidden_dims": [],
+        "critic_hidden_dims": [32],
+        "negative_slope": 0.2,
+        "generator_type": "mlp",
+    }
+    run_config = {
+        "device": "cpu",
+        "model": model_cfg,
+        "data": {
+            "descriptor_dim": dim,
+            "preprocess": {
+                "center": center,
+                "whiten": whiten,
+                "l2_normalize": True,
+            },
+        },
+    }
+    (run_dir / "run_config.yaml").write_text(yaml.safe_dump(run_config))
+
+    generator = build_generator(model_cfg, output_dim=dim)
+    rows = np.random.default_rng(1).normal(size=(dim, latent)).astype(np.float32)
+    rows /= np.linalg.norm(rows, axis=1, keepdims=True)
+    with torch.no_grad():
+        generator.net[0].weight.copy_(torch.from_numpy(rows))
+        generator.net[0].bias.zero_()
+    torch.save(
+        {"generator_state_dict": generator.state_dict()},
+        run_dir / "best_generator.pt",
+    )
+
+    state = _fit_state(dim=dim, whiten=whiten, center=center)
+    (run_dir / "run_metadata.json").write_text(
+        json.dumps({"preprocess_state": state.to_serializable()}), encoding="utf-8"
+    )
+    return cv.Variant(name, "configs/deep/v2.yaml", f"runs/{name}")
+
+
+def test_generate_samples_returns_a_whitened_run_to_original_coordinates(tmp_path):
+    """The reason inversion lives in the sampling path at all.
+
+    Checking magnitude alone would let a wrong-direction bug through: applying
+    the forward whitening matrix instead of its inverse also inflates the
+    per-dimension spread, just anti-correlated with the real pattern. So this
+    asserts *direction* -- the inverted output's per-dimension variance must
+    correlate strongly and positively with the `scale ** 2` pattern the
+    transform was fitted on. A no-op, a wrong-direction inverse, or any other
+    subtly broken one cannot produce that correlation by chance.
+    """
+    out_dir = tmp_path / "samples"
+    out_dir.mkdir()
+
+    def draw(variant, sub):
+        (out_dir / sub).mkdir()
+        return np.load(
+            cv.generate_samples(
+                variant, tmp_path, 2000, 512, out_dir / sub, seed=42
+            )
+        )
+
+    inverted = draw(_write_flat_run(tmp_path, "w", whiten=True), "w")
+    unwhitened = draw(_write_flat_run(tmp_path, "u", whiten=False), "u")
+
+    expected = np.linspace(1.0, 0.05, 96).astype(np.float32) ** 2
+    assert np.corrcoef(inverted.var(axis=0), expected)[0, 1] > 0.9
+    assert abs(np.corrcoef(unwhitened.var(axis=0), expected)[0, 1]) < 0.3
+
+
+def test_load_preprocess_state_returns_none_when_no_metadata_was_written(tmp_path):
+    """Every SIFT run predates run_metadata.json; they must still sample."""
+    run_dir = tmp_path / "runs" / "a"
+    run_dir.mkdir(parents=True)
+    assert cv.load_preprocess_state(run_dir) is None
+
+
+def test_invert_samples_is_a_no_op_without_a_fitted_transform():
+    x = np.arange(12, dtype=np.float32).reshape(3, 4)
+    np.testing.assert_array_equal(cv.invert_samples(x, None), x)
+    state = _fit_state(dim=4, whiten=False, center=False)
+    np.testing.assert_array_equal(cv.invert_samples(x, state), x)
+
+
+def test_invert_samples_refuses_centering_combined_with_l2_normalization():
+    """Guards the one configuration that is wrong without being detectable.
+
+    sample_generator L2-normalizes its output, and invert_preprocess only
+    recovers directions exactly when no mean was subtracted. With both on the
+    result is systematically wrong and nothing downstream would flag it, so
+    this must raise rather than return.
+    """
+    state = _fit_state(whiten=True, center=True, l2_normalize=True)
+    with pytest.raises(ValueError, match="center.*l2_normalize|l2_normalize.*center"):
+        cv.invert_samples(np.zeros((4, 96), dtype=np.float32), state)
+
+
+def test_resolve_skips_a_whitened_run_missing_its_metadata(tmp_path):
+    """Reported as a skip before sampling starts, not as a mid-loop failure.
+
+    Left unchecked this surfaces only after earlier variants have already
+    generated hundreds of thousands of vectors.
+    """
+    variant = _write_flat_run(tmp_path, "w", whiten=True)
+    (tmp_path / "runs" / "w" / "run_metadata.json").unlink()
+
+    found, skipped = cv.resolve_variants((variant,), root=tmp_path)
+
+    assert found == []
+    assert "run_metadata.json" in skipped[0][1]
+
+
+def test_resolve_does_not_require_metadata_for_an_untransformed_run(tmp_path):
+    variant = _write_flat_run(tmp_path, "u", whiten=False)
+    (tmp_path / "runs" / "u" / "run_metadata.json").unlink()
+
+    found, skipped = cv.resolve_variants((variant,), root=tmp_path)
+
+    assert [v.name for v in found] == ["u"]
+    assert skipped == []
+
+
+# --- Ladder registry ------------------------------------------------------
+
+
+def test_deep_ladder_covers_the_three_rungs():
+    assert [v.name for v in cv.DEEP_VARIANTS] == ["v0", "v1", "v2"]
+
+
+def test_every_ladder_config_exists():
+    for name, ladder in cv.LADDERS.items():
+        for variant in ladder:
+            assert (REPO_ROOT / variant.config_path).exists(), f"{name}/{variant.name}"
+
+
+def test_ladders_do_not_share_run_directories():
+    """A deep run must never be read out of a SIFT run directory."""
+    sift = {v.run_dir for v in cv.SIFT_VARIANTS}
+    deep = {v.run_dir for v in cv.DEEP_VARIANTS}
+    assert not sift & deep
+
+
+def test_variants_alias_still_points_at_the_sift_ladder():
+    """`VARIANTS` is the historical name the SIFT-era docs and callers use."""
+    assert cv.VARIANTS is cv.SIFT_VARIANTS

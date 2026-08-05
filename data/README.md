@@ -73,12 +73,19 @@ directory containing both:
 - `run_config.yaml` — written by the training script. Required, because the
   generator architecture is rebuilt from it; the checkpoint alone is not
   enough to reconstruct the model.
+- `run_metadata.json` — required only when the run's config sets
+  `preprocess.center` or `preprocess.whiten`. It records the transform that
+  was fitted on the training split, which is what the samples have to be
+  mapped back through before they can be compared against a real corpus in
+  its original coordinates. A run that needs it and lacks it is skipped, not
+  silently sampled in the transformed space.
 
-The variants it drives are the SIFT ladder, defined by `configs/sift/v0.yaml`
-through `configs/sift/v2.yaml`; the table naming each variant's run directory
-now lives in `docs/datasets/sift.md`. Pass `--root` to point at a different
-tree. Variants missing either file are skipped with a message rather than
-failing the run, since checkpoints commonly live only on the training box.
+Which ladder it drives is chosen with `--dataset` (`sift` by default, `deep`
+for the DEEP ladder); the table naming each variant's run directory lives in
+that family's page under `docs/datasets/`. Pass `--root` to point at a
+different tree. Variants missing a required file are skipped with a message
+rather than failing the run, since checkpoints commonly live only on the
+training box.
 
 Samples are written to `<output-dir>/samples/<variant>.npy` and reused as the
 report's input, so they can be inspected independently.

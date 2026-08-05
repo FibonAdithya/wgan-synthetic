@@ -15,7 +15,7 @@ from torch import Tensor, nn
 from torch.amp import GradScaler, autocast
 from torch.utils.data import DataLoader
 
-from src.data.sift1m_dataset import (
+from src.data.dataset import (
     NumpyTensorDataset,
     PreprocessConfig,
     build_training_data,
@@ -304,7 +304,9 @@ def train(config: Dict) -> Tuple[Path, Dict]:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     data_cfg = config["data"]
-    preprocess_cfg = PreprocessConfig(**data_cfg["preprocess"])
+    preprocess_cfg = PreprocessConfig(
+        **data_cfg["preprocess"], metric=data_cfg.get("metric", "l2")
+    )
     x_train, x_holdout, preprocess_state = build_training_data(
         descriptor_path=data_cfg["real_path"],
         file_format=data_cfg["format"],

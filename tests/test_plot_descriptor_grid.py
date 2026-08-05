@@ -162,7 +162,7 @@ def test_variant_row_is_seed_reproducible(tmp_path, write_tiny_gated_run, monkey
 def test_missing_checkpoint_is_skipped_and_the_poster_still_renders(
     tmp_path, capsys, monkeypatch
 ):
-    absent = cv.Variant("ghost", "configs/sift_gan_v2.yaml", "runs/ghost")
+    absent = cv.Variant("ghost", "configs/sift/v2.yaml", "runs/ghost")
     monkeypatch.setattr(cv, "VARIANTS", (absent,))
     out = pdg.run(_args(tmp_path))
     assert out.exists()

@@ -9,7 +9,7 @@ from PIL import Image, ImageDraw
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 
-from src.data.sift1m_dataset import load_descriptors
+from src.data.dataset import load_descriptors
 
 
 def parse_args() -> argparse.Namespace:

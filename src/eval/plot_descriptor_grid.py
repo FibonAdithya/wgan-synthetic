@@ -29,7 +29,7 @@ import plotly.graph_objects as go
 import torch
 import yaml
 
-from src.data.sift1m_dataset import load_descriptors
+from src.data.dataset import load_descriptors
 from src.eval import compare_variants as cv
 from src.eval import eda_report
 from src.eval.descriptor_glyph import DESCRIPTOR_DIM

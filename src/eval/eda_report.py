@@ -35,7 +35,7 @@ from plotly.subplots import make_subplots
 from sklearn.decomposition import PCA
 from sklearn.neighbors import NearestNeighbors
 
-from src.data.sift1m_dataset import load_descriptors
+from src.data.dataset import load_descriptors
 from src.eval import ann_difficulty
 from src.eval.descriptor_glyph import (
     DESCRIPTOR_DIM,

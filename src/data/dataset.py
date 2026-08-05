@@ -39,12 +39,24 @@ def _load_npy(path: Path) -> np.ndarray:
     return arr.astype(np.float32, copy=False)
 
 
+METRICS = ("l2", "angular")
+
+
 @dataclass
 class PreprocessConfig:
     center: bool = False
     whiten: bool = False
     l2_normalize: bool = True
     eps: float = 1.0e-8
+    metric: str = "l2"
+
+    def __post_init__(self) -> None:
+        if self.metric not in METRICS:
+            raise ValueError(
+                f"Unknown metric {self.metric!r}; expected one of {METRICS}. "
+                "This is the distance the real corpus is searched under, not a "
+                "preprocessing step."
+            )
 
 
 @dataclass

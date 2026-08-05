@@ -72,7 +72,7 @@ def write_tiny_gated_run():
         }
         (run_dir / "run_config.yaml").write_text(yaml.safe_dump(run_config))
 
-        variant = cv.Variant(name, "configs/sift_gan_v2.yaml", f"runs/{name}")
+        variant = cv.Variant(name, "configs/sift/v2.yaml", f"runs/{name}")
         return variant, descriptor_dim
 
     return _write

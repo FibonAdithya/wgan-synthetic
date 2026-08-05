@@ -23,8 +23,8 @@ def test_every_variant_config_exists():
 
 def test_resolve_skips_variants_with_no_checkpoint(tmp_path, make_run_dir):
     variants = (
-        cv.Variant("v0", "configs/sift_gan_v0.yaml", "runs/a"),
-        cv.Variant("v1", "configs/sift_gan_v1.yaml", "runs/b"),
+        cv.Variant("v0", "configs/sift/v0.yaml", "runs/a"),
+        cv.Variant("v1", "configs/sift/v1.yaml", "runs/b"),
     )
     make_run_dir(tmp_path / "runs", "a")
     make_run_dir(tmp_path / "runs", "b", with_checkpoint=False)
@@ -37,7 +37,7 @@ def test_resolve_skips_variants_with_no_checkpoint(tmp_path, make_run_dir):
 
 
 def test_resolve_skips_variants_with_no_run_config(tmp_path, make_run_dir):
-    variants = (cv.Variant("v0", "configs/sift_gan_v0.yaml", "runs/a"),)
+    variants = (cv.Variant("v0", "configs/sift/v0.yaml", "runs/a"),)
     make_run_dir(tmp_path / "runs", "a", with_config=False)
 
     found, skipped = cv.resolve_variants(variants, root=tmp_path)
@@ -47,7 +47,7 @@ def test_resolve_skips_variants_with_no_run_config(tmp_path, make_run_dir):
 
 
 def test_resolve_reports_a_missing_run_dir(tmp_path):
-    variants = (cv.Variant("v0", "configs/sift_gan_v0.yaml", "runs/nope"),)
+    variants = (cv.Variant("v0", "configs/sift/v0.yaml", "runs/nope"),)
 
     found, skipped = cv.resolve_variants(variants, root=tmp_path)
 
@@ -57,8 +57,8 @@ def test_resolve_reports_a_missing_run_dir(tmp_path):
 
 def test_resolve_finds_everything_when_present(tmp_path, make_run_dir):
     variants = (
-        cv.Variant("v0", "configs/sift_gan_v0.yaml", "runs/a"),
-        cv.Variant("v2", "configs/sift_gan_v2.yaml", "runs/b"),
+        cv.Variant("v0", "configs/sift/v0.yaml", "runs/a"),
+        cv.Variant("v2", "configs/sift/v2.yaml", "runs/b"),
     )
     make_run_dir(tmp_path / "runs", "a")
     make_run_dir(tmp_path / "runs", "b")

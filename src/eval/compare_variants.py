@@ -183,6 +183,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--bins", type=int, default=80)
     parser.add_argument("--top-divergent", type=int, default=16)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--glyph-samples", type=int, default=eda_report.GLYPH_SAMPLES_DEFAULT
+    )
     parser.add_argument("--no-png", action="store_true")
     parser.add_argument(
         "--plotlyjs", type=str, default="inline", choices=["inline", "cdn", "directory"]
@@ -216,6 +219,7 @@ def build_report_args(args: argparse.Namespace, specs: List[str]) -> argparse.Na
         bins=args.bins,
         top_divergent=args.top_divergent,
         seed=args.seed,
+        glyph_samples=args.glyph_samples,
         no_png=args.no_png,
         plotlyjs=args.plotlyjs,
     )

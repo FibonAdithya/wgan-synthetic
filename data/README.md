@@ -50,6 +50,11 @@ not one of them: it records the distance the real corpus is searched under,
 not a transform to apply. Setting it does not normalize anything, and
 `l2_normalize` is configured independently.
 
+`src/eval/plot_descriptor_grid.py` depends on `center: false` and
+`whiten: false`, since it interprets dimension `(row * 4 + col) * 8 + bin` as
+a specific spatial cell and orientation bin; centering or whitening would
+break that mapping.
+
 ## Example layout
 
 - `data/sift_250k.npy`

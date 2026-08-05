@@ -4,13 +4,9 @@ from pathlib import Path
 
 import numpy as np
 import torch
-import yaml
 
 from src.eval import compare_variants as cv
 from src.eval import eda_report
-from src.models.critic import Critic
-from src.models.generator import build_generator
-from src.train.train_wgan_gp import save_checkpoint
 
 
 def test_variants_are_the_four_named_ones():
@@ -25,23 +21,13 @@ def test_every_variant_config_exists():
         assert (REPO_ROOT / v.config_path).exists(), f"missing config for {v.name}"
 
 
-def _make_run_dir(root, name, with_checkpoint=True, with_config=True):
-    d = root / name
-    d.mkdir(parents=True)
-    if with_config:
-        (d / "run_config.yaml").write_text("model: {}\n")
-    if with_checkpoint:
-        (d / "best_generator.pt").write_bytes(b"")
-    return d
-
-
-def test_resolve_skips_variants_with_no_checkpoint(tmp_path):
+def test_resolve_skips_variants_with_no_checkpoint(tmp_path, make_run_dir):
     variants = (
         cv.Variant("v0", "configs/sift/v0.yaml", "runs/a"),
         cv.Variant("v1", "configs/sift/v1.yaml", "runs/b"),
     )
-    _make_run_dir(tmp_path / "runs", "a")
-    _make_run_dir(tmp_path / "runs", "b", with_checkpoint=False)
+    make_run_dir(tmp_path / "runs", "a")
+    make_run_dir(tmp_path / "runs", "b", with_checkpoint=False)
 
     found, skipped = cv.resolve_variants(variants, root=tmp_path)
 
@@ -50,9 +36,9 @@ def test_resolve_skips_variants_with_no_checkpoint(tmp_path):
     assert "best_generator.pt" in skipped[0][1]
 
 
-def test_resolve_skips_variants_with_no_run_config(tmp_path):
+def test_resolve_skips_variants_with_no_run_config(tmp_path, make_run_dir):
     variants = (cv.Variant("v0", "configs/sift/v0.yaml", "runs/a"),)
-    _make_run_dir(tmp_path / "runs", "a", with_config=False)
+    make_run_dir(tmp_path / "runs", "a", with_config=False)
 
     found, skipped = cv.resolve_variants(variants, root=tmp_path)
 
@@ -69,13 +55,13 @@ def test_resolve_reports_a_missing_run_dir(tmp_path):
     assert [v.name for v, _ in skipped] == ["v0"]
 
 
-def test_resolve_finds_everything_when_present(tmp_path):
+def test_resolve_finds_everything_when_present(tmp_path, make_run_dir):
     variants = (
         cv.Variant("v0", "configs/sift/v0.yaml", "runs/a"),
         cv.Variant("v2", "configs/sift/v2.yaml", "runs/b"),
     )
-    _make_run_dir(tmp_path / "runs", "a")
-    _make_run_dir(tmp_path / "runs", "b")
+    make_run_dir(tmp_path / "runs", "a")
+    make_run_dir(tmp_path / "runs", "b")
 
     found, skipped = cv.resolve_variants(variants, root=tmp_path)
 
@@ -83,47 +69,9 @@ def test_resolve_finds_everything_when_present(tmp_path):
     assert skipped == []
 
 
-def _write_tiny_gated_run(tmp_path, name="tiny_gated"):
-    """Write a real save_checkpoint + run_config pair for a tiny gated model."""
-    model_cfg = {
-        "latent_dim": 4,
-        "generator_hidden_dims": [6],
-        "negative_slope": 0.2,
-        "generator_type": "gated",
-        "gate_temperature": 0.5,
-        "logit_clamp": 4.0,
-    }
-    descriptor_dim = 8
-
-    generator = build_generator(model_cfg, output_dim=descriptor_dim)
-    critic = Critic(input_dim=descriptor_dim, hidden_dims=[6], negative_slope=0.2)
-    optim_g = torch.optim.Adam(generator.parameters(), lr=1e-4)
-    optim_d = torch.optim.Adam(critic.parameters(), lr=1e-4)
-
-    run_dir = tmp_path / "runs" / name
-    save_checkpoint(
-        generator,
-        critic,
-        optim_g,
-        optim_d,
-        out_dir=run_dir,
-        step=1,
-        best=True,
-        generator_weights="live",
-    )
-
-    run_config = {
-        "device": "cpu",
-        "model": model_cfg,
-        "data": {"descriptor_dim": descriptor_dim},
-    }
-    (run_dir / "run_config.yaml").write_text(yaml.safe_dump(run_config))
-
-    variant = cv.Variant(name, "configs/sift/v2.yaml", f"runs/{name}")
-    return variant, descriptor_dim
-
-
-def test_generate_samples_round_trips_a_real_gated_checkpoint(tmp_path):
+def test_generate_samples_round_trips_a_real_gated_checkpoint(
+    tmp_path, write_tiny_gated_run
+):
     """Exercise the full generate_samples seam end to end.
 
     This is the only test in the branch that proves a checkpoint written by
@@ -132,7 +80,7 @@ def test_generate_samples_round_trips_a_real_gated_checkpoint(tmp_path):
     gated generator, that the sparse->gated rename did not break checkpoint
     loadability.
     """
-    variant, descriptor_dim = _write_tiny_gated_run(tmp_path)
+    variant, descriptor_dim = write_tiny_gated_run(tmp_path)
     out_dir = tmp_path / "samples"
     out_dir.mkdir()
 
@@ -162,14 +110,16 @@ def test_variant_seed_differs_per_variant_and_is_stable():
     assert cv.variant_seed(7, "v2") != seeds["v2"], "--seed must still move it"
 
 
-def test_generate_samples_does_not_depend_on_preceding_variants(tmp_path):
+def test_generate_samples_does_not_depend_on_preceding_variants(
+    tmp_path, write_tiny_gated_run
+):
     """A skipped variant must not change the samples of the ones that survive.
 
     Variants are skipped whenever their checkpoint is not on this machine, so
     a single seed for the whole loop would make v2's samples depend on how
     many earlier checkpoints happened to be present.
     """
-    variant, _ = _write_tiny_gated_run(tmp_path)
+    variant, _ = write_tiny_gated_run(tmp_path)
     out_dir = tmp_path / "samples"
     out_dir.mkdir()
 
@@ -216,6 +166,7 @@ def test_report_args_match_eda_report_fields(monkeypatch, tmp_path):
         bins=8,
         top_divergent=4,
         seed=42,
+        glyph_samples=eda_report.GLYPH_SAMPLES_DEFAULT,
         no_png=True,
         plotlyjs="cdn",
     )

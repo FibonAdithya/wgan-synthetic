@@ -403,12 +403,28 @@ Memory-safe note:
   - `src/eval/eda_report.py`
   - One self-contained interactive HTML file (plotly bundled inline, opens
     offline) plus a `summary.json` and best-effort PNGs.
-  - Panels: local intrinsic dimensionality and relative contrast (ANN
-    difficulty), hubness (k-occurrence), IVF cell balance, pooled value
-    distribution, per-dimension marginals with a dropdown over every
-    dimension, per-dim mean/std/zero-rate profiles, pairwise distances,
+  - Panels: descriptor glyphs, local intrinsic dimensionality and relative
+    contrast (ANN difficulty), hubness (k-occurrence), IVF cell balance,
+    pooled value distribution, per-dimension marginals with a dropdown over
+    every dimension, per-dim mean/std/zero-rate profiles, pairwise distances,
     within-set kNN distances, PCA spectrum, correlation heatmaps, and a
     Wasserstein-1 ranking of the worst-matching dimensions.
+  - The descriptor glyph panel comes first because it frames the rest: every
+    other panel is an aggregate over tens of thousands of vectors, and all of
+    them can look healthy while the generator emits descriptors that are
+    structurally wrong. It draws a handful of individual descriptors instead
+    -- two real rows and one per synthetic set -- using the geometry in
+    `src/eval/descriptor_glyph.py`. `--glyph-samples` (default 8) sets
+    descriptors per row, and `0` turns the panel off. It is skipped
+    automatically unless every series is 128-dimensional and large enough for
+    its rows, since the (cell, orientation bin) mapping exists only for SIFT
+    descriptors while the rest of the report is dimension-agnostic.
+  - Caveat the glyph panel cannot check: it assumes the arrays it is handed
+    are raw descriptors. `eda_report` sees materialised `.npy` files, not run
+    configs, so a set that was centered or whitened before being written out
+    no longer maps dimension to (cell, orientation bin) and would be drawn as
+    a plausible-looking lie. `plot_descriptor_grid` reads the run config and
+    refuses such a run outright; prefer it when that risk is live.
   - The ANN-difficulty panels carry the gate described above; their knobs
     are set here. `--ann-k` (default 100) sets the neighbour depth
     for LID and relative contrast, `--ann-hub-k` (default 10) the depth for
@@ -467,6 +483,68 @@ off a remote training box:
 
 When running on a remote box, generating with `--plotlyjs cdn` and gzipping
 before transfer took the three-report set from 5.7MB to 1.5MB.
+
+- Descriptor glyph grid (standalone):
+  - `src/eval/plot_descriptor_grid.py`
+  - The same figure as the `eda_report` glyph panel -- `eda_report.
+    fig_descriptor_glyphs` is the single implementation both use -- but
+    sourced differently. This CLI loads generator checkpoints and samples
+    them directly, so it works with no materialised `.npy` files and can read
+    each run config. That is what lets it refuse a run trained with centering
+    or whitening, a check `eda_report` structurally cannot make. Use the
+    report panel in the normal `compare_variants` flow; use this when
+    rendering straight from a checkpoint, or when the preprocessing of a set
+    is in doubt.
+  - Every aggregate panel is over tens of thousands of vectors. This
+    one instead draws individual SIFT descriptors as glyphs: each 128-value
+    descriptor becomes a 4x4 grid of spatial cells, and each cell an 8-ray
+    star, one ray per orientation bin, using the index convention
+    `index = (row * 4 + col) * 8 + orientation_bin`. Ray length is a shared
+    99th-percentile scale computed across every descriptor in the figure
+    (not per-glyph normalisation, which would make a flat generated
+    descriptor look as structured as a real one), and is clipped so a ray
+    never crosses into a neighbouring cell.
+  - Writes `descriptor_grid.html` into `--output-dir`, plus a `png/`
+    subdirectory unless `--no-png`. The figure has two rows of real
+    descriptors (`real-a`, `real-b`) above one row per resolvable variant
+    checkpoint.
+  - How to read it: real SIFT is sparse and spiky, with most cells dominated
+    by one or two directions. Even, bushy stars mean the generator matched
+    the marginals without the structure. **Red rays are negative bins --
+    impossible for a gradient histogram**, and expected from v0/v1/v1_5,
+    which use the unactivated MLP generator. The real-a/real-b pair is the
+    baseline for how much natural variation to expect before comparing it to
+    a variant row.
+  - Negative rays are drawn at a minimum length
+    (`descriptor_glyph.NEGATIVE_RAY_FLOOR`, 35% of the half-cell) rather than
+    their true one. Measured on the real checkpoints, v0/v1/v1_5 put around
+    10% of their bins below zero but at a median magnitude of 0.003 against a
+    scale reference of 0.26 -- roughly 0.4px in a 2400px export, which made
+    the figure's headline defect invisible. Length therefore does **not**
+    encode magnitude for negative rays; their presence and count are what to
+    read. Positive rays keep the honest shared scale, since flooring those
+    would give every near-zero bin a ray and erase the real-vs-generated
+    sparsity difference.
+  - It refuses to run against a variant trained with centering or
+    whitening, or one that generates a width other than 128, because either
+    breaks the dimension-to-(cell, bin) mapping the glyph depends on. It also
+    refuses a real or generated array containing NaN or inf, since either
+    would draw a spurious or blank glyph rather than a true picture of the
+    descriptor. A variant whose checkpoint or run config is not on this
+    machine is skipped with a printed message, like `compare_variants`.
+  - Flags: `--num-samples` (default 8) sets descriptors per row; `--seed`
+    (default 42); `--root` (default `.`), the repo root that variant config
+    and run paths resolve against; `--real-format` (default `auto`, or `npy`
+    / `fvecs`), same meaning as in `eda_report`; `--plotlyjs` (default
+    `inline`), likewise. PNG export follows the same best-effort
+    stance as `eda_report`: without a Chrome install the HTML report is still
+    written and the export is skipped with a printed message.
+
+```bash
+.venv/bin/python -m src.eval.plot_descriptor_grid \
+    --real-path data/sift_base.npy \
+    --output-dir runs/descriptor_grid
+```
 
 ---
 

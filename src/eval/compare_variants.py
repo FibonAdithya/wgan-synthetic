@@ -329,9 +329,18 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=eda_report.ANN_MAX_ROWS_DEFAULT,
         help=(
-            "Equal-N truncation for every difficulty metric, and for the "
-            "within-set k-NN panel. LID, contrast and hubness all drift with "
-            "sample count, so every set must be cut to the same size."
+            "Equal-N truncation for every ANN-difficulty metric. LID, "
+            "contrast and hubness all drift with sample count, so every set "
+            "must be cut to the same size."
+        ),
+    )
+    parser.add_argument(
+        "--knn-max-rows",
+        type=int,
+        default=eda_report.KNN_MAX_ROWS_DEFAULT,
+        help=(
+            "Equal-N truncation for the within-set k-NN distance panel, "
+            "which is not an ANN-difficulty panel."
         ),
     )
     parser.add_argument(
@@ -375,6 +384,7 @@ def build_report_args(args: argparse.Namespace, specs: list[str]) -> argparse.Na
         ann_k=args.ann_k,
         ann_hub_k=args.ann_hub_k,
         ann_max_rows=args.ann_max_rows,
+        knn_max_rows=args.knn_max_rows,
         ivf_nlist=args.ivf_nlist,
         bins=args.bins,
         top_divergent=args.top_divergent,

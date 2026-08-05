@@ -43,6 +43,7 @@ import yaml
 
 from src.data.dataset import PreprocessState, invert_preprocess
 from src.eval import eda_report
+from src.eval.eda import config as eda_config
 from src.eval.evaluate_distribution import get_device, load_generator
 from src.train.train_wgan_gp import sample_generator
 
@@ -434,19 +435,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--ann-k",
         type=int,
-        default=eda_report.ANN_K_DEFAULT,
+        default=eda_config.ANN_K_DEFAULT,
         help="Neighbours per query for the LID and relative-contrast panels.",
     )
     parser.add_argument(
         "--ann-hub-k",
         type=int,
-        default=eda_report.ANN_HUB_K_DEFAULT,
+        default=eda_config.ANN_HUB_K_DEFAULT,
         help="Neighbour depth for the k-occurrence count behind the hubness panel.",
     )
     parser.add_argument(
         "--ann-max-rows",
         type=int,
-        default=eda_report.ANN_MAX_ROWS_DEFAULT,
+        default=eda_config.ANN_MAX_ROWS_DEFAULT,
         help=(
             "Equal-N truncation for every ANN-difficulty metric. LID, "
             "contrast and hubness all drift with sample count, so every set "
@@ -456,7 +457,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--knn-max-rows",
         type=int,
-        default=eda_report.KNN_MAX_ROWS_DEFAULT,
+        default=eda_config.KNN_MAX_ROWS_DEFAULT,
         help=(
             "Equal-N truncation for the within-set k-NN distance panel, "
             "which is not an ANN-difficulty panel."
@@ -465,14 +466,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--ivf-nlist",
         type=int,
-        default=eda_report.IVF_NLIST_DEFAULT,
+        default=eda_config.IVF_NLIST_DEFAULT,
         help="Cluster count for the IVF cell-balance panel.",
     )
     parser.add_argument("--bins", type=int, default=80)
     parser.add_argument("--top-divergent", type=int, default=16)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
-        "--glyph-samples", type=int, default=eda_report.GLYPH_SAMPLES_DEFAULT
+        "--glyph-samples", type=int, default=eda_config.GLYPH_SAMPLES_DEFAULT
     )
     parser.add_argument("--no-png", action="store_true")
     parser.add_argument(

@@ -10,6 +10,7 @@ import yaml
 
 from src.eval import compare_variants as cv
 from src.eval import eda_report
+from src.eval.eda import config as eda_config
 from src.models.generator import build_generator
 
 
@@ -163,15 +164,15 @@ def test_report_args_match_eda_report_fields(monkeypatch, tmp_path):
         max_vectors=100,
         num_pairs=200,
         knn=3,
-        ann_k=eda_report.ANN_K_DEFAULT,
-        ann_hub_k=eda_report.ANN_HUB_K_DEFAULT,
-        ann_max_rows=eda_report.ANN_MAX_ROWS_DEFAULT,
-        knn_max_rows=eda_report.KNN_MAX_ROWS_DEFAULT,
-        ivf_nlist=eda_report.IVF_NLIST_DEFAULT,
+        ann_k=eda_config.ANN_K_DEFAULT,
+        ann_hub_k=eda_config.ANN_HUB_K_DEFAULT,
+        ann_max_rows=eda_config.ANN_MAX_ROWS_DEFAULT,
+        knn_max_rows=eda_config.KNN_MAX_ROWS_DEFAULT,
+        ivf_nlist=eda_config.IVF_NLIST_DEFAULT,
         bins=8,
         top_divergent=4,
         seed=42,
-        glyph_samples=eda_report.GLYPH_SAMPLES_DEFAULT,
+        glyph_samples=eda_config.GLYPH_SAMPLES_DEFAULT,
         no_png=True,
         plotlyjs="cdn",
     )

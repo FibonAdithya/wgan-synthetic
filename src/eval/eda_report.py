@@ -44,6 +44,14 @@ from src.eval.descriptor_glyph import (
     glyph_segments,
     shared_scale,
 )
+from src.eval.eda.config import (
+    ANN_HUB_K_DEFAULT,
+    ANN_K_DEFAULT,
+    ANN_MAX_ROWS_DEFAULT,
+    GLYPH_SAMPLES_DEFAULT,
+    IVF_NLIST_DEFAULT,
+    KNN_MAX_ROWS_DEFAULT,
+)
 
 REAL_NAME = "real"
 REAL_COLOR = "#2b6cb0"
@@ -58,25 +66,11 @@ SYNTH_PALETTE = [
     "#a0522d",
 ]
 
-# Single source of truth for the ANN-difficulty flag defaults, shared with
-# compare_variants.py so its hand-built Namespace cannot silently drift from
-# what this module's own --ann-* / --ivf-nlist flags default to.
-ANN_K_DEFAULT = 100
-ANN_HUB_K_DEFAULT = 10
-ANN_MAX_ROWS_DEFAULT = 20000
-IVF_NLIST_DEFAULT = 256
-# The within-set k-NN distance panel is not an ANN-difficulty panel, so it
-# gets its own knob rather than riding on --ann-max-rows: tuning the cost of
-# the difficulty metrics should not silently move a pre-existing panel. The
-# default is the same number, so nothing changes unless a flag is passed.
-KNN_MAX_ROWS_DEFAULT = ANN_MAX_ROWS_DEFAULT
-
 # Descriptor glyph panel. Every other section here is an aggregate over tens of
 # thousands of vectors; this one draws a handful of individual descriptors,
 # because a matched marginal says nothing about whether the 128 numbers form a
 # plausible gradient histogram.
 GLYPH_SECTION_TITLE = "Descriptor glyphs"
-GLYPH_SAMPLES_DEFAULT = 8
 GLYPH_CELL_PITCH = 1.0
 # Roughly one glyph width (4 * GLYPH_CELL_PITCH) plus a gutter, so rows read as
 # discrete descriptors rather than one continuous texture.

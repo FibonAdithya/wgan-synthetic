@@ -6,6 +6,7 @@ import json
 import math
 import random
 from collections.abc import Iterator
+from functools import partial
 from pathlib import Path
 
 import numpy as np
@@ -13,7 +14,7 @@ import torch
 import yaml
 from torch import Tensor, nn
 from torch.amp import GradScaler, autocast
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset, RandomSampler
 
 from src.data.dataset import (
     NumpyTensorDataset,
@@ -30,6 +31,60 @@ def set_seed(seed: int) -> None:
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
+
+
+def seed_dataloader_worker(worker_id: int, base_seed: int) -> None:
+    """Reseed the RNGs inside a DataLoader worker process.
+
+    Workers are forked *after* `set_seed` ran in the parent, so without this
+    every worker starts from an identical `random`/numpy state -- any sampling
+    done inside the dataset would be duplicated across them. Deriving the
+    worker state from the run seed plus the worker id (rather than from process
+    or wall-clock entropy) keeps it a pure function of the config.
+    """
+    worker_seed = (base_seed + worker_id) % 2**32
+    random.seed(worker_seed)
+    np.random.seed(worker_seed)
+    torch.manual_seed(worker_seed)
+
+
+def build_dataloader(
+    dataset: Dataset,
+    *,
+    batch_size: int,
+    num_workers: int,
+    seed: int,
+    pin_memory: bool = False,
+) -> DataLoader:
+    """Build the shuffling training loader with a reproducible batch order.
+
+    The sampler is constructed by hand, with a generator of its own, rather than
+    passing `shuffle=True` plus `generator=`. Both give the permutation a seeded
+    source, but DataLoader's own `generator` is *also* what the multiprocessing
+    iterator draws its worker base seed from -- and with `persistent_workers` it
+    draws that once, while the single-process iterator redraws it on every
+    epoch. Sharing one generator therefore desynchronises the two after the
+    first epoch. A generator dedicated to the sampler is consumed only by the
+    per-epoch permutation, so the batch order depends on `seed` alone and not on
+    how many workers the machine happens to be configured for.
+    """
+    sampler_generator = torch.Generator()
+    sampler_generator.manual_seed(seed)
+    loader_generator = torch.Generator()
+    loader_generator.manual_seed(seed)
+    return DataLoader(
+        dataset,
+        batch_size=batch_size,
+        sampler=RandomSampler(dataset, generator=sampler_generator),
+        drop_last=True,
+        num_workers=num_workers,
+        # Keep workers alive across epochs: the loop re-creates the iterator on
+        # StopIteration, which would otherwise respawn the pool every epoch.
+        persistent_workers=num_workers > 0,
+        pin_memory=pin_memory,
+        generator=loader_generator,
+        worker_init_fn=partial(seed_dataloader_worker, base_seed=seed),
+    )
 
 
 def get_device(device_cfg: str) -> torch.device:
@@ -347,15 +402,11 @@ def train(config: dict) -> tuple[Path, dict]:
 
     dataset = NumpyTensorDataset(x_train)
     num_workers = int(train_cfg.get("num_workers", 0))
-    loader = DataLoader(
+    loader = build_dataloader(
         dataset,
         batch_size=int(train_cfg["batch_size"]),
-        shuffle=True,
-        drop_last=True,
         num_workers=num_workers,
-        # Keep workers alive across epochs: the loop re-creates the iterator on
-        # StopIteration, which would otherwise respawn the pool every epoch.
-        persistent_workers=num_workers > 0,
+        seed=seed,
         pin_memory=(device.type == "cuda"),
     )
     data_iter = iter(loader)

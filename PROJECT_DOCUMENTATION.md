@@ -534,8 +534,9 @@ before transfer took the three-report set from 5.7MB to 1.5MB.
     machine is skipped with a printed message, like `compare_variants`.
   - Flags: `--num-samples` (default 8) sets descriptors per row; `--seed`
     (default 42); `--root` (default `.`), the repo root that variant config
-    and run paths resolve against; `--plotlyjs` (default `inline`), same
-    meaning as in `eda_report`. PNG export follows the same best-effort
+    and run paths resolve against; `--real-format` (default `auto`, or `npy`
+    / `fvecs`), same meaning as in `eda_report`; `--plotlyjs` (default
+    `inline`), likewise. PNG export follows the same best-effort
     stance as `eda_report`: without a Chrome install the HTML report is still
     written and the export is skipped with a printed message.
 

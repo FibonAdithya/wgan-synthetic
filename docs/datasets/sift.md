@@ -28,6 +28,16 @@ dense MLP generator cannot reproduce that support, which is why `gated`
 exists — a softplus magnitude times a sampled binary gate, giving exact
 zeros.
 
+That structure is the one thing an aggregate cannot show you: the 128 values
+are a 4x4 grid of spatial cells holding 8-bin gradient orientation
+histograms, and a generator can match every marginal while producing 128
+numbers that are not a plausible histogram. The descriptor glyph panel draws
+individual descriptors instead — `Descriptor glyphs` in `eda_report`, or
+`src/eval/plot_descriptor_grid.py` to draw straight from run checkpoints.
+It is the only panel here that is SIFT-specific: the `(cell, orientation
+bin)` mapping does not exist for the other families, so it is skipped for
+them. See `PROJECT_DOCUMENTATION.md` for how to read it.
+
 ## Measured profile
 
 Read from the file rather than quoted from a paper. Canonical N and k are

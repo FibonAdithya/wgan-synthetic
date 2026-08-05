@@ -124,10 +124,16 @@ The judgment half — disk pressure, stale checkouts, orphaned run directories,
 drifted branches — goes to a periodically scheduled housekeeping agent that
 *reports and proposes*, and does not delete.
 
-### GPU lock: its own repository
+### The host layer: its own repository
 
-`gpu_lock.py` moves out of this repo into a small standalone project, installed
-onto any box by bootstrap and used by every project that touches the card.
+The lock, the queue, the runner, the reaper and bootstrap all move out of this
+repo into **`FibonAdithya/gpu-queue-management`** (private), installed onto any
+box by its own `bootstrap.sh`. Its design and implementation plan live there;
+this section records why the split exists and what stays behind.
+
+What stays here: job specs, dataset configs, and the per-dataset agent
+workflow. This repo becomes a *consumer* — it submits jobs via `gpuq` and
+reads back artifacts.
 
 The lock is already host-global in effect: it keys on the GPU UUID and writes
 to a fixed directory, so two checkouts running that code contend correctly
@@ -156,15 +162,20 @@ What must be shared is the protocol, not merely the file:
 
 Any implementation pinning those three interoperates.
 
+The queue and runner generalize for the same reason. The runner executes job
+specs and knows nothing about any model or dataset, so a second project on the
+box should get scheduling without reimplementing it. Keeping the lock and the
+scheduler that drives it in one place also avoids splitting the failure
+handling across two repositories.
+
 Enforcement stays **advisory**, as `flock` is, with one addition: a preflight
 that refuses to start when the card already carries foreign CUDA processes,
 naming the pid and command. This cannot stop a determined direct run. It turns
 accidental contention into a fast, readable failure instead of an OOM
 thirty minutes in.
 
-*Open at implementation time:* the new repository's owner and name. This repo
-lives under `Daniel-T-S-Adams`; creating a repository is an outward-facing act
-and needs confirmation before it happens.
+Enforcement and failure handling are specified in that repo's `docs/design.md`
+rather than duplicated here, so the two cannot drift.
 
 ### Isolation
 
@@ -208,13 +219,17 @@ to durable storage is available as an opt-in. Not built now.
 
 ### Bootstrap
 
-`tools/box/bootstrap.sh` takes a bare instance to a working runner,
-idempotently: clone, create the venv, install requirements, write the
-supervisor program file, create the queue tree, start the runner. The
-supervisor configuration ships in the repo rather than being added by hand.
+`bootstrap.sh` lives in `gpu-queue-management` and takes a bare instance to a
+working runner, idempotently: install the package, create the queue tree,
+clone the declared project checkouts, write the supervisor program file, start
+the runner. The supervisor configuration ships in that repo rather than being
+added by hand.
 
-Host identity lives in exactly one place, `tools/box/host.env`, holding
-`BOX_SSH_HOST=tig-gpu`. Rebuilding is that one edit plus a bootstrap run.
+This repo contributes only its entry in `queue.toml` — remote, checkout path,
+venv, and whether the runner may commit artifacts to it.
+
+Host identity lives in exactly one place, the ssh target in that config.
+Rebuilding is one edit plus a bootstrap run.
 
 Rebuild costs a re-fetch of roughly 15GB of HDF5, about half an hour. vast.ai
 volumes could persist `/workspace/data-cache` across instances; slow is
@@ -235,8 +250,9 @@ agents are hard-blocked on PR #7, which is what puts `configs/<dataset>/` and
 | Phase | Work | Blocked on |
 |---|---|---|
 | 0 | Cleanup, local and box | — |
-| 1 | Extract the GPU lock to its own repo; cherry-pick device resolver, resume and EMA-checkpoint commits onto `main` | — |
-| 2 | Queue, runner, reaper, bootstrap | phase 1 |
+| 1 | Build `gpu-queue-management` (lock, queue, runner, reaper, bootstrap) — plan in that repo | — |
+| 1b | Cherry-pick device resolver, resume and EMA-checkpoint commits from `worktree-gan+infra-exec` onto `main` here | — |
+| 2 | Add this repo's `queue.toml` entry and a job-submission helper | phase 1 |
 | 3 | Rebuild box from bootstrap; fetch and profile all six | #7 merged, phase 2 |
 | 4 | Breadth-first `v0` across all six families | phase 3 |
 | 5 | Gate bands per dataset, then deepen ladders | phase 4 |
@@ -245,10 +261,11 @@ Phase 3 is where the parallelism pays: six fetches and six `eda_report` runs
 occupy the CPU lane at once. Phase 4 is serial on the card — at roughly 1–3
 hours per 30k-step run, one rung across six families is most of a day.
 
-This spec covers more than one implementation plan. **Phases 0–2 are the first
-plan** — cleanup, the lock extraction, and the queue/runner/reaper/bootstrap
-build. Phases 3–5 are execution against that infrastructure and get their own
-plan once it exists, because what they should contain depends on what phase 3
+Phase 1 has its own plan in its own repo:
+`gpu-queue-management/docs/plans/2026-08-05-initial-implementation.md`, ten
+tasks, executable by an agent with no context from this project. Phases 0 and
+1b are cleanup and a rebase, needing no plan. Phases 3–5 get a plan once the
+infrastructure exists, because what they contain depends on what phase 3
 measures.
 
 **Breadth-first is deliberate.** A `v0` everywhere before any `v1` sets gate
@@ -291,4 +308,7 @@ The `pentest-scorer` supervisor process, unrelated to this project and running
   recorded in `docs/datasets/<name>.md`.
 - **The v3/v4 model track** on `worktree-gan+infra-exec` — `structured_gated`,
   the log-ratio regularizer and seven probe tools. It stays on its branch until
-  someone owns it. Only the infrastructure commits are extracted in phase 1.
+  someone owns it. Only the training-loop commits are cherry-picked in phase 1b.
+- **Everything in `gpu-queue-management`.** The lock protocol, queue format,
+  runner behaviour and failure handling are specified there. This document
+  records only why the split exists and what this repo submits.

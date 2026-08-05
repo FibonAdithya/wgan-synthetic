@@ -279,12 +279,16 @@ def compute(
     )
 
 
-def summary(m: AnnMetrics) -> dict[str, float | None]:
+def summary(m: AnnMetrics) -> dict[str, float | int | None]:
     """Scalars for the report's statistics table and summary.json.
 
     lid_median and relative_contrast_median are None when every query was
     discarded, which happens only for a fully degenerate set. Callers must
     render None rather than assuming a float.
+
+    lid_discarded_queries is a count, so it is an int and not a float: at a
+    million rows `format(1200000.0, '.6g')` renders `1.2e+06`, which reads as
+    a measurement rather than a tally.
     """
     has_queries = m.lid.size > 0
     return {
@@ -294,5 +298,5 @@ def summary(m: AnnMetrics) -> dict[str, float | None]:
         ),
         "hubness_skew": hubness_skew(m.k_occurrence),
         "ivf_gini": gini(m.cell_occupancy),
-        "lid_discarded_queries": float(m.discarded_queries),
+        "lid_discarded_queries": int(m.discarded_queries),
     }

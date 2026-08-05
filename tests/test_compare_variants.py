@@ -166,6 +166,7 @@ def test_report_args_match_eda_report_fields(monkeypatch, tmp_path):
         ann_k=eda_report.ANN_K_DEFAULT,
         ann_hub_k=eda_report.ANN_HUB_K_DEFAULT,
         ann_max_rows=eda_report.ANN_MAX_ROWS_DEFAULT,
+        knn_max_rows=eda_report.KNN_MAX_ROWS_DEFAULT,
         ivf_nlist=eda_report.IVF_NLIST_DEFAULT,
         bins=8,
         top_divergent=4,

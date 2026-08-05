@@ -285,3 +285,22 @@ def test_summary_returns_the_agreed_keys():
     }
     assert result["lid_median"] > 0
     assert result["lid_discarded_queries"] == 0
+
+
+def test_summary_reports_the_discarded_count_as_an_int_not_a_float():
+    """It is a tally, and `format(1200000.0, '.6g')` renders `1.2e+06` in the
+    report's statistics table."""
+    x = np.tile(np.array([[1.0, 0.0, 0.0]], dtype=np.float32), (40, 1))
+    result = summary(compute(x, k=10, k_hub=5, nlist=8, max_rows=0, seed=0))
+    assert isinstance(result["lid_discarded_queries"], int)
+
+
+def test_compute_discards_every_query_when_k_clamps_to_one():
+    """A two-row set clamps k_eff to 1, where r_1 and r_k are the same column
+    so survivor_mask's r_1 < r_k can never hold. The report's discarded note
+    exists to explain this rather than let it render as a silent n/a."""
+    x = np.array([[0.0, 0.0], [1.0, 2.0]], dtype=np.float32)
+    metrics = compute(x, k=100, k_hub=5, nlist=8, max_rows=0, seed=0)
+    assert metrics.k == 1
+    assert metrics.discarded_queries == metrics.num_rows
+    assert summary(metrics)["lid_median"] is None

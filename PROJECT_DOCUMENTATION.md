@@ -460,7 +460,10 @@ Memory-safe note:
     the hubness k-occurrence count, `--ann-max-rows` (default 20000) the
     equal-N truncation every set is cut to so the metrics stay comparable
     across series, and `--ivf-nlist` (default 256) the cluster count for the
-    IVF cell-balance panel. These numbers are self-queried subsample
+    IVF cell-balance panel. The pre-existing within-set k-NN distance panel
+    is not an ANN-difficulty panel and has its own `--knn-max-rows`
+    (default 20000, the same number), so tuning ANN cost does not silently
+    move it. These numbers are self-queried subsample
     statistics, not published benchmark figures, and are only comparable
     across the series in one report; each family's locked values are in its
     page under `docs/datasets/`.

@@ -65,6 +65,11 @@ ANN_K_DEFAULT = 100
 ANN_HUB_K_DEFAULT = 10
 ANN_MAX_ROWS_DEFAULT = 20000
 IVF_NLIST_DEFAULT = 256
+# The within-set k-NN distance panel is not an ANN-difficulty panel, so it
+# gets its own knob rather than riding on --ann-max-rows: tuning the cost of
+# the difficulty metrics should not silently move a pre-existing panel. The
+# default is the same number, so nothing changes unless a flag is passed.
+KNN_MAX_ROWS_DEFAULT = ANN_MAX_ROWS_DEFAULT
 
 # Descriptor glyph panel. Every other section here is an aggregate over tens of
 # thousands of vectors; this one draws a handful of individual descriptors,
@@ -156,9 +161,19 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=ANN_MAX_ROWS_DEFAULT,
         help=(
-            "Equal-N truncation for every difficulty metric, and for the "
-            "within-set k-NN panel. LID, contrast and hubness all drift with "
-            "sample count, so every set must be cut to the same size."
+            "Equal-N truncation for every ANN-difficulty metric. LID, "
+            "contrast and hubness all drift with sample count, so every set "
+            "must be cut to the same size."
+        ),
+    )
+    parser.add_argument(
+        "--knn-max-rows",
+        type=int,
+        default=KNN_MAX_ROWS_DEFAULT,
+        help=(
+            "Equal-N truncation for the within-set k-NN distance panel, "
+            "which is not an ANN-difficulty panel. k-NN distance shrinks as "
+            "sample count grows, so every set must be cut to the same size."
         ),
     )
     parser.add_argument(
@@ -510,6 +525,20 @@ def fig_ann_profile(
         values = [getattr(metrics[s.name], attr) for s in series]
         populated = [v for v in values if v.size]
         if not populated:
+            # Every series was fully degenerate, so there is nothing to bin.
+            # Say so in the subplot rather than leaving an empty pair of axes
+            # that reads as a rendering failure.
+            fig.add_annotation(
+                text="no surviving queries",
+                showarrow=False,
+                xref="x domain",
+                yref="y domain",
+                x=0.5,
+                y=0.5,
+                font=dict(color="#718096"),
+                row=1,
+                col=col,
+            )
             continue
         edges = shared_edges(populated, bins)
         centers = 0.5 * (edges[:-1] + edges[1:])
@@ -754,7 +783,7 @@ def summary_stats(
     knn: int,
     num_pairs: int,
     seed: int,
-    max_rows: int,
+    knn_max_rows: int,
     metrics: ann_difficulty.AnnMetrics,
 ) -> dict:
     norms = np.linalg.norm(s.x, axis=1)
@@ -777,7 +806,7 @@ def summary_stats(
             np.median(pairwise_distance_sample(s.x, num_pairs, seed))
         ),
         f"median_{knn}nn_distance": float(
-            np.median(nn_distances(s.x, knn, seed, max_rows))
+            np.median(nn_distances(s.x, knn, seed, knn_max_rows))
         ),
         "effective_rank": effective_rank(s.x),
     }
@@ -794,14 +823,27 @@ def summary_stats(
     return stats
 
 
+def format_stat(value: float | int | None) -> str:
+    """Render one statistics-table cell.
+
+    Counts stay counts: `format(1200000, '.6g')` is `1.2e+06`, which reads as
+    a measurement rather than a tally, so integer-valued statistics (row
+    counts, discarded queries, the measured k and nlist) are formatted as
+    plain integers and only the genuinely continuous ones get `.6g`.
+    """
+    if value is None:
+        return "n/a"
+    if isinstance(value, (int, np.integer)) and not isinstance(value, bool):
+        return format(int(value), "d")
+    return format(value, ".6g")
+
+
 def stats_table_html(stats: list[dict]) -> str:
     keys = [k for k in stats[0] if k != "name"]
     header = "".join(f"<th>{s['name']}</th>" for s in stats)
     rows = []
     for k in keys:
-        cells = "".join(
-            f"<td>{'n/a' if s[k] is None else format(s[k], '.6g')}</td>" for s in stats
-        )
+        cells = "".join(f"<td>{format_stat(s[k])}</td>" for s in stats)
         rows.append(f"<tr><th>{k}</th>{cells}</tr>")
     return (
         "<table><thead><tr><th>statistic</th>"
@@ -940,6 +982,47 @@ def ann_condition_note(
     )
 
 
+def ann_discarded_note(
+    series: Sequence[Series],
+    ann_metrics: dict[str, ann_difficulty.AnnMetrics],
+) -> str:
+    """Call out any series that contributed no queries at all, and why.
+
+    `summary` returns None for `lid_median` and `relative_contrast_median`
+    when every query was discarded, and the panel simply has no trace for
+    that series. That is the honest answer, but on its own it renders as a
+    silent `n/a`. The two ways to get there are a set of exact duplicates
+    (every query has r_1 == 0) and `k == 1` -- either passed via `--ann-k 1`
+    or clamped there by `knn` for a two-row series -- where r_1 and r_k are
+    the same column, so `survivor_mask`'s r_1 < r_k can never hold.
+
+    Only the LID/contrast panels need this: hubness and IVF balance are
+    computed over every row regardless of which queries survived.
+    """
+    affected = []
+    for s in series:
+        m = ann_metrics[s.name]
+        if m.num_rows == 0 or m.discarded_queries != m.num_rows:
+            continue
+        # k < 2 is checked first: at k == 1 the mask cannot pass whatever the
+        # data looks like, so it explains the whole series on its own.
+        reason = (
+            "measured at k=1, where the nearest and the k-th neighbour are "
+            "the same point, so no query can pass the estimator's r_1 < r_k "
+            "test"
+            if m.k < 2
+            else "every query sits on an exact duplicate"
+        )
+        affected.append(f"{s.name} ({reason})")
+    if not affected:
+        return ""
+    return (
+        f" <b>No surviving queries for {'; '.join(affected)}</b>. Both panels "
+        "report n/a for those series rather than a number, and draw no trace "
+        "for them."
+    )
+
+
 def run(args: argparse.Namespace) -> Path:
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -963,7 +1046,7 @@ def run(args: argparse.Namespace) -> Path:
             args.knn,
             args.num_pairs,
             args.seed,
-            args.ann_max_rows,
+            args.knn_max_rows,
             ann_metrics[s.name],
         )
         for s in series
@@ -1019,6 +1102,7 @@ def run(args: argparse.Namespace) -> Path:
             + ann_condition_note(
                 series, ann_metrics, (("num_rows", "rows"), ("k", "k"))
             )
+            + ann_discarded_note(series, ann_metrics)
             + ann_note_suffix,
             fig_ann_profile(series, ann_metrics, args.bins),
         )
@@ -1121,7 +1205,7 @@ def run(args: argparse.Namespace) -> Path:
                 [
                     (
                         s.name,
-                        nn_distances(s.x, args.knn, args.seed, args.ann_max_rows),
+                        nn_distances(s.x, args.knn, args.seed, args.knn_max_rows),
                         s.color,
                     )
                     for s in series
@@ -1214,6 +1298,7 @@ def run(args: argparse.Namespace) -> Path:
             "max_rows": args.ann_max_rows,
             "nlist": args.ivf_nlist,
         },
+        "knn_settings": {"k": args.knn, "max_rows": args.knn_max_rows},
         "stats": stats,
         "worst_dimensions": worst_dims,
         "report_html": str(report_path),

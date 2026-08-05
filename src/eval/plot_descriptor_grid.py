@@ -167,6 +167,23 @@ def variant_rows(
     """
     found, skipped = cv.resolve_variants(cv.VARIANTS, root)
     for variant, reason in skipped:
+        # check_preprocess even though this variant is skipped. `resolve_variants`
+        # also drops a centered/whitened run whose fitted transform cannot be
+        # recovered, and such a variant would otherwise slip past the refusal
+        # below and go silently absent from the poster instead of loudly
+        # refused. The objection is to the training config, not to the run
+        # being unsamplable.
+        #
+        # Only for a variant that is otherwise plottable, though: one skipped
+        # because its checkpoint is not on this machine cannot be drawn under
+        # any preprocessing, and raising for it would make a missing checkpoint
+        # fatal -- the machine-dependent abort this skip list exists to avoid.
+        run_dir = root / variant.run_dir
+        run_config = run_dir / cv.RUN_CONFIG_NAME
+        if (run_dir / cv.CHECKPOINT_NAME).exists() and run_config.exists():
+            check_preprocess(
+                yaml.safe_load(run_config.read_text(encoding="utf-8")), variant.name
+            )
         print(f"skipping {variant.name}: {reason}")
     if not found:
         print("no variant checkpoints resolved; rendering the real rows only")

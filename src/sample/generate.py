@@ -1,3 +1,14 @@
+"""Draw vectors from one trained generator checkpoint.
+
+Emits samples in whatever space the run was trained in. That is the same
+space as the real corpus for any config preprocessing with L2 normalization
+alone -- every SIFT variant and the first two DEEP rungs -- but NOT for a
+config setting `preprocess.whiten` or `preprocess.center`. For those, use
+`python -m src.eval.compare_variants --dataset <family>`, which reads the
+fitted transform out of the run's `run_metadata.json` and inverts it. This
+script has no access to that transform and would emit vectors in whitened
+coordinates without saying so.
+"""
 from __future__ import annotations
 
 import argparse

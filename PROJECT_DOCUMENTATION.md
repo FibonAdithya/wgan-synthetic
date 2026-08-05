@@ -98,11 +98,25 @@ Generator objective:
 
 - Minimize `-E[D(fake)]`
 
-Optional generator regularizer (implemented):
+Optional generator regularizers (implemented). Both default to `0.0`, i.e.
+off, and each adds its term to `adv_loss` independently — a config may enable
+either, neither, or both:
 
 - Pairwise-distance mean matching on minibatches:
-  - `L_G = adv_loss + alpha * |mean_pairdist(real) - mean_pairdist(fake)|`
+  - `L_G += alpha * |mean_pairdist(real) - mean_pairdist(fake)|`
   - Controlled by `training.distance_reg_alpha` and `training.distance_reg_max_points`.
+- Covariance-spectrum matching on minibatches (`src/train/spectrum.py`):
+  - `L_G += alpha * mean|spectrum(real) - spectrum(fake)|`, where `spectrum`
+    is the sorted eigenvalues of the batch covariance divided by their own
+    trace — so it matches how variance is *distributed* across directions,
+    not how much of it there is. Overall scale is already pinned by the
+    unit-norm constraint.
+  - Controlled by `training.spectrum_reg_alpha`. Logged per step as
+    `spectrum_reg`.
+  - Motivated by DEEP, whose descriptors are PCA-compressed CNN embeddings
+    with a sharp, uneven variance decay the critic does not reliably enforce.
+    Nothing about the term itself is family-specific. Enabled by
+    `configs/deep/v1.yaml` and `v2.yaml`; no SIFT config uses it.
 
 ---
 
@@ -122,6 +136,21 @@ Preprocessing options:
 - `center` (train-split mean subtraction)
 - `whiten` (train-split covariance whitening)
 - `l2_normalize` (per-vector normalization)
+
+`center` and `whiten` change the space the generator learns, so its samples
+have to be mapped back before anything compares them against the real corpus.
+`invert_preprocess` (same module) undoes those two in reverse order, driven
+from the transform `train` records in each run's `run_metadata.json`;
+`src/eval/compare_variants.py` calls it on every sample it draws, which is a
+no-op for runs that only normalize. `l2_normalize` is deliberately *not*
+inverted — it discards each vector's norm, so the information needed to undo
+it is gone, and the families this matters to are compared angularly anyway.
+
+One combination is refused rather than supported: `center` together with
+`l2_normalize`. Sampling L2-normalizes before inversion, and the subtracted
+mean's relative contribution then differs per row, so re-normalizing
+downstream yields systematically wrong directions with nothing to flag them.
+`compare_variants.invert_samples` raises on that state.
 
 Training/eval split:
 
@@ -677,5 +706,7 @@ Most impactful levers observed:
 - `n_critic` and critic LR
 - training length (`num_gen_steps`)
 - optional distance regularizer (`distance_reg_alpha`)
+- optional covariance-spectrum regularizer (`spectrum_reg_alpha`), for
+  families whose variance decays unevenly across directions
 
 Use separate output directories for every sweep run to avoid artifact overwrite.

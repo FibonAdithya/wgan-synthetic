@@ -127,6 +127,48 @@ def apply_preprocess(x: np.ndarray, state: PreprocessState) -> np.ndarray:
     return out.astype(np.float32, copy=False)
 
 
+def invert_preprocess(x: np.ndarray, state: PreprocessState) -> np.ndarray:
+    """Undo centering and whitening, in reverse order of `apply_preprocess`.
+
+    Needed because a config with `whiten: true` trains in a transformed space:
+    the generator's output lives there too, and has to be mapped back before
+    anything compares it against the real corpus.
+
+    L2 normalization is deliberately NOT inverted: it discards each vector's
+    norm, so the information needed to undo it is gone. That is not a
+    limitation for the families this matters to -- DEEP vectors are unit-norm
+    to begin with and are compared angularly.
+
+    The whitening matrix is symmetric (`u @ diag(1/sqrt(s)) @ u.T` over a
+    symmetric covariance), so its inverse is likewise symmetric. pinv rather
+    than inv, because the eps-regularized covariance can still be
+    near-singular on the tail dimensions of a PCA-derived set like DEEP.
+
+    Exactness, and the one case where it fails: `sample_generator`
+    L2-normalizes its raw output, so what callers invert is `normalize(x @ W)`.
+    With `state.mean is None` this reduces to
+    `normalize(x @ W) @ W^-1 = x / ||x @ W||` -- the original direction `x`
+    times a positive per-vector scalar, which any angular comparison is
+    invariant to. Directions come back exactly.
+
+    That breaks the moment `state.mean is not None`: the inverse then computes
+    `normalize(x @ W) @ W^-1 + mean`, and the mean's relative contribution to
+    that sum differs for every row (it does not scale with `1 / ||x @ W||` the
+    way the direction term does), so re-normalizing downstream no longer
+    recovers a uniformly scaled direction. This function raises nothing for
+    that case -- it cannot know whether its input was L2-normalized upstream.
+    Callers needing the exactness guarantee must reject
+    `state.mean is not None and state.config.l2_normalize` first; see
+    `src/eval/compare_variants.py::invert_samples`.
+    """
+    out = np.asarray(x, dtype=np.float32)
+    if state.whitening_matrix is not None:
+        out = out @ np.linalg.pinv(state.whitening_matrix).astype(np.float32)
+    if state.mean is not None:
+        out = out + state.mean
+    return np.ascontiguousarray(out, dtype=np.float32)
+
+
 def load_descriptors(path: Path, file_format: str = "auto") -> np.ndarray:
     if file_format == "auto":
         suffix = path.suffix.lower()

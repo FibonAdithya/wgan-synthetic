@@ -140,3 +140,80 @@ v0/v1/v1_5 are in `/workspace/wgan-synthetic/runs/` while v2 is in
 the four-row comparison needs the run directories collected under one tree
 first. Either move v2's run into the main checkout, or let `Variant` carry an
 absolute run dir.
+## DEEP ladder results rest on one seed per rung (PR #6)
+
+`docs/datasets/deep.md` reports three trained rungs at `seed: 42`. The ladder
+was run twice — once at `latent_dim: 128` (inherited from SIFT, since
+corrected) and once at 96 — which gives two draws rather than one, and the
+comparison is not reassuring: `v0`'s IVF gini gap moved tenfold and its
+hubness gap doubled under a change the target's effective rank of 65 says
+should barely bind. Several of those swings exceed the differences between
+rungs.
+
+Two claims survive both draws (`v2` closest on LID, `v1` closest on hubness
+skew by two orders of magnitude); the IVF gini ordering does not survive at
+all and should not be used to rank rungs. Two draws is still two.
+
+Three or four seeds per rung (~35 min each on the RTX 4060) would settle it,
+and are a prerequisite for setting this family's gate bands — a band fitted to
+either existing draw would be fitted to noise.
+
+Resolved in passing: the `summary.json` those numbers were read out of is now
+committed as `docs/datasets/deep_ladder_summary.json`, so the table is
+checkable from this repo alone.
+
+## `spectrum_reg_alpha: 0.1` is too small to bind, and v1 may be measuring noise (PR #6)
+
+The seed sweep above should be an **alpha sweep** as well, because there is
+reason to think `v1`'s rung is not currently testing what it claims to.
+
+`spectrum_distance` compares trace-normalized spectra, so at `d = 96` each
+entry is O(1/96) ≈ 0.0104 and the mean absolute gap between two spectra is
+inherently small. Measured on v1's actual architecture (512×96 batch,
+DEEP-like anisotropy, at initialization):
+
+| quantity | value |
+|---|---|
+| `spectrum_distance`, isotropic fake vs anisotropic real | 0.0039 |
+| `spectrum_distance`, untrained generator vs real | 0.0014 |
+| ‖∇_G adv_loss‖ | 0.170 |
+| ‖∇_G spectrum_reg‖ | 0.0205 |
+| ‖∇_G (0.1 × spectrum_reg)‖ | **0.0020** — ~1.2% of the adversarial gradient |
+
+So the term contributes about one percent of the generator gradient at its
+strongest, and shrinks from there as the spectra converge. `deep_ladder_summary.json`
+is consistent with it having done nothing to the property it targets:
+
+| | real | v0 | v1 | v2 |
+|---|---|---|---|---|
+| effective rank | 65.30 | 63.34 | **63.36** | 64.22 |
+
+`v1` moved effective rank by 0.02 against a 1.96 gap to real. The whitening
+rung moved it by 0.88 — roughly 45× more, with no penalty term at all. That
+makes the one claim surviving both draws (`v1` closest on hubness skew) most
+likely a consequence of a perturbed optimization trajectory rather than of the
+regularizer acting through the spectrum. Note that
+`test_enabling_the_regularizer_changes_the_generator` needed `alpha: 5.0` to
+show the term reaching the weights at all.
+
+Two things to decide together, since the second changes what `alpha` means:
+
+1. Sweep `alpha` over something like `{0.1, 1, 10}` alongside the seeds, and
+   report effective rank per rung so the term is judged on the property it
+   targets rather than only on downstream ANN metrics.
+2. Consider making the penalty scale-free — a relative gap rather than the
+   absolute mean, e.g. dividing by the real spectrum's mean entry — so that
+   `spectrum_reg_alpha` is comparable to `distance_reg_alpha` and does not
+   quietly depend on `descriptor_dim`.
+
+Not urgent: `v1` is not *wrong*, and nothing in `docs/datasets/deep.md`
+overclaims for it. But the rung costs 35 minutes a draw and currently cannot
+support the conclusion it exists to test.
+
+## `src/eval/ann_difficulty.py` is the last consumer that could inherit `--dataset`
+
+`compare_variants` now selects a family's ladder with `--dataset`, and reads
+the search metric off each config as `data.metric`. `ann_difficulty.py` still
+measures everything under L2 (phase (c), above). When it learns to read
+`data.metric`, `compare_variants` is where the value should be threaded
+through from — it already resolves the config for every variant it samples.

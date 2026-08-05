@@ -1,15 +1,20 @@
-# DEEP v0 -- plain WGAN-GP baseline, the first rung of the DEEP ladder.
+# DEEP v2 -- v1 plus PCA whitening of the training space. Where v1 pushes the
+# variance decay in with a penalty, v2 makes it exact by construction: the
+# generator learns an isotropic target and the anisotropy lives in a fixed
+# linear map, inverted at sample time. Sole delta from v1:
+# data.preprocess.whiten.
 #
-# Hyperparameters are carried over from configs/sift/v1.yaml -- the SIFT rung
-# that has generator EMA but not the pairwise-distance regularizer -- rather
-# than re-ablated, because the SIFT track already answered them.
+# This rung REQUIRES a sampler that inverts the transform. Draw its samples
+# with `python -m src.eval.compare_variants --dataset deep`, which does so via
+# invert_samples. src/sample/generate.py does not, and would emit vectors in
+# whitened space.
 #
-# No spherical generator is needed here. normalize_l2 is already applied
-# wherever the generator's output is consumed in train_wgan_gp.py, and it sits
-# in the autograd graph, so a plain MLP is trained against the unit sphere.
+# center stays false: with a mean subtracted, inverting after L2 normalization
+# no longer recovers directions exactly, and compare_variants refuses the
+# combination rather than returning quietly-wrong vectors.
 seed: 42
 device: auto
-output_dir: runs/deep/v0
+output_dir: runs/deep/v2
 
 data:
   real_path: data/deep_1m.npy
@@ -21,7 +26,7 @@ data:
   synthetic_num_vectors: 100000
   preprocess:
     center: false
-    whiten: false
+    whiten: true
     l2_normalize: true
 
 model:
@@ -47,7 +52,7 @@ training:
   ema_decay: 0.999
   distance_reg_alpha: 0.0
   distance_reg_max_points: 256
-  spectrum_reg_alpha: 0.0
+  spectrum_reg_alpha: 0.1
   num_workers: 0
   amp: false
   log_every: 250

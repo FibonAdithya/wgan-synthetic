@@ -187,6 +187,30 @@ def test_whitened_run_is_refused(tmp_path, write_tiny_gated_run, monkeypatch):
         pdg.run(_args(tmp_path))
 
 
+def test_whitened_run_without_a_checkpoint_degrades_rather_than_aborting(
+    tmp_path, write_tiny_gated_run, capsys, monkeypatch
+):
+    """The refusal is about runs that would otherwise be drawn.
+
+    A variant with no checkpoint on this machine cannot be plotted whatever its
+    preprocessing says, and `variant_rows` promises a partial poster in exactly
+    that case. Refusing here would make a missing checkpoint fatal -- a
+    machine-dependent abort, which is the thing the skip list exists to avoid.
+    """
+    variant, _ = write_tiny_gated_run(tmp_path, name="v2", descriptor_dim=128)
+    run_config_path = tmp_path / "runs" / "v2" / "run_config.yaml"
+    config = yaml.safe_load(run_config_path.read_text())
+    config["data"]["preprocess"] = {"center": False, "whiten": True}
+    run_config_path.write_text(yaml.safe_dump(config))
+    (tmp_path / "runs" / "v2" / cv.CHECKPOINT_NAME).unlink()
+    monkeypatch.setattr(cv, "VARIANTS", (variant,))
+
+    out = pdg.run(_args(tmp_path))
+
+    assert out.exists()
+    assert "v2" in capsys.readouterr().out
+
+
 def test_variant_generating_the_wrong_width_is_refused(
     tmp_path, write_tiny_gated_run, monkeypatch
 ):

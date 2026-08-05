@@ -278,10 +278,17 @@ def test_variant_colour_is_keyed_by_identity_not_resolved_position(
     assert v1_color_with_v0_present == v1_color_alone
 
 
-def test_variant_colour_fallback_for_a_name_absent_from_cv_variants():
-    assert pdg.variant_color("mystery") == pdg.VARIANT_COLORS[
-        len(cv.VARIANTS) % len(pdg.VARIANT_COLORS)
-    ]
+def test_variant_colour_fallback_is_distinct_from_every_known_variant():
+    """An unknown name must not borrow a known variant's colour. Wrapping the
+    index modulo the palette handed it v0's orange, so two rows in a figure
+    built for row-to-row comparison came out indistinguishable."""
+    known = {pdg.variant_color(v.name) for v in cv.VARIANTS}
+    assert pdg.variant_color("mystery") not in known
+
+
+def test_every_known_variant_gets_its_own_colour():
+    colors = [pdg.variant_color(v.name) for v in cv.VARIANTS]
+    assert len(set(colors)) == len(colors)
 
 
 def test_ray_scale_is_shared_across_rows_not_computed_per_row():

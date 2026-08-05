@@ -40,6 +40,11 @@ from src.train.train_wgan_gp import sample_generator
 # `eda_report`, which draws the same panel from materialised arrays.
 REAL_COLORS = eda_report.GLYPH_REAL_COLORS
 VARIANT_COLORS = ("#ff7f0e", "#2ca02c", "#9467bd", "#8c564b")
+# Any variant not in `cv.VARIANTS`. Deliberately outside the palette above:
+# wrapping the index into it instead handed an unknown name v0's orange, and
+# two identically-coloured rows are unreadable in a figure whose whole job is
+# row-to-row comparison. Grey also reads as "unplaced", which is accurate.
+UNKNOWN_VARIANT_COLOR = "#7f7f7f"
 
 REPORT_NAME = "descriptor_grid.html"
 
@@ -149,12 +154,13 @@ def variant_color(name: str) -> str:
     on this machine, so indexing `found` directly would make v1's colour
     depend on whether v0's checkpoint happens to be present -- the same
     machine-dependence `cv.variant_seed` exists to prevent for sampling. A
-    name absent from `cv.VARIANTS` falls back to a colour past the known
-    ones rather than raising.
+    name absent from `cv.VARIANTS` gets `UNKNOWN_VARIANT_COLOR` rather than
+    raising, and rather than wrapping back onto a known variant's colour.
     """
     names = [variant.name for variant in cv.VARIANTS]
-    index = names.index(name) if name in names else len(names)
-    return VARIANT_COLORS[index % len(VARIANT_COLORS)]
+    if name not in names:
+        return UNKNOWN_VARIANT_COLOR
+    return VARIANT_COLORS[names.index(name) % len(VARIANT_COLORS)]
 
 
 def variant_rows(

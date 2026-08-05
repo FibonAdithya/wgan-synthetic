@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 import yaml
@@ -9,12 +9,12 @@ CONFIG_DIR = REPO_ROOT / "configs" / "deep"
 LADDER = ["v0", "v1", "v2"]
 
 
-def _load(name: str) -> Dict[str, Any]:
+def _load(name: str) -> dict[str, Any]:
     return yaml.safe_load((CONFIG_DIR / f"{name}.yaml").read_text(encoding="utf-8"))
 
 
-def _flatten(d: Dict[str, Any], prefix: str = "") -> Dict[str, Any]:
-    flat: Dict[str, Any] = {}
+def _flatten(d: dict[str, Any], prefix: str = "") -> dict[str, Any]:
+    flat: dict[str, Any] = {}
     for key, value in d.items():
         path = f"{prefix}.{key}" if prefix else key
         if isinstance(value, dict):

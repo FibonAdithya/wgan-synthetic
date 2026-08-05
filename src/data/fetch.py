@@ -9,6 +9,7 @@ handles one container format. Sets obtained by other routes -- corpus-texmex
 .fvecs, say -- are read directly by load_descriptors and do not come through
 here.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -16,7 +17,6 @@ import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Tuple
 from urllib.request import Request, urlopen
 
 import h5py
@@ -45,14 +45,14 @@ class Source:
     dim: int
     metric: str
     hdf5_key: str = "train"
-    default_rows: Tuple[int, ...] = (250_000, 1_000_000)
+    default_rows: tuple[int, ...] = (250_000, 1_000_000)
 
 
 def _ann_benchmarks(name: str, slug: str, dim: int, metric: str) -> Source:
     return Source(name=name, url=f"{BASE_URL}/{slug}.hdf5", dim=dim, metric=metric)
 
 
-SOURCES: Dict[str, Source] = {
+SOURCES: dict[str, Source] = {
     "sift": _ann_benchmarks("sift", "sift-128-euclidean", 128, "l2"),
     "gist": _ann_benchmarks("gist", "gist-960-euclidean", 960, "l2"),
     "deep": _ann_benchmarks("deep", "deep-image-96-angular", 96, "angular"),

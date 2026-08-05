@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Dict
 
 import numpy as np
 import torch
@@ -21,12 +20,16 @@ from src.models.generator import build_generator
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Evaluate synthetic vectors against real descriptors.")
+    parser = argparse.ArgumentParser(
+        description="Evaluate synthetic vectors against real descriptors."
+    )
     parser.add_argument("--real-path", type=str, required=True)
     parser.add_argument("--checkpoint", type=str, required=True)
     parser.add_argument("--config", type=str, required=True)
     parser.add_argument("--output-dir", type=str, required=True)
-    parser.add_argument("--format", type=str, default="auto", choices=["auto", "npy", "fvecs"])
+    parser.add_argument(
+        "--format", type=str, default="auto", choices=["auto", "npy", "fvecs"]
+    )
     parser.add_argument("--num-samples", type=int, default=50000)
     parser.add_argument("--gamma", type=float, default=1.0, help="RBF gamma for MMD.")
     return parser.parse_args()
@@ -42,7 +45,9 @@ def get_device(device_cfg: str) -> torch.device:
     return torch.device(device_cfg)
 
 
-def load_generator(config: Dict, checkpoint_path: Path, device: torch.device) -> torch.nn.Module:
+def load_generator(
+    config: dict, checkpoint_path: Path, device: torch.device
+) -> torch.nn.Module:
     data_cfg = config["data"]
     model_cfg = config["model"]
     generator = build_generator(
@@ -68,7 +73,9 @@ def sample_fake(
             cur = min(batch_size, n - generated)
             z = torch.randn(cur, latent_dim, device=device)
             x = generator(z)
-            x = x / torch.clamp(torch.linalg.vector_norm(x, dim=1, keepdim=True), min=1.0e-8)
+            x = x / torch.clamp(
+                torch.linalg.vector_norm(x, dim=1, keepdim=True), min=1.0e-8
+            )
             x = x.cpu().numpy().astype(np.float32, copy=False)
             out.append(x)
             generated += cur
@@ -81,7 +88,7 @@ def covariance_fro(real: np.ndarray, fake: np.ndarray) -> float:
     return float(np.linalg.norm(cov_real - cov_fake, ord="fro"))
 
 
-def mean_var_l2(real: np.ndarray, fake: np.ndarray) -> Dict[str, float]:
+def mean_var_l2(real: np.ndarray, fake: np.ndarray) -> dict[str, float]:
     out = {
         "mean_l2": float(np.linalg.norm(real.mean(axis=0) - fake.mean(axis=0))),
         "var_l2": float(np.linalg.norm(real.var(axis=0) - fake.var(axis=0))),
@@ -93,8 +100,12 @@ def mmd_rbf(real: np.ndarray, fake: np.ndarray, gamma: float) -> float:
     max_samples = 5000
     if real.shape[0] > max_samples or fake.shape[0] > max_samples:
         rng = np.random.default_rng(0)
-        idx_r = rng.choice(real.shape[0], size=min(max_samples, real.shape[0]), replace=False)
-        idx_f = rng.choice(fake.shape[0], size=min(max_samples, fake.shape[0]), replace=False)
+        idx_r = rng.choice(
+            real.shape[0], size=min(max_samples, real.shape[0]), replace=False
+        )
+        idx_f = rng.choice(
+            fake.shape[0], size=min(max_samples, fake.shape[0]), replace=False
+        )
         real = real[idx_r]
         fake = fake[idx_f]
     k_xx = rbf_kernel(real, real, gamma=gamma)
@@ -137,7 +148,9 @@ def pairwise_hist_l1(real: np.ndarray, fake: np.ndarray, bins: int = 50) -> floa
 
     # Dynamic max bound via triangle inequality; avoids expensive full-distance pre-pass.
     max_rr = float(2.0 * np.max(np.linalg.norm(rr, axis=1)))
-    max_rf = float(np.max(np.linalg.norm(rr, axis=1)) + np.max(np.linalg.norm(ff, axis=1)))
+    max_rf = float(
+        np.max(np.linalg.norm(rr, axis=1)) + np.max(np.linalg.norm(ff, axis=1))
+    )
     max_dist = max(max_rr, max_rf, 1.0e-6)
     edges = np.linspace(0.0, max_dist, bins + 1, dtype=np.float64)
 
@@ -147,9 +160,13 @@ def pairwise_hist_l1(real: np.ndarray, fake: np.ndarray, bins: int = 50) -> floa
     return float(np.abs(hist_rr - hist_rf).sum())
 
 
-def knn_recall(real_train: np.ndarray, real_holdout: np.ndarray, fake: np.ndarray, k: int = 10) -> float:
+def knn_recall(
+    real_train: np.ndarray, real_holdout: np.ndarray, fake: np.ndarray, k: int = 10
+) -> float:
     k = min(k, max(1, real_train.shape[0] - 1))
-    nn_real = NearestNeighbors(n_neighbors=k, algorithm="auto", n_jobs=1).fit(real_train)
+    nn_real = NearestNeighbors(n_neighbors=k, algorithm="auto", n_jobs=1).fit(
+        real_train
+    )
     nn_fake = NearestNeighbors(n_neighbors=1, algorithm="auto", n_jobs=1).fit(fake)
     d_real, _ = nn_real.kneighbors(real_holdout, return_distance=True)
     d_fake, _ = nn_fake.kneighbors(real_holdout, return_distance=True)
@@ -158,13 +175,21 @@ def knn_recall(real_train: np.ndarray, real_holdout: np.ndarray, fake: np.ndarra
     return float(recall)
 
 
-def ann_proxy_recall(real_train: np.ndarray, fake_train: np.ndarray, queries: np.ndarray, k: int = 10) -> float:
+def ann_proxy_recall(
+    real_train: np.ndarray, fake_train: np.ndarray, queries: np.ndarray, k: int = 10
+) -> float:
     k = min(k, max(1, real_train.shape[0] - 1), max(1, fake_train.shape[0] - 1))
-    nn_real = NearestNeighbors(n_neighbors=k, algorithm="auto", n_jobs=1).fit(real_train)
-    nn_fake = NearestNeighbors(n_neighbors=k, algorithm="auto", n_jobs=1).fit(fake_train)
+    nn_real = NearestNeighbors(n_neighbors=k, algorithm="auto", n_jobs=1).fit(
+        real_train
+    )
+    nn_fake = NearestNeighbors(n_neighbors=k, algorithm="auto", n_jobs=1).fit(
+        fake_train
+    )
     d_real, _ = nn_real.kneighbors(queries, return_distance=True)
     d_fake, _ = nn_fake.kneighbors(queries, return_distance=True)
-    ratio = np.mean(np.clip(d_fake.mean(axis=1) / (d_real.mean(axis=1) + 1.0e-8), 0.0, 10.0))
+    ratio = np.mean(
+        np.clip(d_fake.mean(axis=1) / (d_real.mean(axis=1) + 1.0e-8), 0.0, 10.0)
+    )
     return float(np.exp(-abs(ratio - 1.0)))
 
 
@@ -178,12 +203,16 @@ def main() -> None:
 
     device = get_device(config["device"])
     checkpoint_path = Path(args.checkpoint)
-    generator = load_generator(config=config, checkpoint_path=checkpoint_path, device=device)
+    generator = load_generator(
+        config=config, checkpoint_path=checkpoint_path, device=device
+    )
 
     real = load_descriptors(Path(args.real_path), file_format=args.format)
     seed = int(config["seed"])
     holdout_fraction = float(config["data"]["holdout_fraction"])
-    real_train_raw, real_holdout_raw = train_holdout_split(real, holdout_fraction=holdout_fraction, seed=seed)
+    real_train_raw, real_holdout_raw = train_holdout_split(
+        real, holdout_fraction=holdout_fraction, seed=seed
+    )
 
     preprocess_payload = None
     meta_path = checkpoint_path.parent / "run_metadata.json"
@@ -215,7 +244,9 @@ def main() -> None:
     metrics["mmd_rbf"] = mmd_rbf(real_eval, fake_eval, gamma=float(args.gamma))
     metrics["pairwise_hist_l1"] = pairwise_hist_l1(real_eval, fake_eval)
     metrics["knn_recall"] = knn_recall(real_train, real_eval, fake_eval, k=10)
-    metrics["ann_proxy_recall"] = ann_proxy_recall(real_train, fake_eval, real_eval, k=10)
+    metrics["ann_proxy_recall"] = ann_proxy_recall(
+        real_train, fake_eval, real_eval, k=10
+    )
 
     with (output_dir / "metrics.json").open("w", encoding="utf-8") as f:
         json.dump(metrics, f, indent=2)

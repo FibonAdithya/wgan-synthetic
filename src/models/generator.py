@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Iterable, List, Mapping
+from collections.abc import Iterable, Mapping
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -16,7 +17,7 @@ class Generator(nn.Module):
         negative_slope: float = 0.2,
     ):
         super().__init__()
-        dims: List[int] = [latent_dim, *list(hidden_dims), output_dim]
+        dims: list[int] = [latent_dim, *list(hidden_dims), output_dim]
         layers = []
         for i in range(len(dims) - 2):
             layers.append(nn.Linear(dims[i], dims[i + 1]))
@@ -65,7 +66,7 @@ class GatedGenerator(nn.Module):
         if eps <= 0:
             raise ValueError("eps must be greater than zero")
 
-        dims: List[int] = [latent_dim, *hidden_dims]
+        dims: list[int] = [latent_dim, *hidden_dims]
         layers = []
         for i in range(len(dims) - 1):
             layers.append(nn.Linear(dims[i], dims[i + 1]))
@@ -99,9 +100,9 @@ class GatedGenerator(nn.Module):
         # row is off. This is vanishingly rare at 128 dimensions but otherwise
         # silently produces an invalid zero vector.
         empty = hard.sum(dim=1, keepdim=True) == 0
-        fallback = F.one_hot(
-            sample_logits.argmax(dim=1), sample_logits.shape[1]
-        ).to(hard.dtype)
+        fallback = F.one_hot(sample_logits.argmax(dim=1), sample_logits.shape[1]).to(
+            hard.dtype
+        )
         # Note: on a rescued row the straight-through gradient still comes from
         # `soft`, i.e. from the gate the forward pass did *not* take. This is
         # the one place forward and backward genuinely disagree. It is harmless

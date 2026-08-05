@@ -102,7 +102,7 @@ def test_generate_samples_round_trips_a_real_gated_checkpoint(
     x = np.load(path)
     assert x.shape == (num_samples, descriptor_dim)
 
-    norms = (x ** 2).sum(axis=1) ** 0.5
+    norms = (x**2).sum(axis=1) ** 0.5
     assert (abs(norms - 1.0) < 1e-4).all(), "gated generator output must be unit-norm"
     assert (x == 0.0).any(), "gated generator should produce exact zeros"
 
@@ -290,9 +290,7 @@ def test_generate_samples_returns_a_whitened_run_to_original_coordinates(tmp_pat
     def draw(variant, sub):
         (out_dir / sub).mkdir()
         return np.load(
-            cv.generate_samples(
-                variant, tmp_path, 2000, 512, out_dir / sub, seed=42
-            )
+            cv.generate_samples(variant, tmp_path, 2000, 512, out_dir / sub, seed=42)
         )
 
     inverted = draw(_write_flat_run(tmp_path, "w", whiten=True), "w")

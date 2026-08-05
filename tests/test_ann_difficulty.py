@@ -1,6 +1,17 @@
 import numpy as np
 
-from src.eval.ann_difficulty import gini
+from src.eval.ann_difficulty import (
+    cell_occupancy,
+    compute,
+    gini,
+    hubness_skew,
+    k_occurrence,
+    knn,
+    lid_mle,
+    relative_contrast,
+    summary,
+    survivor_mask,
+)
 
 
 def test_gini_is_zero_for_perfectly_balanced_occupancy():
@@ -15,9 +26,6 @@ def test_gini_is_maximal_for_a_single_dominant_cluster():
 
 def test_gini_is_zero_for_empty_occupancy():
     assert gini(np.array([0, 0, 0])) == 0.0
-
-
-from src.eval.ann_difficulty import knn
 
 
 def test_knn_excludes_the_query_itself():
@@ -51,9 +59,6 @@ def test_knn_returns_distances_in_ascending_order():
     x = rng.normal(size=(50, 8)).astype(np.float32)
     dist, _, _ = knn(x, k=5)
     assert np.all(np.diff(dist, axis=1) >= -1e-6)
-
-
-from src.eval.ann_difficulty import lid_mle, survivor_mask
 
 
 def _uniform_in_ball(n, d, seed):
@@ -131,9 +136,6 @@ def test_lid_is_finite_for_every_surviving_query_when_duplicates_exist():
     assert np.all(np.isfinite(values))
 
 
-from src.eval.ann_difficulty import relative_contrast
-
-
 def test_relative_contrast_falls_as_dimension_rises():
     # Distances concentrate in high dimensions, so the gap between the mean
     # distance and the nearest distance shrinks and search gets harder.
@@ -161,9 +163,6 @@ def test_relative_contrast_returns_one_value_per_row():
     x = rng.normal(size=(500, 8)).astype(np.float32)
     dist, _, _ = knn(x, k=10)
     assert relative_contrast(x, dist, seed=0).shape == (500,)
-
-
-from src.eval.ann_difficulty import hubness_skew, k_occurrence
 
 
 def test_k_occurrence_conserves_total_count():
@@ -200,9 +199,6 @@ def test_hubness_skew_is_zero_for_a_flat_count_distribution():
     assert hubness_skew(np.array([4, 4, 4, 4])) == 0.0
 
 
-from src.eval.ann_difficulty import cell_occupancy
-
-
 def test_cell_occupancy_totals_the_row_count_and_sorts_ascending():
     rng = np.random.default_rng(8)
     x = rng.normal(size=(600, 8)).astype(np.float32)
@@ -230,14 +226,13 @@ def test_cell_occupancy_is_deterministic_under_a_fixed_seed():
 def test_well_separated_blobs_partition_more_evenly_than_one_dense_lump():
     rng = np.random.default_rng(11)
     centres = rng.normal(size=(8, 6)).astype(np.float32) * 30.0
-    blobs = np.repeat(centres, 100, axis=0) + rng.normal(size=(800, 6)).astype(np.float32)
+    blobs = np.repeat(centres, 100, axis=0) + rng.normal(size=(800, 6)).astype(
+        np.float32
+    )
     lump = rng.normal(size=(800, 6)).astype(np.float32)
     blob_occupancy, _ = cell_occupancy(blobs, nlist=8, seed=0)
     lump_occupancy, _ = cell_occupancy(lump, nlist=8, seed=0)
     assert gini(blob_occupancy) < gini(lump_occupancy)
-
-
-from src.eval.ann_difficulty import compute, summary
 
 
 def test_compute_truncates_to_max_rows():

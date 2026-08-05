@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import List, Tuple
 
 import numpy as np
 import plotly.graph_objects as go
@@ -72,7 +71,7 @@ def check_finite(arr: np.ndarray, source: str) -> None:
 
 def pick_real_rows(
     real: np.ndarray, num_samples: int, seed: int
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """Draw two disjoint random rows of real descriptors."""
     needed = 2 * num_samples
     if real.shape[0] < needed:
@@ -85,7 +84,7 @@ def pick_real_rows(
     return real[idx[:num_samples]], real[idx[num_samples:]]
 
 
-def build_figure(rows: List[Tuple[str, np.ndarray, str]]) -> go.Figure:
+def build_figure(rows: list[tuple[str, np.ndarray, str]]) -> go.Figure:
     """Assemble the glyph grid.
 
     The figure itself lives in `eda_report`, which draws the same panel from
@@ -158,7 +157,7 @@ def variant_color(name: str) -> str:
 
 def variant_rows(
     root: Path, num_samples: int, seed: int
-) -> List[Tuple[str, np.ndarray, str]]:
+) -> list[tuple[str, np.ndarray, str]]:
     """Sample every resolvable variant checkpoint into one row each.
 
     A variant whose artifacts are not on this machine is skipped with a
@@ -188,7 +187,7 @@ def variant_rows(
     if not found:
         print("no variant checkpoints resolved; rendering the real rows only")
 
-    rows: List[Tuple[str, np.ndarray, str]] = []
+    rows: list[tuple[str, np.ndarray, str]] = []
     for variant in found:
         run_dir = root / variant.run_dir
         config = yaml.safe_load(
@@ -268,7 +267,7 @@ def run(args: argparse.Namespace) -> Path:
     row_a = eda_report.maybe_l2_normalize(row_a, "l2")
     row_b = eda_report.maybe_l2_normalize(row_b, "l2")
 
-    rows: List[Tuple[str, np.ndarray, str]] = [
+    rows: list[tuple[str, np.ndarray, str]] = [
         ("real-a", row_a, REAL_COLORS[0]),
         ("real-b", row_b, REAL_COLORS[1]),
     ]

@@ -117,9 +117,7 @@ def glyph_segments(
     """
     cells = np.asarray(cells, dtype=np.float64)
     if cells.shape != (CELL_ROWS, CELL_COLS, ORIENTATION_BINS):
-        raise ValueError(
-            f"expected cells of shape (4, 4, 8), got {cells.shape}"
-        )
+        raise ValueError(f"expected cells of shape (4, 4, 8), got {cells.shape}")
 
     empty = np.array([], dtype=np.float64)
     if scale <= 0.0:

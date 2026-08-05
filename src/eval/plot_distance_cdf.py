@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -18,7 +17,9 @@ def parse_args() -> argparse.Namespace:
         )
     )
     parser.add_argument("--real-path", type=str, required=True)
-    parser.add_argument("--real-format", type=str, default="auto", choices=["auto", "npy", "fvecs"])
+    parser.add_argument(
+        "--real-format", type=str, default="auto", choices=["auto", "npy", "fvecs"]
+    )
     parser.add_argument("--synthetic-path", type=str, required=True)
     parser.add_argument("--num-queries", type=int, default=200)
     parser.add_argument("--num-targets", type=int, default=5000)
@@ -43,7 +44,7 @@ def query_cdf_quantiles(
     num_queries: int,
     num_targets: int,
     rng: np.random.Generator,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     q_idx = sampled_indices(x.shape[0], num_queries, rng)
     t_idx = sampled_indices(x.shape[0], num_targets, rng)
     queries = x[q_idx]

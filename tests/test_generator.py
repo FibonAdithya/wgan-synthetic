@@ -2,7 +2,7 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from src.models.generator import Generator, GatedGenerator
+from src.models.generator import GatedGenerator, Generator
 
 LATENT = 16
 OUTPUT = 128
@@ -68,7 +68,9 @@ def test_saturated_magnitude_still_yields_unit_norm():
         generator.magnitude_head.bias.fill_(-1000.0)
     torch.manual_seed(9)
     out = generator(torch.randn(32, LATENT))
-    assert (F.softplus(torch.tensor(-1000.0)) == 0.0).item(), "premise: softplus underflows"
+    assert (F.softplus(torch.tensor(-1000.0)) == 0.0).item(), (
+        "premise: softplus underflows"
+    )
     norms = out.norm(dim=1)
     assert torch.allclose(norms, torch.ones_like(norms), atol=1e-5)
     assert ((out > 0).sum(dim=1) > 0).all()

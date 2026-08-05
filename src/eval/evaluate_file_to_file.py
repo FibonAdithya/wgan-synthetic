@@ -23,7 +23,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--real-path", type=str, required=True)
     parser.add_argument("--synthetic-path", type=str, required=True)
-    parser.add_argument("--real-format", type=str, default="auto", choices=["auto", "npy", "fvecs"])
+    parser.add_argument(
+        "--real-format", type=str, default="auto", choices=["auto", "npy", "fvecs"]
+    )
     parser.add_argument(
         "--synthetic-format", type=str, default="auto", choices=["auto", "npy", "fvecs"]
     )
@@ -87,7 +89,9 @@ def main() -> None:
     metrics["mmd_rbf"] = mmd_rbf(real_eval, fake_eval, gamma=float(args.gamma))
     metrics["pairwise_hist_l1"] = pairwise_hist_l1(real_eval, fake_eval)
     metrics["knn_recall"] = knn_recall(real_train, real_eval, fake_eval, k=10)
-    metrics["ann_proxy_recall"] = ann_proxy_recall(real_train, fake_eval, real_eval, k=10)
+    metrics["ann_proxy_recall"] = ann_proxy_recall(
+        real_train, fake_eval, real_eval, k=10
+    )
     metrics["num_samples_used"] = int(n)
 
     with (out_dir / "metrics.json").open("w", encoding="utf-8") as f:

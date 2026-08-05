@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Iterable, List
+from collections.abc import Iterable
 
 import torch
 from torch import nn
@@ -14,7 +14,7 @@ class Critic(nn.Module):
         negative_slope: float = 0.2,
     ):
         super().__init__()
-        dims: List[int] = [input_dim, *list(hidden_dims), 1]
+        dims: list[int] = [input_dim, *list(hidden_dims), 1]
         layers = []
         for i in range(len(dims) - 2):
             layers.append(nn.Linear(dims[i], dims[i + 1]))

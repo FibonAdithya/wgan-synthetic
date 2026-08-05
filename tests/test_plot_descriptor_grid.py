@@ -111,8 +111,9 @@ def test_build_figure_omits_the_negative_trace_when_all_bins_are_positive():
 
 
 def test_check_preprocess_accepts_the_current_config_shape():
-    config = {"data": {"preprocess": {"center": False, "whiten": False,
-                                      "l2_normalize": True}}}
+    config = {
+        "data": {"preprocess": {"center": False, "whiten": False, "l2_normalize": True}}
+    }
     pdg.check_preprocess(config, "v2")  # must not raise
 
 

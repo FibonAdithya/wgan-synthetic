@@ -134,7 +134,9 @@ def test_bias_correction_matters_for_short_runs_at_high_decay():
 
     corrected = TinyModel(w=0.0, b=0.0)
     load_ema_into_model(ema, corrected, decay=decay, ema_step=steps)
-    assert float(corrected.lin.weight.detach().flatten()[0]) == pytest.approx(1.0, rel=1e-4)
+    assert float(corrected.lin.weight.detach().flatten()[0]) == pytest.approx(
+        1.0, rel=1e-4
+    )
 
 
 def test_load_ema_leaves_the_accumulator_uncorrected():
@@ -252,7 +254,9 @@ def test_save_checkpoint_records_which_generator_weights_it_holds(tmp_path):
     opt_g = torch.optim.Adam(gen.parameters(), lr=1e-3)
     opt_d = torch.optim.Adam(critic.parameters(), lr=1e-3)
 
-    save_checkpoint(gen, critic, opt_g, opt_d, tmp_path, step=1, generator_weights="live")
+    save_checkpoint(
+        gen, critic, opt_g, opt_d, tmp_path, step=1, generator_weights="live"
+    )
     save_checkpoint(
         gen, critic, opt_g, opt_d, tmp_path, step=2, best=True, generator_weights="ema"
     )
@@ -339,8 +343,9 @@ def test_ema_decay_of_one_is_rejected(tmp_path):
     Bias correction cannot rescue it, so eval and best_generator.pt would come
     from an all-zero generator. It must fail loudly at config-read time.
     """
-    from src.train.train_wgan_gp import train
     from tests.test_train_smoke import make_config
+
+    from src.train.train_wgan_gp import train
 
     config = make_config(tmp_path, "gated")
     config["training"]["ema_decay"] = 1.0

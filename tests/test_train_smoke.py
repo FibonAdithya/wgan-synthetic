@@ -90,10 +90,14 @@ def test_training_resumes_on_live_weights_after_ema_eval(tmp_path):
     live = torch.load(ckpt_path.parent / "checkpoint_step_4.pt", weights_only=False)
     assert best["step"] == live["step"] == 4
     differs = any(
-        not torch.equal(best["generator_state_dict"][k], live["generator_state_dict"][k])
+        not torch.equal(
+            best["generator_state_dict"][k], live["generator_state_dict"][k]
+        )
         for k in live["generator_state_dict"]
     )
-    assert differs, "EMA and live generator weights are identical -- swap/restore is a no-op"
+    assert differs, (
+        "EMA and live generator weights are identical -- swap/restore is a no-op"
+    )
 
 
 def test_mlp_config_without_generator_type_still_trains(tmp_path):

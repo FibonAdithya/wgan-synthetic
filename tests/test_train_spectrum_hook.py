@@ -1,5 +1,3 @@
-import numpy as np
-import pytest
 import torch
 
 from src.train.train_wgan_gp import train

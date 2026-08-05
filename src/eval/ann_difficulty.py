@@ -23,7 +23,6 @@ and testable without plotly or argparse.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple
 
 import numpy as np
 from sklearn.cluster import MiniBatchKMeans
@@ -46,7 +45,7 @@ def gini(occupancy: np.ndarray) -> float:
     return float(2.0 * np.sum(index * x) / (n * total) - (n + 1.0) / n)
 
 
-def knn(x: np.ndarray, k: int) -> Tuple[np.ndarray, np.ndarray, int]:
+def knn(x: np.ndarray, k: int) -> tuple[np.ndarray, np.ndarray, int]:
     """Nearest neighbours of every row among the *other* rows.
 
     Returns (distances, indices, k_eff). k is clamped to n-1 when the set is
@@ -187,7 +186,7 @@ def hubness_skew(counts: np.ndarray) -> float:
     return float(np.mean(((x - x.mean()) / spread) ** 3))
 
 
-def cell_occupancy(x: np.ndarray, nlist: int, seed: int) -> Tuple[np.ndarray, int]:
+def cell_occupancy(x: np.ndarray, nlist: int, seed: int) -> tuple[np.ndarray, int]:
     """Points per cluster under a k-means partition, sorted ascending.
 
     Stands in for how an IVF index would carve up the set. Each set is
@@ -280,7 +279,7 @@ def compute(
     )
 
 
-def summary(m: AnnMetrics) -> Dict[str, Optional[float]]:
+def summary(m: AnnMetrics) -> dict[str, float | None]:
     """Scalars for the report's statistics table and summary.json.
 
     lid_median and relative_contrast_median are None when every query was

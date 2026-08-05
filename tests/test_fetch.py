@@ -190,7 +190,14 @@ def test_main_prints_a_clamp_notice_when_the_corpus_is_smaller_than_requested(
     out_dir = tmp_path / "out"
     monkeypatch.setattr(
         "src.data.fetch.SOURCES",
-        {"deep": Source(name="deep", url="http://example.invalid/fake.hdf5", dim=96, metric="angular")},
+        {
+            "deep": Source(
+                name="deep",
+                url="http://example.invalid/fake.hdf5",
+                dim=96,
+                metric="angular",
+            )
+        },
     )
     monkeypatch.setattr("src.data.fetch.fetch", lambda url, dest: fake_hdf5)
     monkeypatch.setattr(

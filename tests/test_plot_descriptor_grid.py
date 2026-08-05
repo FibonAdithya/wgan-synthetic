@@ -150,6 +150,24 @@ def test_variant_row_renders_from_a_real_checkpoint(
     assert "real-a" in text and "v2" in text
 
 
+def test_generated_rows_arrive_unit_norm_like_the_real_rows(
+    tmp_path, write_tiny_mlp_run, monkeypatch
+):
+    """The shared ray scale is a single percentile over real and generated
+    values pooled together, so it is only honest while both arrive on the same
+    magnitude. Real rows get `l2_normalize` here; generated rows get theirs
+    inside `sample_generator`, which is a training-loop function this module
+    does not own. If that normalisation is ever dropped, every generated ray
+    silently rescales and the comparison the figure exists for becomes a lie
+    that no other test in this suite would catch."""
+    variant, _ = write_tiny_mlp_run(tmp_path, name="v0", descriptor_dim=128)
+    monkeypatch.setattr(cv, "VARIANTS", (variant,))
+
+    _, vecs, _ = pdg.variant_rows(tmp_path, num_samples=4, seed=42)[0]
+
+    assert np.linalg.norm(vecs, axis=1) == pytest.approx(1.0, rel=1e-5)
+
+
 def test_variant_row_is_seed_reproducible(tmp_path, write_tiny_gated_run, monkeypatch):
     """GatedGenerator samples gate noise in eval() too, so this needs a seed."""
     variant, _ = write_tiny_gated_run(tmp_path, name="v2", descriptor_dim=128)

@@ -260,6 +260,12 @@ def run(args: argparse.Namespace) -> Path:
         ("real-b", row_b, REAL_COLORS[1]),
     ]
 
+    # Real rows are normalised just above; generated rows arrive already
+    # normalised from `sample_generator`. Both have to hold, because the ray
+    # scale is one percentile over the two pooled together -- if either side
+    # drifts off unit norm the figure silently rescales and stops being a
+    # comparison. Pinned by
+    # `test_generated_rows_arrive_unit_norm_like_the_real_rows`.
     rows.extend(variant_rows(Path(args.root), args.num_samples, args.seed))
 
     fig = build_figure(rows)

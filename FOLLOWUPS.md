@@ -154,10 +154,9 @@ whether any of it is real. Until then the page's ordering claims should be
 read as provisional, and the family's gate bands stay unset because there is
 nothing to set them against.
 
-Related: the `summary.json` those numbers were read out of is not committed —
-the training box has no persistent volume, so the table in
-`docs/datasets/deep.md` is not re-derivable from this repo alone. It is ~8 KB;
-committing it on the next run would make the numbers checkable.
+Resolved in passing: the `summary.json` those numbers were read out of is now
+committed as `docs/datasets/deep_ladder_summary.json`, so the table is
+checkable from this repo alone.
 
 ## `src/eval/ann_difficulty.py` is the last consumer that could inherit `--dataset`
 

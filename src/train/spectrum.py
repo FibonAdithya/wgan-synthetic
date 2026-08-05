@@ -3,10 +3,18 @@
 Sits alongside the pairwise-distance regularizer in `train_wgan_gp` as the
 second optional generator penalty. Nothing here is family-specific -- it reads
 a batch and returns a scalar -- but the property it targets is one some
-families have far more of than others. DEEP descriptors are PCA-compressed CNN
-embeddings, so their variance decays sharply and unevenly across directions,
-and the WGAN critic does not reliably enforce that decay. Same failure mode
-that motivated the distance regularizer on the SIFT track.
+families have more of than others. DEEP descriptors are PCA-compressed CNN
+embeddings, so their variance is unevenly distributed across directions in a
+way the WGAN critic does not reliably enforce. Same failure mode that
+motivated the distance regularizer on the SIFT track.
+
+How uneven, measured on 50k rows of the real DEEP train split rather than
+assumed: participation ratio 45.3 of a possible 96, largest normalized
+eigenvalue 7.0x the isotropic 1/96, smallest 0.13x, ratio first-to-last 53.6.
+The top 10 directions hold 36.6% of the variance and the top 50 hold 82%.
+That is a real anisotropy but a moderate one -- not the steep decay a
+PCA-compressed set is often assumed to have, which is worth knowing before
+attributing much to this term. See docs/datasets/deep.md.
 
 The penalty compares the *shape* of the two spectra: each is divided by its own
 trace before comparison, so it measures how variance is distributed across

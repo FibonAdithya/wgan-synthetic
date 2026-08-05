@@ -30,7 +30,12 @@ data:
     l2_normalize: true
 
 model:
-  latent_dim: 128
+  # Matches descriptor_dim, as every other family's config does. An earlier
+  # draft of this ladder carried 128 over from configs/sift/v1.yaml, where it
+  # is SIFT's descriptor_dim -- a coincidence of that family, not a tuned
+  # value, and over-parameterized against a 96-D unit-sphere target whose
+  # measured effective rank is 65.
+  latent_dim: 96
   generator_hidden_dims: [512, 1024, 1024]
   critic_hidden_dims: [1024, 512, 256]
   negative_slope: 0.2

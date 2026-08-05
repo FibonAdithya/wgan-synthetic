@@ -25,6 +25,32 @@ immutable; the fetcher downloads it once and is safe to run concurrently.
 unit-norm. The smallest angular family, which makes it the right first
 target for the `spherical` generator.
 
+Measured on 50,000 rows of the real train split (9,990,000 x 96 float32):
+
+| | |
+|---|---|
+| Norm | exactly 1.0 (std 2.2e-08 — machine precision, not approximately) |
+| Negative fraction | 0.508 |
+| Exact zeros | none |
+| Mean abs. per-dim mean | 0.021 — effectively centered already |
+| Effective rank | 65.3 |
+
+Covariance spectrum, which is what `training.spectrum_reg_alpha` targets:
+
+| | |
+|---|---|
+| Participation ratio | 45.3 of a possible 96 |
+| Largest normalized eigenvalue | 0.0731 (7.0x the isotropic 1/96) |
+| Smallest | 0.0014 (0.13x isotropic) |
+| First-to-last ratio | 53.6 |
+| Variance in top 10 / 25 / 50 dims | 36.6% / 60.1% / 81.9% |
+
+Worth stating plainly because it is easy to assume otherwise: a PCA-compressed
+set is often taken to have a steeply decaying spectrum, and DEEP's decay is
+real but **moderate**. Variance is spread across roughly half the available
+directions. That tempers how much the spectrum regularizer could be expected
+to do here, and is consistent with the `v1` results below.
+
 ## Measured profile
 
 Read from the file rather than quoted from a paper. Canonical N and k are
@@ -43,7 +69,9 @@ locked here so a gate result stays readable against an older one.
 | IVF cell-balance Gini | 0.304576 | 0.299153 (`v2`) |
 
 Measured over 50,000 vectors per set at `preprocess: l2`, `seed: 42`,
-`nlist: 256`. Reproduce the real column with:
+`nlist: 256`. The full report output these came from is committed as
+`docs/datasets/deep_ladder_summary.json`, so every figure on this page is
+checkable without access to the training box. Reproduce the real column with:
 
     python -m src.eval.eda_report \
         --real-path data/deep_1m.npy \

@@ -29,6 +29,17 @@ def test_every_rung_targets_96_dimensions(name: str):
 
 
 @pytest.mark.parametrize("name", LADDER)
+def test_latent_dim_tracks_descriptor_dim(name: str):
+    """The convention every other family's config follows.
+
+    Pins the fix for a latent_dim of 128 carried over from the SIFT ladder,
+    where 128 is that family's descriptor_dim rather than a tuned value.
+    """
+    config = _load(name)
+    assert config["model"]["latent_dim"] == config["data"]["descriptor_dim"]
+
+
+@pytest.mark.parametrize("name", LADDER)
 def test_every_rung_records_the_angular_search_metric(name: str):
     """DEEP is searched angularly; the ladder must say so on every rung."""
     assert _load(name)["data"]["metric"] == "angular"
@@ -44,7 +55,7 @@ def test_every_rung_reads_what_the_fetcher_writes(name: str):
 def test_every_rung_shares_the_fixed_hyperparameters(name: str):
     config = _load(name)
     assert config["seed"] == 42
-    assert config["model"]["latent_dim"] == 128
+    assert config["model"]["latent_dim"] == 96
     assert config["model"]["generator_hidden_dims"] == [512, 1024, 1024]
     assert config["model"]["critic_hidden_dims"] == [1024, 512, 256]
     assert config["model"]["generator_type"] == "mlp"

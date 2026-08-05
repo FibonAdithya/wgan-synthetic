@@ -1,16 +1,22 @@
-numpy
-torch
-pyyaml
-tqdm
-scikit-learn
-scipy
+# Pinned so that a green CI run means "passed against these versions" rather
+# than "passed against whatever resolved today". Bump deliberately, in a commit
+# that says why.
+numpy==2.5.1
+torch==2.13.0
+pyyaml==6.0.3
+tqdm==4.68.4
+scikit-learn==1.9.0
+scipy==1.18.0
 # HDF5 reader for the ann-benchmarks mirrors, used only by src/data/fetch.py.
-h5py
-plotly
+h5py==3.16.0
+plotly==6.9.0
 # Static PNG export in src/eval/eda_report.py. Kaleido v1 drives a headless
 # Chrome; run `plotly_get_chrome` once if no browser is installed. The HTML
 # report is produced without it -- pass --no-png to skip export entirely.
-kaleido
+kaleido==1.3.0
 # Test suite. Run from the repo root:
 #   python3 -m pytest
-pytest
+# or `make check` to run lint and formatting alongside it.
+pytest==9.1.1
+# Lint and formatter. Configured in pyproject.toml; `make check` gates on it.
+ruff==0.14.5

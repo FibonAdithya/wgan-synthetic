@@ -36,17 +36,6 @@ def _args(tmp_path, **overrides):
     return argparse.Namespace(**base)
 
 
-def test_l2_normalize_gives_unit_rows():
-    x = np.array([[3.0, 4.0], [1.0, 0.0]], dtype=np.float32)
-    out = pdg.l2_normalize(x)
-    assert np.linalg.norm(out, axis=1) == pytest.approx([1.0, 1.0])
-
-
-def test_l2_normalize_leaves_a_zero_row_finite():
-    out = pdg.l2_normalize(np.zeros((1, 4), dtype=np.float32))
-    assert np.all(np.isfinite(out))
-
-
 def test_pick_real_rows_returns_two_disjoint_rows():
     real = np.arange(40 * 128, dtype=np.float32).reshape(40, 128)
     row_a, row_b = pdg.pick_real_rows(real, num_samples=5, seed=1)

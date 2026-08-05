@@ -49,13 +49,6 @@ UNKNOWN_VARIANT_COLOR = "#7f7f7f"
 REPORT_NAME = "descriptor_grid.html"
 
 
-def l2_normalize(x: np.ndarray, eps: float = 1.0e-8) -> np.ndarray:
-    """Scale rows to unit norm, matching the training preprocessing."""
-    arr = np.asarray(x, dtype=np.float32)
-    norms = np.linalg.norm(arr, axis=1, keepdims=True)
-    return arr / np.maximum(norms, eps)
-
-
 def check_finite(arr: np.ndarray, source: str) -> None:
     """Refuse a descriptor array holding NaN or inf.
 
@@ -252,8 +245,11 @@ def run(args: argparse.Namespace) -> Path:
     row_a, row_b = pick_real_rows(real, args.num_samples, args.seed)
     check_finite(row_a, str(args.real_path))
     check_finite(row_b, str(args.real_path))
-    row_a = l2_normalize(row_a)
-    row_b = l2_normalize(row_b)
+    # `eda_report`'s normaliser rather than a local one: this has to match the
+    # training preprocessing, and a third copy of that rule is a third place
+    # for it to drift out of step with `dataset.apply_preprocess`.
+    row_a = eda_report.maybe_l2_normalize(row_a, "l2")
+    row_b = eda_report.maybe_l2_normalize(row_b, "l2")
 
     rows: List[Tuple[str, np.ndarray, str]] = [
         ("real-a", row_a, REAL_COLORS[0]),

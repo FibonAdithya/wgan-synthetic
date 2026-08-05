@@ -104,3 +104,14 @@ L2-measured figures sitting next to figures measured under the metric the
 corpus is actually searched with, and will need re-measuring so the report
 stays internally comparable. Each of those four pages now says as much in
 its "Measured profile" section.
+
+## Fold the remaining `l2_normalize` copies onto `eda_report.maybe_l2_normalize`
+
+`plot_descriptor_grid` now reuses `eda_report.maybe_l2_normalize` rather than
+carrying its own copy, but four remain: `evaluate_file_to_file.py:43`,
+`plot_distance_cdf.py:30`, `plot_distance_cdf_pillow.py:46` and
+`plot_embedding_clusters.py:33`. All four are byte-identical to each other
+and encode the same rule as `dataset.apply_preprocess`, so each is a place
+that rule can drift out of step with training preprocessing without any test
+noticing. Mechanical, but it touches four eval entry points that the glyph
+work has no reason to disturb, so it wants its own change.

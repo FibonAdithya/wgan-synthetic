@@ -115,3 +115,28 @@ and encode the same rule as `dataset.apply_preprocess`, so each is a place
 that rule can drift out of step with training preprocessing without any test
 noticing. Mechanical, but it touches four eval entry points that the glyph
 work has no reason to disturb, so it wants its own change.
+
+## `build_generator` rejects the `sparse` run configs it wrote itself
+
+`b29e317` renamed `generator_type: sparse` to `gated` in the code but left the
+already-written run configs alone, and `build_generator` raises
+`ValueError: Unknown generator_type: sparse` rather than accepting the old
+name. v2's only trained checkpoint on tig-gpu
+(`/workspace/wgan-sparse-v2/runs/x100k_sparse_clamp4/run_config.yaml`) still
+says `sparse`, so **no current tool can load v2 from its real run config** --
+`compare_variants` and `plot_descriptor_grid` both fail on it. Verifying the
+glyph grid against v2 needed a hand-patched copy of that config.
+
+The fix is an alias in `build_generator` (`sparse` -> `gated`) rather than
+editing checkpoints on disk: a run config is a historical record of a run that
+happened, and the rename should not have invalidated it. Wants its own change
+since it touches model loading for every consumer.
+
+## v2's checkpoint lives outside the repo the variant table points at
+
+`cv.VARIANTS` resolves every variant under one `--root`, but on tig-gpu
+v0/v1/v1_5 are in `/workspace/wgan-synthetic/runs/` while v2 is in
+`/workspace/wgan-sparse-v2/runs/`. No single `--root` resolves all four, so
+the four-row comparison needs the run directories collected under one tree
+first. Either move v2's run into the main checkout, or let `Variant` carry an
+absolute run dir.

@@ -74,7 +74,7 @@ Run from the repo root, on Python 3.12:
 
     make check
 
-That is ruff lint, ruff format check, and pytest (211 tests). It runs in
+That is ruff lint, ruff format check, and the pytest suite. It runs in
 seconds and is CPU-only — no GPU and no dataset needed. It is the same
 command CI runs (`.github/workflows/ci.yml`). No target uses `|| true`; a red
 suite is a failure, not a warning.

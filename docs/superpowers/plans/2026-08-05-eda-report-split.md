@@ -155,8 +155,13 @@ UUID = re.compile(
 )
 
 
-def normalized(path: Path) -> str:
-    return UUID.sub("UUID", path.read_text(encoding="utf-8"))
+def normalized(path: Path, root: Path) -> str:
+    # Strip the snapshot root out BEFORE normalizing UUIDs: the scratchpad
+    # path itself is UUID-shaped (a session id component), so if UUID
+    # substitution ran first it would eat that component and the
+    # subsequent literal root replacement would never match.
+    text = path.read_text(encoding="utf-8").replace(str(root), "SNAPSHOT")
+    return UUID.sub("UUID", text)
 
 
 def main() -> None:
@@ -175,8 +180,8 @@ def main() -> None:
             # snapshot root out before comparing; everything else in the
             # file -- every statistic, every worst-dimension entry -- must
             # match exactly.
-            lhs = normalized(b).replace(str(before), "SNAPSHOT")
-            rhs = normalized(a).replace(str(after), "SNAPSHOT")
+            lhs = normalized(b, before)
+            rhs = normalized(a, after)
             if lhs != rhs:
                 failures.append(f"{name}/{f}: DIFFERS")
     if failures:

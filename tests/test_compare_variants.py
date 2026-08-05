@@ -6,9 +6,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
+import yaml
 
 from src.eval import compare_variants as cv
 from src.eval import eda_report
+from src.models.generator import build_generator
 
 
 def test_variants_are_the_four_named_ones():

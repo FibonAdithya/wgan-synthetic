@@ -166,6 +166,18 @@ def variant_rows(
     box, and a partial poster is still worth reading.
     """
     found, skipped = cv.resolve_variants(cv.VARIANTS, root)
+    # check_preprocess before honouring the skip list. `resolve_variants` now
+    # also skips a centered/whitened run that has no run_metadata.json to
+    # invert with, and a variant dropped for that reason would otherwise slip
+    # past the refusal below and be silently absent from the poster instead of
+    # loudly refused. The objection here is about the training config, not
+    # about whether the run happens to be samplable.
+    for variant, _ in skipped:
+        run_config = root / variant.run_dir / cv.RUN_CONFIG_NAME
+        if run_config.exists():
+            check_preprocess(
+                yaml.safe_load(run_config.read_text(encoding="utf-8")), variant.name
+            )
     for variant, reason in skipped:
         print(f"skipping {variant.name}: {reason}")
     if not found:

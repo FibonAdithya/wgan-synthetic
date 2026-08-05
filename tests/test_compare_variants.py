@@ -404,26 +404,225 @@ def test_resolve_does_not_require_metadata_for_an_untransformed_run(tmp_path):
     assert skipped == []
 
 
-# --- Ladder registry ------------------------------------------------------
+# --- Manifest registry ----------------------------------------------------
+#
+# These replace the old `LADDERS` tests: the ladders are manifests on disk
+# now, so what has to hold is that every family `--dataset` offers resolves to
+# a readable manifest naming configs that exist.
 
 
-def test_deep_ladder_covers_the_three_rungs():
-    assert [v.name for v in cv.DEEP_VARIANTS] == ["v0", "v1", "v2"]
+def test_every_offered_dataset_has_a_manifest_whose_configs_exist():
+    for dataset in cv.known_datasets():
+        variants = cv.load_variants(cv.manifest_for_dataset(dataset))
+        for variant in variants:
+            assert (REPO_ROOT / variant.config_path).exists(), (
+                f"{dataset}/{variant.name}"
+            )
 
 
-def test_every_ladder_config_exists():
-    for name, ladder in cv.LADDERS.items():
-        for variant in ladder:
-            assert (REPO_ROOT / variant.config_path).exists(), f"{name}/{variant.name}"
+def test_both_shipped_families_are_offered():
+    """DEEP arrived after SIFT; dropping it from `--dataset` is the regression."""
+    assert {"sift", "deep"} <= set(cv.known_datasets())
 
 
-def test_ladders_do_not_share_run_directories():
+def test_the_deep_manifest_covers_the_three_rungs():
+    variants = cv.load_variants(cv.manifest_for_dataset("deep"))
+    assert [v.name for v in variants] == ["v0", "v1", "v2"]
+
+
+def test_families_do_not_share_run_directories():
     """A deep run must never be read out of a SIFT run directory."""
-    sift = {v.run_dir for v in cv.SIFT_VARIANTS}
-    deep = {v.run_dir for v in cv.DEEP_VARIANTS}
+    sift = {v.run_dir for v in cv.load_variants(cv.manifest_for_dataset("sift"))}
+    deep = {v.run_dir for v in cv.load_variants(cv.manifest_for_dataset("deep"))}
     assert not sift & deep
 
 
-def test_variants_alias_still_points_at_the_sift_ladder():
-    """`VARIANTS` is the historical name the SIFT-era docs and callers use."""
-    assert cv.VARIANTS is cv.SIFT_VARIANTS
+def write_manifest(path: Path, entries: list[dict]) -> Path:
+    """Write a variant manifest, the shape `load_variants` reads."""
+    path.write_text(yaml.safe_dump({"variants": entries}), encoding="utf-8")
+    return path
+
+
+def test_the_default_manifest_still_holds_the_four_historical_runs():
+    """The manifest is the source of `VARIANTS`, so it pins the same values.
+
+    Moving the list out of source must not quietly change what the headline
+    comparison compares -- anyone who does have those run directories should
+    see no difference.
+    """
+    variants = cv.load_variants(REPO_ROOT / cv.DEFAULT_MANIFEST)
+
+    assert [(v.name, v.config_path, v.run_dir) for v in variants] == [
+        ("v0", "configs/sift/v0.yaml", "runs/long_baseline"),
+        ("v1", "configs/sift/v1.yaml", "runs/x100k_ema_only"),
+        ("v1_5", "configs/sift/v1_5.yaml", "runs/x100k_improved"),
+        ("v2", "configs/sift/v2.yaml", "runs/x100k_sparse_clamp4"),
+    ]
+    assert variants == cv.VARIANTS, "VARIANTS must be exactly the default manifest"
+
+
+def test_load_variants_reads_an_alternative_manifest(tmp_path):
+    manifest = write_manifest(
+        tmp_path / "variants.yaml",
+        [{"name": "mine", "config": "configs/sift/v0.yaml", "run_dir": "runs/mine"}],
+    )
+
+    variants = cv.load_variants(manifest)
+
+    assert variants == (cv.Variant("mine", "configs/sift/v0.yaml", "runs/mine"),)
+
+
+def test_load_variants_names_the_manifest_path_when_it_does_not_exist(tmp_path):
+    with pytest.raises(SystemExit) as excinfo:
+        cv.load_variants(tmp_path / "nope.yaml")
+
+    assert "nope.yaml" in str(excinfo.value)
+
+
+def test_load_variants_rejects_an_entry_missing_a_required_field(tmp_path):
+    manifest = write_manifest(
+        tmp_path / "variants.yaml", [{"name": "v0", "config": "configs/sift/v0.yaml"}]
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        cv.load_variants(manifest)
+
+    assert "run_dir" in str(excinfo.value), "the missing field must be named"
+
+
+def test_load_variants_rejects_duplicate_names(tmp_path):
+    """Two variants sharing a name would overwrite each other's samples file."""
+    entry = {"name": "v0", "config": "configs/sift/v0.yaml", "run_dir": "runs/a"}
+    manifest = write_manifest(
+        tmp_path / "variants.yaml", [entry, {**entry, "run_dir": "runs/b"}]
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        cv.load_variants(manifest)
+
+    assert "v0" in str(excinfo.value)
+
+
+def test_load_variants_rejects_a_manifest_with_no_variants_list(tmp_path):
+    manifest = tmp_path / "variants.yaml"
+    manifest.write_text("just a string\n", encoding="utf-8")
+
+    with pytest.raises(SystemExit) as excinfo:
+        cv.load_variants(manifest)
+
+    assert "variants" in str(excinfo.value)
+
+
+def test_load_variants_rejects_an_empty_variants_list(tmp_path):
+    manifest = write_manifest(tmp_path / "variants.yaml", [])
+
+    with pytest.raises(SystemExit) as excinfo:
+        cv.load_variants(manifest)
+
+    assert str(manifest) in str(excinfo.value)
+
+
+def test_describe_missing_names_the_path_and_what_would_produce_it(tmp_path):
+    variant = cv.Variant("v0", "configs/sift/v0.yaml", "runs/long_baseline")
+    _, skipped = cv.resolve_variants((variant,), root=tmp_path)
+
+    message = cv.describe_missing(skipped, manifest=tmp_path / "m.yaml", root=tmp_path)
+
+    assert str(tmp_path / "runs/long_baseline") in message, "name the missing path"
+    assert "src.train.train_wgan_gp --config configs/sift/v0.yaml" in message
+    assert str(tmp_path / "m.yaml") in message, "say which manifest asked for it"
+
+
+def test_main_stops_before_sampling_when_a_run_directory_is_missing(
+    monkeypatch, tmp_path
+):
+    """A fresh clone has no `runs/`, so this is its first experience of the tool.
+
+    It must fail here -- naming the path and the command that produces it --
+    rather than deep inside plotting, and must not leave a half-built output
+    tree behind.
+    """
+    out_dir = tmp_path / "out"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "compare_variants.py",
+            "--real-path",
+            str(tmp_path / "real.npy"),
+            "--output-dir",
+            str(out_dir),
+            "--root",
+            str(tmp_path),
+        ],
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        cv.main()
+
+    message = str(excinfo.value)
+    assert "runs/long_baseline" in message
+    assert "src.train.train_wgan_gp" in message
+    assert "--allow-missing" in message, "the escape hatch must be discoverable"
+    assert not out_dir.exists(), "an aborted run must leave no output tree"
+
+
+def test_main_reports_on_the_variants_a_custom_manifest_resolves(
+    monkeypatch, tmp_path, write_tiny_gated_run
+):
+    """The manifest is what makes this reproducible off the training box.
+
+    One entry points at a run that exists here, one at a run that does not;
+    with --allow-missing the present one is sampled and handed to the report.
+    """
+    variant, _ = write_tiny_gated_run(tmp_path)
+    manifest = write_manifest(
+        tmp_path / "variants.yaml",
+        [
+            {
+                "name": variant.name,
+                "config": variant.config_path,
+                "run_dir": variant.run_dir,
+            },
+            {
+                "name": "absent",
+                "config": "configs/sift/v0.yaml",
+                "run_dir": "runs/nope",
+            },
+        ],
+    )
+
+    seen = {}
+
+    def fake_run(args):
+        seen["specs"] = args.synthetic_path
+        return Path(args.output_dir) / "report.html"
+
+    monkeypatch.setattr(cv.eda_report, "run", fake_run)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "compare_variants.py",
+            "--real-path",
+            str(tmp_path / "real.npy"),
+            "--output-dir",
+            str(tmp_path / "out"),
+            "--root",
+            str(tmp_path),
+            "--variants-manifest",
+            str(manifest),
+            "--allow-missing",
+            "--num-samples",
+            "20",
+            "--batch-size",
+            "8",
+        ],
+    )
+
+    cv.main()
+
+    assert len(seen["specs"]) == 1, "only the resolvable variant is sampled"
+    label, _, path = seen["specs"][0].partition("=")
+    assert label == variant.name
+    assert np.load(path).shape[0] == 20

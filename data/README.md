@@ -81,11 +81,18 @@ directory containing both:
   silently sampled in the transformed space.
 
 Which ladder it drives is chosen with `--dataset` (`sift` by default, `deep`
-for the DEEP ladder); the table naming each variant's run directory lives in
-that family's page under `docs/datasets/`. Pass `--root` to point at a
-different tree. Variants missing a required file are skipped with a message
-rather than failing the run, since checkpoints commonly live only on the
-training box.
+for the DEEP ladder), which reads the manifest at `configs/eval/<dataset>.yaml`;
+`--variants-manifest` overrides that with any path. A manifest pairs each
+variant's config with the historical run directory it was trained into; the
+same table also appears in that family's page under `docs/datasets/`. Pass
+`--root` to point at a different tree.
+
+A variant missing either file aborts the run before any sampling, naming the
+path and the command that would produce it — `runs/` is gitignored, so on a
+fresh clone none of the default directories exist and there is nothing to
+compare. Pass `--allow-missing` to skip those variants with a message and
+report on the rest instead, which is what you want when the checkpoints you
+care about are the only ones off the training box.
 
 Samples are written to `<output-dir>/samples/<variant>.npy` and reused as the
 report's input, so they can be inspected independently.

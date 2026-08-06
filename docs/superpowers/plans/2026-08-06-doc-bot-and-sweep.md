@@ -153,7 +153,7 @@ Expected: `ok`
 - [ ] **Step 3: Confirm the suite is unaffected**
 
 Run: `/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/python -m pytest`
-Expected: `433 passed`
+Expected: `448 passed`
 
 - [ ] **Step 4: Commit**
 

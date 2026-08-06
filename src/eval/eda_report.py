@@ -32,7 +32,6 @@ import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from sklearn.decomposition import PCA
-from sklearn.neighbors import NearestNeighbors
 
 from src.eval import ann_difficulty
 from src.eval.descriptor_glyph import (
@@ -42,6 +41,7 @@ from src.eval.descriptor_glyph import (
     glyph_segments,
     shared_scale,
 )
+from src.eval.eda import metrics
 from src.eval.eda.config import (
     ANN_HUB_K_DEFAULT,
     ANN_K_DEFAULT,
@@ -51,7 +51,7 @@ from src.eval.eda.config import (
     KNN_MAX_ROWS_DEFAULT,
     EdaConfig,
 )
-from src.eval.eda.series import Series, load_series, subsample
+from src.eval.eda.series import Series, load_series
 
 # Descriptor glyph panel. Every other section here is an aggregate over tens of
 # thousands of vectors; this one draws a handful of individual descriptors,
@@ -193,38 +193,6 @@ def parse_args() -> argparse.Namespace:
 # --------------------------------------------------------------------------
 # data prep
 # --------------------------------------------------------------------------
-
-
-def pairwise_distance_sample(x: np.ndarray, num_pairs: int, seed: int) -> np.ndarray:
-    """Euclidean distances over randomly drawn distinct pairs."""
-    rng = np.random.default_rng(seed)
-    n = x.shape[0]
-    i = rng.integers(0, n, size=num_pairs)
-    j = rng.integers(0, n, size=num_pairs)
-    keep = i != j
-    i, j = i[keep], j[keep]
-    return np.linalg.norm(x[i] - x[j], axis=1)
-
-
-def nn_distances(x: np.ndarray, k: int, seed: int, max_rows: int) -> np.ndarray:
-    """Distance to the k-th nearest *other* point within the same set.
-
-    Collapsed generators put mass on a few modes, which shows up as a
-    within-set NN distance distribution shifted far below the real one. All
-    sets are cut to the same max_rows first: k-NN distance shrinks as sample
-    count grows, so unequal N would make the comparison meaningless.
-    """
-    sub = subsample(x, max_rows, seed)
-    nn = NearestNeighbors(n_neighbors=min(k + 1, sub.shape[0]))
-    nn.fit(sub)
-    dist, _ = nn.kneighbors(sub)
-    return dist[:, -1]
-
-
-def wasserstein1(a: np.ndarray, b: np.ndarray, num_quantiles: int = 512) -> float:
-    """1-D Wasserstein-1 via quantile functions; avoids a scipy dependency."""
-    q = np.linspace(0.0, 1.0, num_quantiles)
-    return float(np.mean(np.abs(np.quantile(a, q) - np.quantile(b, q))))
 
 
 # --------------------------------------------------------------------------
@@ -541,29 +509,16 @@ def fig_ivf_balance(
 
 
 def fig_dim_divergence(
-    series: Sequence[Series], top_k: int
-) -> tuple[go.Figure, dict[str, list[dict]]]:
-    """Rank dimensions by 1-D Wasserstein distance from real, per synthetic set.
-
-    Dimensions are ordered by the worst mismatch across all synthetics, so the
-    same x-axis ordering applies to every series and they stay comparable.
-    """
-    real = next(s for s in series if s.is_real)
-    synths = [s for s in series if not s.is_real]
-    dim = real.x.shape[1]
-
-    dists = {
-        s.name: np.array([wasserstein1(real.x[:, d], s.x[:, d]) for d in range(dim)])
-        for s in synths
-    }
-    worst_overall = np.max(np.stack(list(dists.values())), axis=0)
-    order = np.argsort(worst_overall)[::-1]
-
+    divergence: metrics.DimDivergence, series: Sequence[Series]
+) -> go.Figure:
+    """Draw the per-dimension mismatch bars in the shared worst-first order."""
     fig = go.Figure()
-    for s in synths:
+    for s in series:
+        if s.is_real:
+            continue
         fig.add_bar(
-            x=[f"dim {d}" for d in order],
-            y=dists[s.name][order],
+            x=[f"dim {d}" for d in divergence.order],
+            y=divergence.distances[s.name][divergence.order],
             name=s.name,
             marker_color=s.color,
         )
@@ -575,11 +530,7 @@ def fig_dim_divergence(
         template="plotly_white",
         height=440,
     )
-    worst = {
-        name: [{"dim": int(d), "wasserstein1": float(v[d])} for d in order[:top_k]]
-        for name, v in dists.items()
-    }
-    return fig, worst
+    return fig
 
 
 def fig_descriptor_glyphs(rows: Sequence[tuple[str, np.ndarray, str]]) -> go.Figure:
@@ -699,66 +650,6 @@ def glyph_rows(
 # --------------------------------------------------------------------------
 # report assembly
 # --------------------------------------------------------------------------
-
-
-def effective_rank(x: np.ndarray) -> float:
-    """exp(Shannon entropy of the explained-variance spectrum).
-
-    Reads as "how many directions meaningfully carry variance": equals the
-    dimension count when variance is spread evenly and 1 when it all sits on a
-    single direction. Note this uses variance ratios, not the normalized
-    singular values of Roy & Vetterli, so absolute values are not comparable
-    with that definition -- only across sets measured here.
-    """
-    ratio = (
-        PCA(n_components=min(x.shape[1], x.shape[0])).fit(x).explained_variance_ratio_
-    )
-    return float(np.exp(-np.sum(ratio * np.log(ratio + 1.0e-12))))
-
-
-def summary_stats(
-    s: Series,
-    knn: int,
-    num_pairs: int,
-    seed: int,
-    knn_max_rows: int,
-    metrics: ann_difficulty.AnnMetrics,
-) -> dict:
-    norms = np.linalg.norm(s.x, axis=1)
-    stats = {
-        "name": s.name,
-        "num_vectors": int(s.x.shape[0]),
-        "dim": int(s.x.shape[1]),
-        "value_mean": float(s.x.mean()),
-        "value_std": float(s.x.std()),
-        "value_min": float(s.x.min()),
-        "value_max": float(s.x.max()),
-        "exact_zero_fraction": float((s.x == 0.0).mean()),
-        "negative_fraction": float((s.x < 0.0).mean()),
-        "norm_mean": float(norms.mean()),
-        "norm_std": float(norms.std()),
-        "duplicate_row_fraction": float(
-            1.0 - np.unique(s.x, axis=0).shape[0] / s.x.shape[0]
-        ),
-        "median_pairwise_distance": float(
-            np.median(pairwise_distance_sample(s.x, num_pairs, seed))
-        ),
-        f"median_{knn}nn_distance": float(
-            np.median(nn_distances(s.x, knn, seed, knn_max_rows))
-        ),
-        "effective_rank": effective_rank(s.x),
-    }
-    stats.update(ann_difficulty.summary(metrics))
-    # Actual (post-clamp) measurement conditions, not the requested ones: a
-    # series with fewer rows than --ann-max-rows gets its k and nlist clamped
-    # inside knn()/cell_occupancy(), and its num_vectors above is the
-    # PRE-truncation count. Without these, nothing records what a series was
-    # actually measured under, and the report's section notes cannot tell a
-    # reader when conditions diverge across series.
-    stats["ann_measured_rows"] = metrics.num_rows
-    stats["ann_measured_k"] = metrics.k
-    stats["ann_measured_nlist"] = metrics.nlist
-    return stats
 
 
 def format_stat(value: float | int | None) -> str:
@@ -952,7 +843,7 @@ def run(args: argparse.Namespace) -> Path:
         for s in series
     }
     stats = [
-        summary_stats(
+        metrics.summary_stats(
             s,
             args.knn,
             args.num_pairs,
@@ -1093,7 +984,9 @@ def run(args: argparse.Namespace) -> Path:
                 [
                     (
                         s.name,
-                        pairwise_distance_sample(s.x, args.num_pairs, args.seed),
+                        metrics.pairwise_distance_sample(
+                            s.x, args.num_pairs, args.seed
+                        ),
                         s.color,
                     )
                     for s in series
@@ -1116,7 +1009,9 @@ def run(args: argparse.Namespace) -> Path:
                 [
                     (
                         s.name,
-                        nn_distances(s.x, args.knn, args.seed, args.knn_max_rows),
+                        metrics.nn_distances(
+                            s.x, args.knn, args.seed, args.knn_max_rows
+                        ),
                         s.color,
                     )
                     for s in series
@@ -1162,7 +1057,9 @@ def run(args: argparse.Namespace) -> Path:
 
     worst_dims: dict[str, list[dict]] = {}
     if has_synth:
-        div_fig, worst_dims = fig_dim_divergence(series, args.top_divergent)
+        divergence = metrics.dimension_divergence(series, args.top_divergent)
+        worst_dims = divergence.worst
+        div_fig = fig_dim_divergence(divergence, series)
         sections.append(
             (
                 "Per-dimension mismatch",

@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 
 from src.eval import ann_difficulty, eda_report
+from src.eval.eda import figures
 
 
 def make_args(tmp_path, real, synthetic):
@@ -307,7 +308,7 @@ def test_fig_ann_profile_annotates_a_panel_with_no_surviving_queries():
     bare pair of axes that reads as a rendering failure."""
     series = [_stub_series("real")]
     metrics = {"real": _stub_metrics(num_rows=5, k=1, nlist=2, discarded=5)}
-    fig = eda_report.fig_ann_profile(series, metrics, bins=8)
+    fig = figures.fig_ann_profile(series, metrics, bins=8)
     texts = [a.text for a in fig.layout.annotations]
     assert texts.count("no surviving queries") == 2, texts
 

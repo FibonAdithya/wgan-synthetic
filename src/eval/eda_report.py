@@ -25,14 +25,13 @@ from __future__ import annotations
 
 import argparse
 import json
-from collections.abc import Sequence
 from pathlib import Path
 
 import numpy as np
 import plotly.graph_objects as go
 
 from src.eval import ann_difficulty
-from src.eval.eda import figures, glyphs, metrics
+from src.eval.eda import figures, glyphs, metrics, notes
 from src.eval.eda.config import (
     ANN_HUB_K_DEFAULT,
     ANN_K_DEFAULT,
@@ -42,7 +41,7 @@ from src.eval.eda.config import (
     KNN_MAX_ROWS_DEFAULT,
     EdaConfig,
 )
-from src.eval.eda.series import Series, load_series
+from src.eval.eda.series import load_series
 
 
 def parse_args() -> argparse.Namespace:
@@ -273,82 +272,6 @@ def export_pngs(sections: list[tuple[str, str, go.Figure]], out_dir: Path) -> li
     return written
 
 
-def ann_condition_note(
-    series: Sequence[Series],
-    ann_metrics: dict[str, ann_difficulty.AnnMetrics],
-    attrs: tuple[tuple[str, str], ...],
-) -> str:
-    """State the actual per-series ANN measurement conditions for `attrs`.
-
-    `attrs` is a sequence of (AnnMetrics field name, display label) pairs,
-    e.g. (("num_rows", "rows"), ("k", "k")). When every series in this run
-    was measured under the same conditions, one summary sentence is enough.
-    When they differ -- e.g. a series with fewer rows than --ann-max-rows
-    gets num_rows, k or nlist clamped -- a reader must not be able to mistake
-    one series' numbers for all of them, so each series' actual values are
-    spelled out instead.
-    """
-    per_series = {
-        s.name: tuple(getattr(ann_metrics[s.name], field) for field, _ in attrs)
-        for s in series
-    }
-    if len(set(per_series.values())) == 1:
-        values = next(iter(per_series.values()))
-        parts = ", ".join(f"{label}={v}" for (_, label), v in zip(attrs, values))
-        return f" Measured with {parts} for every series."
-    per_series_text = "; ".join(
-        f"{name} ("
-        + ", ".join(f"{label}={v}" for (_, label), v in zip(attrs, values))
-        + ")"
-        for name, values in per_series.items()
-    )
-    return (
-        " Measurement conditions differ across series (a series with fewer "
-        f"rows than requested has k and/or nlist clamped): {per_series_text}."
-    )
-
-
-def ann_discarded_note(
-    series: Sequence[Series],
-    ann_metrics: dict[str, ann_difficulty.AnnMetrics],
-) -> str:
-    """Call out any series that contributed no queries at all, and why.
-
-    `summary` returns None for `lid_median` and `relative_contrast_median`
-    when every query was discarded, and the panel simply has no trace for
-    that series. That is the honest answer, but on its own it renders as a
-    silent `n/a`. The two ways to get there are a set of exact duplicates
-    (every query has r_1 == 0) and `k == 1` -- either passed via `--ann-k 1`
-    or clamped there by `knn` for a two-row series -- where r_1 and r_k are
-    the same column, so `survivor_mask`'s r_1 < r_k can never hold.
-
-    Only the LID/contrast panels need this: hubness and IVF balance are
-    computed over every row regardless of which queries survived.
-    """
-    affected = []
-    for s in series:
-        m = ann_metrics[s.name]
-        if m.num_rows == 0 or m.discarded_queries != m.num_rows:
-            continue
-        # k < 2 is checked first: at k == 1 the mask cannot pass whatever the
-        # data looks like, so it explains the whole series on its own.
-        reason = (
-            "measured at k=1, where the nearest and the k-th neighbour are "
-            "the same point, so no query can pass the estimator's r_1 < r_k "
-            "test"
-            if m.k < 2
-            else "every query sits on an exact duplicate"
-        )
-        affected.append(f"{s.name} ({reason})")
-    if not affected:
-        return ""
-    return (
-        f" <b>No surviving queries for {'; '.join(affected)}</b>. Both panels "
-        "report n/a for those series rather than a number, and draw no trace "
-        "for them."
-    )
-
-
 def run(args: argparse.Namespace) -> Path:
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -409,11 +332,6 @@ def run(args: argparse.Namespace) -> Path:
             )
         )
 
-    ann_note_suffix = (
-        " Compare against the <code>real</code> series in this report only. "
-        "These numbers come from a self-queried subsample, so they are not "
-        "comparable with published SIFT1M figures."
-    )
     sections.append(
         (
             "Local intrinsic dimensionality",
@@ -424,11 +342,11 @@ def run(args: argparse.Namespace) -> Path:
             "and it overstates it. Relative contrast sits alongside: values "
             "near 1 mean the nearest neighbour is barely closer than an "
             "arbitrary point, leaving an index little to exploit."
-            + ann_condition_note(
+            + notes.ann_condition_note(
                 series, ann_metrics, (("num_rows", "rows"), ("k", "k"))
             )
-            + ann_discarded_note(series, ann_metrics)
-            + ann_note_suffix,
+            + notes.ann_discarded_note(series, ann_metrics)
+            + notes.ANN_NOTE_SUFFIX,
             figures.fig_ann_profile(series, ann_metrics, args.bins),
         )
     )
@@ -440,8 +358,8 @@ def run(args: argparse.Namespace) -> Path:
             "graph indexes like HNSW. A generator gets no direct training "
             "pressure to reproduce this, so matching it is genuine evidence "
             "rather than a fitted artefact."
-            + ann_condition_note(series, ann_metrics, (("num_rows", "rows"),))
-            + ann_note_suffix,
+            + notes.ann_condition_note(series, ann_metrics, (("num_rows", "rows"),))
+            + notes.ANN_NOTE_SUFFIX,
             figures.overlay_hist_fig(
                 [
                     (
@@ -464,8 +382,8 @@ def run(args: argparse.Namespace) -> Path:
             "How evenly k-means would partition each set, which drives how many "
             "cells an IVF query has to probe. Each set is clustered on its own, "
             "because an index would be built on whichever set you shipped."
-            + ann_condition_note(series, ann_metrics, (("nlist", "nlist"),))
-            + ann_note_suffix,
+            + notes.ann_condition_note(series, ann_metrics, (("nlist", "nlist"),))
+            + notes.ANN_NOTE_SUFFIX,
             figures.fig_ivf_balance(series, ann_metrics),
         )
     )

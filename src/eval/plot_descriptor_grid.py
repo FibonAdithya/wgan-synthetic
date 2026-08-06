@@ -1,9 +1,10 @@
 """Render real and generated SIFT descriptors as a grid of orientation glyphs.
 
-Every other panel in `eda.glyphs` is an aggregate over tens of thousands of
-vectors. All of them can look healthy while the generator produces
-descriptors that are structurally wrong, because a matched marginal says
-nothing about whether the 128 numbers form a plausible gradient histogram.
+Every other panel in the EDA report (`src/eval/eda`) is an aggregate over
+tens of thousands of vectors. All of them can look healthy while the
+generator produces descriptors that are structurally wrong, because a
+matched marginal says nothing about whether the 128 numbers form a
+plausible gradient histogram.
 This figure shows individual descriptors instead.
 
 Two rows of real descriptors are drawn, not one. Without a sense of how much

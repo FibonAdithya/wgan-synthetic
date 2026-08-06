@@ -156,3 +156,10 @@ def test_knn_max_rows_is_a_separate_flag_from_ann_max_rows(monkeypatch, tmp_path
 def test_knn_max_rows_defaults_to_the_same_value_as_ann_max_rows():
     """Same default, so no existing invocation changes what it measures."""
     assert config.KNN_MAX_ROWS_DEFAULT == config.ANN_MAX_ROWS_DEFAULT
+
+
+def test_help_description_is_the_module_docstring():
+    """cli.py's module docstring is the --help text: parse_args passes it as
+    description=__doc__. Pins that the docstring still opens with a stable
+    phrase, since nothing else here would notice it being edited away."""
+    assert "Exploratory data analysis for SIFT1M descriptors" in cli.__doc__

@@ -4,7 +4,10 @@ The implementation lives in `src/eval/eda/`; this module exists so that
 `python -m src.eval.eda_report`, the command in `README.md`,
 `docs/datasets/*.md` and `check_gate.py`'s error messages, keeps working.
 
-It deliberately re-exports nothing. Import from `src.eval.eda.<module>`.
+Nothing in this repo imports names from here; import from
+`src.eval.eda.<module>` instead. (`parse_args` and `run` are importable off
+this module too, as a side effect of the imports below -- that is harmless,
+but this module is not where they are meant to be imported from.)
 """
 
 from src.eval.eda.cli import parse_args

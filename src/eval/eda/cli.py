@@ -1,3 +1,5 @@
+# This docstring is the CLI's --help text: parse_args passes it as
+# description=__doc__. Editing it for tidiness changes the CLI contract.
 """Exploratory data analysis for SIFT1M descriptors, with optional synthetic overlays.
 
 Complements the metric-driven scripts in this package (evaluate_distribution,

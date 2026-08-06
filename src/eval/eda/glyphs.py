@@ -26,10 +26,6 @@ from src.eval.descriptor_glyph import (
 )
 from src.eval.eda.series import Series
 
-# Descriptor glyph panel. Every other section here is an aggregate over tens of
-# thousands of vectors; this one draws a handful of individual descriptors,
-# because a matched marginal says nothing about whether the 128 numbers form a
-# plausible gradient histogram.
 GLYPH_SECTION_TITLE = "Descriptor glyphs"
 GLYPH_CELL_PITCH = 1.0
 # Roughly one glyph width (4 * GLYPH_CELL_PITCH) plus a gutter, so rows read as

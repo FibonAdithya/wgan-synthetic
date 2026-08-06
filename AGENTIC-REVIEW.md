@@ -195,7 +195,7 @@ low blast radius — but sampling correctness is load-bearing.
 
 `eda_report.py`, formerly 1017 lines and the file most likely to be edited by
 an agent and the hardest for one to hold in context, has since been split
-into the `src/eval/eda/` package (`894e2d3..c88ded8`, 2026-08-05, see
+into the `src/eval/eda/` package (`894e2d3^..c88ded8`, 2026-08-05, see
 `docs/superpowers/specs/2026-08-05-eda-report-split-design.md`); the
 entrypoint module is now 19 lines.
 

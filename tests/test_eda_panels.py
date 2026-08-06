@@ -3,12 +3,32 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Sequence
 
 import numpy as np
 import plotly.graph_objects as go
 
 from src.eval import ann_difficulty
 from src.eval.eda import config, metrics, panels, series
+
+# List order is report order (pipeline.py walks PANELS directly). This pins
+# the report's whole composition -- count, order and titles -- now that the
+# out-of-repo golden harness that used to catch a reorder or deletion is gone.
+EXPECTED_PANEL_TITLES = [
+    "Descriptor glyphs",
+    "Local intrinsic dimensionality",
+    "Hubness",
+    "IVF cell balance",
+    "Pooled value distribution",
+    "Per-dimension marginals",
+    "Per-dimension profiles",
+    "Pairwise distances",
+    "Within-set 5-NN distances",  # 5 is _namespace()'s --knn default
+    "Vector norms",
+    "PCA spectrum",
+    "Correlation structure",
+    "Per-dimension mismatch",
+]
 
 
 def _namespace(preprocess: str = "l2") -> argparse.Namespace:
@@ -41,7 +61,9 @@ def _namespace(preprocess: str = "l2") -> argparse.Namespace:
     )
 
 
-def _by_title(all_panels, title: str, ctx: panels.Context) -> panels.Panel:
+def _by_title(
+    all_panels: Sequence[panels.Panel], title: str, ctx: panels.Context
+) -> panels.Panel:
     """The single panel whose resolved title is `title`."""
     found = [p for p in all_panels if p.resolve_title(ctx) == title]
     if len(found) != 1:
@@ -76,6 +98,12 @@ def _context(dim: int = 128, num_synth: int = 2, preprocess: str = "l2"):
             else None
         ),
     )
+
+
+def test_panels_are_registered_in_report_order():
+    """List order is report order; nothing else pins it once the golden harness is gone."""
+    ctx = _context()
+    assert [p.resolve_title(ctx) for p in panels.PANELS] == EXPECTED_PANEL_TITLES
 
 
 def test_every_panel_declares_a_title_and_a_note():

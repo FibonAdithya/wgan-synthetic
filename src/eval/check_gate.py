@@ -7,7 +7,7 @@ ANN-difficulty statistics against their bands, prints JSON, and exits non-zero
 when the run does not pass. An agent that trains a rung can then tell whether
 it succeeded without a human opening a browser.
 
-Like `ann_difficulty`, this deliberately does not import from `eda_report`:
+Like `ann_difficulty`, this deliberately does not import from `src.eval.eda`:
 the check must run anywhere `summary.json` can be copied to, without plotly
 and without loading any vectors.
 

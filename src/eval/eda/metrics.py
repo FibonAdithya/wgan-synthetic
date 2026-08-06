@@ -69,6 +69,9 @@ def dimension_divergence(series: Sequence[Series], top_k: int) -> DimDivergence:
 
     Dimensions are ordered by the worst mismatch across all synthetics, so the
     same x-axis ordering applies to every series and they stay comparable.
+
+    Requires one series with `is_real` True and at least one without: raises
+    `StopIteration` if no series is real, `ValueError` if none are synthetic.
     """
     real = next(s for s in series if s.is_real)
     synths = [s for s in series if not s.is_real]

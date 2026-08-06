@@ -122,21 +122,6 @@ def _stub_metrics(
     )
 
 
-def test_format_stat_renders_counts_as_integers_not_scientific_notation():
-    assert eda_report.format_stat(1200000) == "1200000"
-    assert eda_report.format_stat(np.int64(1200000)) == "1200000"
-    assert eda_report.format_stat(None) == "n/a"
-    assert eda_report.format_stat(0.5) == "0.5"
-
-
-def test_stats_table_renders_a_large_discarded_count_as_a_tally():
-    html = eda_report.stats_table_html(
-        [{"name": "real", "lid_discarded_queries": 1200000, "lid_median": 12.5}]
-    )
-    assert "1200000" in html
-    assert "1.2e+06" not in html
-
-
 def test_fig_ann_profile_annotates_a_panel_with_no_surviving_queries():
     """Every series fully degenerate: without the annotation the subplot is a
     bare pair of axes that reads as a rendering failure."""

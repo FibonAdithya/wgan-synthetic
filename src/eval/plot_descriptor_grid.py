@@ -30,9 +30,9 @@ import yaml
 
 from src.data.dataset import load_descriptors
 from src.eval import compare_variants as cv
-from src.eval import eda_report
 from src.eval.descriptor_glyph import DESCRIPTOR_DIM
 from src.eval.eda import glyphs as eda_glyphs
+from src.eval.eda import html as eda_html
 from src.eval.eda import series as eda_series
 from src.eval.evaluate_distribution import get_device, load_generator
 from src.train.train_wgan_gp import sample_generator
@@ -101,7 +101,7 @@ def write_report(
 ) -> Path:
     """Write the HTML report, and optionally a static PNG beside it."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    head = eda_report.plotlyjs_head(plotlyjs_mode, out_dir)
+    head = eda_html.plotlyjs_head(plotlyjs_mode, out_dir)
     body = fig.to_html(full_html=False, include_plotlyjs=False)
     html = (
         "<!doctype html><html><head><meta charset='utf-8'>"
@@ -112,7 +112,7 @@ def write_report(
     path.write_text(html, encoding="utf-8")
     if write_png:
         try:
-            eda_report.export_pngs([("descriptor grid", "", fig)], out_dir)
+            eda_html.export_pngs([("descriptor grid", "", fig)], out_dir)
         except Exception as exc:  # kaleido needs a Chrome binary
             print(f"skipping PNG export: {exc}")
     return path

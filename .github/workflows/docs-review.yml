@@ -1,0 +1,90 @@
+name: Docs review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+# A second push supersedes the review of the first; don't pay for both.
+concurrency:
+  group: docs-review-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          # Bills the Claude subscription rather than an API account, matching
+          # claude-review.yml. The token comes from `claude setup-token`.
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_AUTH_TOKEN }}
+          # Without this the action mints its own token through the Claude
+          # GitHub App, which is not installed here. Note the permissions block
+          # above grants no `contents: write`: this job comments and never
+          # pushes, so a confidently wrong rewrite costs a comment rather than
+          # a commit.
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            Review this pull request for documentation drift only. Another
+            workflow reviews the code; do not duplicate it. The PR branch is
+            already checked out.
+
+            Read AGENTS.md first. It is the project's router: it names the
+            order of authority between documents and lists five invariants
+            that nothing in the test suite catches.
+
+            Report, in this order:
+
+            - A claim in an authoritative document that this diff has just
+              made false. Authority runs: the code in src/ and the configs in
+              configs/ win, then PROJECT_DOCUMENTATION.md, then README.md,
+              data/README.md and docs/datasets/*.md.
+            - Behaviour this diff changes with no matching doc update: a new
+              or renamed CLI flag, a changed default, a renamed config key, a
+              new entry point.
+            - Drift touching the five invariants -- a change to what a variant
+              number means, a diagnostic metric (MMD, cov_fro,
+              pairwise_hist_l1) described as the gate instead of the four
+              ANN-difficulty statistics, a cross-family comparison of variant
+              numbers or measured statistics, or a checkpoint separated from
+              its run_config.yaml.
+            - Any newly added `file.md:123` style citation. This repo cites
+              documents by anchor (`PROJECT_DOCUMENTATION.md#the-gate`) and
+              code by symbol (`src/eval/ann_difficulty.py::lid_mle`), because
+              line numbers silently rot when text is inserted above them.
+              tests/test_docs_references.py enforces this; explain it rather
+              than only naming the failure.
+
+            Do not:
+            - Rewrite documentation. Flag stale claims; the wording is a
+              human's call.
+            - Comment on anything under docs/superpowers/. Those are dated
+              snapshots, non-authoritative by policy, and are not updated as
+              the code changes.
+            - Flag style that `make check` (ruff lint + format) enforces.
+            - Propose tightening gate bands, repointing a config's data path,
+              or bumping a pinned requirement. AGENTS.md reserves those.
+            - Propose re-measuring or editing numbers in docs/datasets/*.md.
+
+            Be concise and specific. If the documentation is consistent with
+            the diff, say so in one short comment rather than manufacturing
+            findings.
+
+            Use `gh pr comment` for top-level feedback.
+            Use `mcp__github_inline_comment__create_inline_comment` (with
+            `confirmed: true`) for issues tied to specific lines.
+            Only post GitHub comments -- don't return review text as a message.
+
+          claude_args: |
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"

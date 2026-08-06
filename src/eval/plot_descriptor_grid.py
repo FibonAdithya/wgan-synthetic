@@ -32,6 +32,7 @@ from src.data.dataset import load_descriptors
 from src.eval import compare_variants as cv
 from src.eval import eda_report
 from src.eval.descriptor_glyph import DESCRIPTOR_DIM
+from src.eval.eda import series as eda_series
 from src.eval.evaluate_distribution import get_device, load_generator
 from src.train.train_wgan_gp import sample_generator
 
@@ -261,11 +262,11 @@ def run(args: argparse.Namespace) -> Path:
     row_a, row_b = pick_real_rows(real, args.num_samples, args.seed)
     check_finite(row_a, str(args.real_path))
     check_finite(row_b, str(args.real_path))
-    # `eda_report`'s normaliser rather than a local one: this has to match the
+    # `eda.series`'s normaliser rather than a local one: this has to match the
     # training preprocessing, and a third copy of that rule is a third place
     # for it to drift out of step with `dataset.apply_preprocess`.
-    row_a = eda_report.maybe_l2_normalize(row_a, "l2")
-    row_b = eda_report.maybe_l2_normalize(row_b, "l2")
+    row_a = eda_series.maybe_l2_normalize(row_a, "l2")
+    row_b = eda_series.maybe_l2_normalize(row_b, "l2")
 
     rows: list[tuple[str, np.ndarray, str]] = [
         ("real-a", row_a, REAL_COLORS[0]),

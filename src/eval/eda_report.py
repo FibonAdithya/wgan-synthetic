@@ -26,7 +26,6 @@ from __future__ import annotations
 import argparse
 import json
 from collections.abc import Sequence
-from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -35,7 +34,6 @@ from plotly.subplots import make_subplots
 from sklearn.decomposition import PCA
 from sklearn.neighbors import NearestNeighbors
 
-from src.data.dataset import load_descriptors
 from src.eval import ann_difficulty
 from src.eval.descriptor_glyph import (
     DESCRIPTOR_DIM,
@@ -51,20 +49,9 @@ from src.eval.eda.config import (
     GLYPH_SAMPLES_DEFAULT,
     IVF_NLIST_DEFAULT,
     KNN_MAX_ROWS_DEFAULT,
+    EdaConfig,
 )
-
-REAL_NAME = "real"
-REAL_COLOR = "#2b6cb0"
-# Colors for synthetic sets, in order. Deliberately distinct from REAL_COLOR so
-# the reference curve stays identifiable when several overlays are present.
-SYNTH_PALETTE = [
-    "#dd6b20",
-    "#38a169",
-    "#805ad5",
-    "#d53f8c",
-    "#00897b",
-    "#a0522d",
-]
+from src.eval.eda.series import Series, load_series, subsample
 
 # Descriptor glyph panel. Every other section here is an aggregate over tens of
 # thousands of vectors; this one draws a handful of individual descriptors,
@@ -79,19 +66,6 @@ GLYPH_PITCH = 5.0
 # descriptors differ from each other, a variant row below them is just a vibe.
 GLYPH_REAL_COLORS = ("#2b6cb0", "#17becf")
 GLYPH_NEGATIVE_COLOR = "#d62728"
-
-
-@dataclass
-class Series:
-    """One dataset to plot, already subsampled and preprocessed."""
-
-    name: str
-    x: np.ndarray
-    color: str
-
-    @property
-    def is_real(self) -> bool:
-        return self.name == REAL_NAME
 
 
 def parse_args() -> argparse.Namespace:
@@ -216,39 +190,9 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def parse_synthetic_spec(spec: str) -> tuple[str, Path]:
-    """Split a '[LABEL=]PATH' argument into its label and path.
-
-    Only the first '=' separates, so paths containing '=' still work when a
-    label is supplied. A bare path falls back to the file stem as its label.
-    """
-    if "=" in spec:
-        label, _, raw = spec.partition("=")
-        label = label.strip()
-        if label:
-            return label, Path(raw)
-    path = Path(spec)
-    return path.stem, path
-
-
 # --------------------------------------------------------------------------
 # data prep
 # --------------------------------------------------------------------------
-
-
-def subsample(x: np.ndarray, max_vectors: int, seed: int) -> np.ndarray:
-    if max_vectors <= 0 or x.shape[0] <= max_vectors:
-        return x
-    rng = np.random.default_rng(seed)
-    idx = rng.choice(x.shape[0], size=max_vectors, replace=False)
-    return x[np.sort(idx)]
-
-
-def maybe_l2_normalize(x: np.ndarray, mode: str, eps: float = 1.0e-8) -> np.ndarray:
-    if mode == "none":
-        return x
-    norm = np.linalg.norm(x, axis=1, keepdims=True)
-    return (x / np.clip(norm, eps, None)).astype(np.float32, copy=False)
 
 
 def pairwise_distance_sample(x: np.ndarray, num_pairs: int, seed: int) -> np.ndarray:
@@ -913,34 +857,6 @@ def export_pngs(sections: list[tuple[str, str, go.Figure]], out_dir: Path) -> li
     return written
 
 
-def load_series(args: argparse.Namespace) -> list[Series]:
-    real_x = load_descriptors(Path(args.real_path), file_format=args.real_format)
-    real_x = maybe_l2_normalize(
-        subsample(real_x, args.max_vectors, args.seed), args.preprocess
-    )
-    series = [Series(REAL_NAME, real_x, REAL_COLOR)]
-
-    seen = {REAL_NAME}
-    for i, spec in enumerate(args.synthetic_path or []):
-        label, path = parse_synthetic_spec(spec)
-        if label in seen:
-            raise ValueError(
-                f"Duplicate series label {label!r}; use LABEL=PATH to rename"
-            )
-        seen.add(label)
-        x = load_descriptors(path, file_format=args.synthetic_format)
-        if x.shape[1] != real_x.shape[1]:
-            raise ValueError(
-                f"Dimension mismatch for {label!r}: real has {real_x.shape[1]}, "
-                f"got {x.shape[1]}"
-            )
-        x = maybe_l2_normalize(
-            subsample(x, args.max_vectors, args.seed), args.preprocess
-        )
-        series.append(Series(label, x, SYNTH_PALETTE[i % len(SYNTH_PALETTE)]))
-    return series
-
-
 def ann_condition_note(
     series: Sequence[Series],
     ann_metrics: dict[str, ann_difficulty.AnnMetrics],
@@ -1021,7 +937,8 @@ def run(args: argparse.Namespace) -> Path:
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    series = load_series(args)
+    cfg = EdaConfig.from_args(args)
+    series = load_series(cfg)
     has_synth = len(series) > 1
     ann_metrics = {
         s.name: ann_difficulty.compute(

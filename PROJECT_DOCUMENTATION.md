@@ -641,7 +641,7 @@ what the fetcher does and `docs/datasets/sift.md` for the family's specifics.
 `configs/sift/v0.yaml` names `data/sift_base.npy` as `data.real_path` — the
 corpus the trained checkpoints in this repo actually used, not the fetched
 `data/sift_250k.npy` subset above. Point `real_path` at whichever file you
-have, per `FOLLOWUPS.md` ("`data.real_path` names a file the fetcher does not
+have, per issue #15 ("`data.real_path` names a file the fetcher does not
 produce").
 
 ## 4) Generate synthetic dataset

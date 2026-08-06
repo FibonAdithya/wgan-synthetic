@@ -6,7 +6,7 @@ import numpy as np
 from tests.conftest import make_args
 
 from src.eval import ann_difficulty, eda_report
-from src.eval.eda import figures
+from src.eval.eda import cli, config, figures, pipeline
 from src.eval.eda.series import Series
 
 
@@ -15,7 +15,7 @@ def test_run_returns_written_report_path(tmp_path):
     real = rng.normal(size=(200, 8)).astype(np.float32)
     synth = {"v0": rng.normal(size=(200, 8)).astype(np.float32)}
 
-    out = eda_report.run(make_args(tmp_path, real, synth))
+    out = pipeline.run(make_args(tmp_path, real, synth))
 
     assert isinstance(out, Path)
     assert out.exists()
@@ -32,7 +32,7 @@ def test_run_accepts_several_synthetic_sets(tmp_path):
         "v2": rng.normal(size=(200, 8)).astype(np.float32),
     }
 
-    html = eda_report.run(make_args(tmp_path, real, synth)).read_text()
+    html = pipeline.run(make_args(tmp_path, real, synth)).read_text()
 
     for label in ("v0", "v1", "v2"):
         assert label in html
@@ -148,11 +148,11 @@ def test_knn_max_rows_is_a_separate_flag_from_ann_max_rows(monkeypatch, tmp_path
             "500",
         ],
     )
-    args = eda_report.parse_args()
+    args = cli.parse_args()
     assert args.ann_max_rows == 500
-    assert args.knn_max_rows == eda_report.KNN_MAX_ROWS_DEFAULT
+    assert args.knn_max_rows == config.KNN_MAX_ROWS_DEFAULT
 
 
 def test_knn_max_rows_defaults_to_the_same_value_as_ann_max_rows():
     """Same default, so no existing invocation changes what it measures."""
-    assert eda_report.KNN_MAX_ROWS_DEFAULT == eda_report.ANN_MAX_ROWS_DEFAULT
+    assert config.KNN_MAX_ROWS_DEFAULT == config.ANN_MAX_ROWS_DEFAULT

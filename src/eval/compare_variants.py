@@ -1,6 +1,6 @@
 """Overlay every trained variant of one dataset family on its real data.
 
-src.eval.eda_report can already overlay any number of synthetic sets; this
+src.eval.eda can already overlay any number of synthetic sets; this
 drives it across a family's named variants so the comparison does not have to
 be retyped. Each variant is one config delta from the one before it, so a
 difference visible in the report attributes to a single cause.
@@ -42,8 +42,8 @@ import torch
 import yaml
 
 from src.data.dataset import PreprocessState, invert_preprocess
-from src.eval import eda_report
 from src.eval.eda import config as eda_config
+from src.eval.eda import pipeline
 from src.eval.evaluate_distribution import get_device, load_generator
 from src.train.train_wgan_gp import sample_generator
 
@@ -483,10 +483,10 @@ def parse_args() -> argparse.Namespace:
 
 
 def build_report_args(args: argparse.Namespace, specs: list[str]) -> argparse.Namespace:
-    """Build the Namespace `eda_report.run` expects from our own parsed args.
+    """Build the Namespace `eda.pipeline.run` expects from our own parsed args.
 
-    Field-for-field parity with `eda_report.parse_args` is load-bearing: if
-    `eda_report` gains a required argument and this Namespace is not updated
+    Field-for-field parity with `eda.cli.parse_args` is load-bearing: if
+    `eda.cli` gains a required argument and this Namespace is not updated
     to match, sampling hundreds of thousands of vectors will succeed before
     the mismatch surfaces as a runtime `AttributeError`. See
     `tests/test_compare_variants.py::test_report_args_match_eda_report_fields`.
@@ -562,7 +562,7 @@ def main() -> None:
         specs.append(f"{variant.name}={path}")
 
     report_args = build_report_args(args, specs)
-    report_path = eda_report.run(report_args)
+    report_path = pipeline.run(report_args)
     print(f"report: {report_path}")
 
 

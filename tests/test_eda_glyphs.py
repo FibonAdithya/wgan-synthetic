@@ -1,8 +1,7 @@
 import numpy as np
 from tests.conftest import make_args
 
-from src.eval import eda_report
-from src.eval.eda import glyphs
+from src.eval.eda import glyphs, pipeline
 
 
 def _sparse_sift_like(rows, seed, dim=128):
@@ -18,7 +17,7 @@ def test_glyph_section_is_included_for_128_dimensional_data(tmp_path):
     real = _sparse_sift_like(200, seed=0)
     synth = {"v0": _sparse_sift_like(200, seed=1)}
 
-    html = eda_report.run(make_args(tmp_path, real, synth)).read_text()
+    html = pipeline.run(make_args(tmp_path, real, synth)).read_text()
 
     assert glyphs.GLYPH_SECTION_TITLE in html
 
@@ -29,7 +28,7 @@ def test_glyph_section_draws_two_real_rows_as_the_variation_baseline(tmp_path):
     real = _sparse_sift_like(200, seed=0)
     synth = {"v0": _sparse_sift_like(200, seed=1)}
 
-    html = eda_report.run(make_args(tmp_path, real, synth)).read_text()
+    html = pipeline.run(make_args(tmp_path, real, synth)).read_text()
 
     assert "real-a" in html and "real-b" in html
 
@@ -42,7 +41,7 @@ def test_glyph_section_is_skipped_for_other_dimensions(tmp_path):
     real = rng.normal(size=(200, 8)).astype(np.float32)
     synth = {"v0": rng.normal(size=(200, 8)).astype(np.float32)}
 
-    html = eda_report.run(make_args(tmp_path, real, synth)).read_text()
+    html = pipeline.run(make_args(tmp_path, real, synth)).read_text()
 
     assert glyphs.GLYPH_SECTION_TITLE not in html
 
@@ -58,7 +57,7 @@ def test_glyph_section_is_skipped_when_a_series_is_too_small(tmp_path):
     args = make_args(tmp_path, real, synth)
     args.knn = 2
     args.glyph_samples = 8
-    html = eda_report.run(args).read_text()
+    html = pipeline.run(args).read_text()
 
     assert glyphs.GLYPH_SECTION_TITLE not in html
 
@@ -69,6 +68,6 @@ def test_glyph_samples_zero_disables_the_section(tmp_path):
 
     args = make_args(tmp_path, real, synth)
     args.glyph_samples = 0
-    html = eda_report.run(args).read_text()
+    html = pipeline.run(args).read_text()
 
     assert glyphs.GLYPH_SECTION_TITLE not in html

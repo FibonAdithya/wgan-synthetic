@@ -25,14 +25,6 @@ AI working notes, kept for provenance and **not** authoritative:
   Claude during development. See `docs/superpowers/README.md`. Where these
   disagree with `PROJECT_DOCUMENTATION.md`, the latter wins.
 
-Reviews and vendored external references, also **not** authoritative:
-
-- `AGENTIC-REVIEW.md` — a cold-read review of how ready this repo is for
-  autonomous agents. Written against one commit; its counts are a snapshot.
-- `docs/ai-first-development-workflow.md` — a general AI-workflow guide copied
-  from the sibling `tig-cpu` repository. It describes no part of this project
-  and is kept only so the citations in `AGENTIC-REVIEW.md` resolve.
-
 ## Datasets
 
 Each family gets its own ladder of variants and its own gate. SIFT and DEEP

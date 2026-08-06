@@ -190,3 +190,22 @@ def test_symbol_references_resolve(doc):
         elif symbol not in module_symbols(target):
             broken.append(f"{rel(doc)}:{lineno} -> {path}::{symbol}")
     assert not broken, "symbols that do not exist: " + "; ".join(broken)
+
+
+@pytest.mark.parametrize("doc", AUTHORITATIVE_DOCS, ids=rel)
+def test_no_line_number_citations(doc):
+    """Line numbers rot silently; anchors and symbols do not.
+
+    This is the check that keeps the other two meaningful. Without it a new
+    `PROJECT_DOCUMENTATION.md:274` can be added at any time and nothing
+    notices until it is pointing at a hyperparameter again.
+    """
+    offenders = [
+        f"{rel(doc)}:{lineno} -> {match.group(0)}"
+        for lineno, match in iter_refs(doc)
+        if match.group("line") is not None
+    ]
+    assert not offenders, (
+        "cite documents by anchor (`FILE.md#heading-slug`) and code by symbol "
+        "(`module.py::name`) instead of by line number: " + "; ".join(offenders)
+    )

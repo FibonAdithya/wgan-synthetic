@@ -28,6 +28,11 @@ jobs:
           # `anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}` to pay per
           # token instead.
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_AUTH_TOKEN }}
+          # Without this the action mints its own token through the Claude
+          # GitHub App, which is not installed here. The job's own token has
+          # the pull-requests: write it needs; comments arrive from
+          # github-actions[bot] rather than from Claude.
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}

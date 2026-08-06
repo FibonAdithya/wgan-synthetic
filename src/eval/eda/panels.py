@@ -40,10 +40,6 @@ class Context:
     ann_metrics: dict[str, ann_difficulty.AnnMetrics]
     divergence: metrics.DimDivergence | None
 
-    @property
-    def has_synthetic(self) -> bool:
-        return len(self.series) > 1
-
 
 Text = str | Callable[[Context], str]
 

@@ -8,7 +8,7 @@ import numpy as np
 import plotly.graph_objects as go
 
 from src.eval import ann_difficulty
-from src.eval.eda import config, panels, series
+from src.eval.eda import config, metrics, panels, series
 
 
 def _namespace(preprocess: str = "l2") -> argparse.Namespace:
@@ -57,13 +57,25 @@ def _context(dim: int = 128, num_synth: int = 2, preprocess: str = "l2"):
             series.Series(f"s{i}", rng.random((300, dim), dtype=np.float32), "#111")
         )
     cfg = config.EdaConfig.from_args(_namespace(preprocess=preprocess))
-    metrics = {
+    ann_metrics = {
         s.name: ann_difficulty.compute(
             s.x, k=10, k_hub=5, nlist=8, max_rows=200, seed=0
         )
         for s in sets
     }
-    return panels.Context(config=cfg, series=sets, ann_metrics=metrics, divergence=None)
+    return panels.Context(
+        config=cfg,
+        series=sets,
+        ann_metrics=ann_metrics,
+        # Computed rather than hardcoded to None: _build_mismatch skips on
+        # `divergence is None`, so a fixture that always passes None makes the
+        # skip test pass whatever num_synth is. run() derives it the same way.
+        divergence=(
+            metrics.dimension_divergence(sets, cfg.top_divergent)
+            if len(sets) > 1
+            else None
+        ),
+    )
 
 
 def test_every_panel_declares_a_title_and_a_note():

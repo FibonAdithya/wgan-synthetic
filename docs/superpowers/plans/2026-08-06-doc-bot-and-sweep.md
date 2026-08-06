@@ -17,7 +17,25 @@
 - Never edit anything under `docs/superpowers/` other than adding this plan's own files. Those are snapshots, non-authoritative by written policy.
 - Never change a number in `docs/datasets/*.md`. Those need the GPU box and corpora not present here. Flag, do not edit.
 - Never touch gate bands, `data.real_path` values, or pins in `requirements.txt` — `AGENTS.md` reserves those for a human.
-- Baseline before starting: 433 tests pass.
+- Baseline before starting: 448 tests pass.
+
+## Revision, after rebasing onto `7f8b69b`
+
+The spec named an unmerged branch, `docs/followups-to-issues`, as a known
+conflict. It merged as PR #24 while this plan was being written, so the
+sweep now runs against its result:
+
+- **`FOLLOWUPS.md` no longer exists.** Its eight entries are GitHub issues
+  #15–#22 on the public mirror. It leaves `AUTHORITATIVE_DOCS`, and the four
+  `l2_normalize` citations Task 4 was going to convert now live in issue #17.
+- **The Issues claim is already corrected.** `AGENTS.md` now says Issues are
+  the tracker on the public mirror and disabled on `upstream`. Task 6 loses
+  that step.
+- **`claude-review.yml` is now on `main`** (PR #13). Task 1 is unaffected —
+  `docs-review.yml` is a separate file.
+- **Nothing else moved.** All nine line-number citations in `AGENTS.md` are
+  still present and still wrong, and every anchor target this plan names is
+  still at the heading the plan assumed.
 
 ---
 
@@ -221,22 +239,24 @@ AUTHORITATIVE_DOCS = [
         "CLAUDE.md",
         "README.md",
         "PROJECT_DOCUMENTATION.md",
-        "FOLLOWUPS.md",
         "data/README.md",
     )
 ] + sorted((REPO_ROOT / "docs" / "datasets").glob("*.md"))
 
 # A backticked reference, optionally suffixed by an anchor, a symbol, or a
 # line number. The path must start with an alphanumeric or underscore, which
-# is what excludes absolute paths on other machines -- FOLLOWUPS.md cites a
-# run config under /workspace on the GPU box, and that is a true statement
-# about tig-gpu, not a path this repo can resolve.
+# is what excludes absolute paths on other machines -- doc prose naming a run
+# config under /workspace on the GPU box is a true statement about tig-gpu,
+# not a path this repo can resolve.
 REFERENCE = re.compile(
     r"`(?P<path>[A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:md|py|ya?ml|json|npy|txt|toml))"
     r"(?:#(?P<anchor>[A-Za-z0-9_-]+)"
     r"|::(?P<symbol>[A-Za-z_][A-Za-z0-9_]*)"
     r"|:(?P<line>\d+(?:-\d+)?))?`"
 )
+# The absolute-path exclusion above was aimed at a FOLLOWUPS.md citation that
+# has since moved into issue #17. Keep it: the constraint is right regardless,
+# and doc prose naming a path on the GPU box will recur.
 
 # Paths that are correctly absent from a clean checkout. runs/ and the .npy
 # corpora are gitignored build products. The eval/ entries appear in
@@ -285,7 +305,7 @@ def test_path_references_resolve(doc):
 - [ ] **Step 2: Run it**
 
 Run: `/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/python -m pytest tests/test_docs_references.py -v`
-Expected: PASS, 12 parametrized cases — 6 named docs plus 6 dataset pages. This check finds nothing today by design. If it fails, a path really is broken — read the failure before assuming the allowlist is wrong.
+Expected: PASS, 11 parametrized cases — 5 named docs plus 6 dataset pages. This check finds nothing today by design. If it fails, a path really is broken — read the failure before assuming the allowlist is wrong.
 
 - [ ] **Step 3: Lint and format the new file**
 
@@ -295,7 +315,7 @@ Expected: no errors; the format run may rewrite the file.
 - [ ] **Step 4: Confirm the whole suite**
 
 Run: `/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/python -m pytest`
-Expected: `445 passed` (433 baseline + 12 parametrized cases)
+Expected: `459 passed` (448 baseline + 11 parametrized cases)
 
 - [ ] **Step 5: Commit**
 
@@ -304,10 +324,9 @@ git add tests/test_docs_references.py
 git commit -m "test: resolve every path referenced by the authoritative docs
 
 First of four checks. This one passes on the current tree and finds nothing:
-all three apparent breakages are false positives, and encoding why is the
-point. Two are run-directory-relative entries in PROJECT_DOCUMENTATION.md's
-run artifact listing; one is an absolute path on tig-gpu, excluded by
-requiring references to start with an alphanumeric.
+the apparent breakages are false positives, and encoding why is the point.
+They are run-directory-relative entries in PROJECT_DOCUMENTATION.md's run
+artifact listing, not repo-relative paths.
 
 So it is a regression guard rather than a fix -- it exists so the first
 genuinely broken path fails make check instead of sitting there.
@@ -323,7 +342,7 @@ The core of the sweep. The test is written first and fails against the un-swept 
 
 **Files:**
 - Modify: `tests/test_docs_references.py`
-- Modify: `AGENTS.md` (lines 19, 32, 48, 52, 62, 106, 111, 112, 114)
+- Modify: `AGENTS.md` (lines 19, 32, 49, 53, 63, 107, 112, 113, 115)
 
 **Interfaces:**
 - Consumes: `REPO_ROOT`, `AUTHORITATIVE_DOCS`, `iter_refs`, `rel` from Task 2.
@@ -408,19 +427,24 @@ Each is a `See ...` reference or a table cell. Apply these exact edits:
 |---|---|---|
 | 19 | `` `README.md:10-26` `` | `` `README.md#documentation-map` `` |
 | 32 | `` `docs/superpowers/README.md:6-13` `` | `` `docs/superpowers/README.md` `` |
-| 48 | `` `PROJECT_DOCUMENTATION.md:274` `` | `` `PROJECT_DOCUMENTATION.md#ann-difficulty--the-gate` `` |
-| 52 | `` `PROJECT_DOCUMENTATION.md:172` `` | `` `PROJECT_DOCUMENTATION.md#model-variants-the-per-dataset-ladder` `` |
-| 62 | `` `PROJECT_DOCUMENTATION.md:216` `` | `` `PROJECT_DOCUMENTATION.md#generator_type` `` |
-| 106 | `` `PROJECT_DOCUMENTATION.md:274` `` | `` `PROJECT_DOCUMENTATION.md#ann-difficulty--the-gate` `` |
-| 111 | `` `PROJECT_DOCUMENTATION.md:146` `` | `` `PROJECT_DOCUMENTATION.md#model-architecture` `` |
-| 112 | `` `PROJECT_DOCUMENTATION.md:172` `` | `` `PROJECT_DOCUMENTATION.md#model-variants-the-per-dataset-ladder` `` |
-| 114 | `` `PROJECT_DOCUMENTATION.md:323` `` | `` `PROJECT_DOCUMENTATION.md#metric-definitions` `` |
+| 49 | `` `PROJECT_DOCUMENTATION.md:274` `` | `` `PROJECT_DOCUMENTATION.md#ann-difficulty--the-gate` `` |
+| 53 | `` `PROJECT_DOCUMENTATION.md:172` `` | `` `PROJECT_DOCUMENTATION.md#model-variants-the-per-dataset-ladder` `` |
+| 63 | `` `PROJECT_DOCUMENTATION.md:216` `` | `` `PROJECT_DOCUMENTATION.md#generator_type` `` |
+| 107 | `` `PROJECT_DOCUMENTATION.md:274` `` | `` `PROJECT_DOCUMENTATION.md#ann-difficulty--the-gate` `` |
+| 112 | `` `PROJECT_DOCUMENTATION.md:146` `` | `` `PROJECT_DOCUMENTATION.md#model-architecture` `` |
+| 113 | `` `PROJECT_DOCUMENTATION.md:172` `` | `` `PROJECT_DOCUMENTATION.md#model-variants-the-per-dataset-ladder` `` |
+| 115 | `` `PROJECT_DOCUMENTATION.md:323` `` | `` `PROJECT_DOCUMENTATION.md#metric-definitions` `` |
+
+The targets were re-verified after the rebase: the gate is at
+`PROJECT_DOCUMENTATION.md:303`, the ladder at 201, `generator_type` at 245,
+model architecture at 175, metric definitions at 365. Cite by anchor anyway —
+those numbers are what rots.
 
 Line 32 loses its range rather than gaining an anchor: it points at the "not the source of truth" paragraph, which sits under the H1 with no heading of its own, so the file alone is the honest citation.
 
 Two of these were correct before the change (19 and 32); the other seven pointed at a hyperparameter, a blank line, a table separator, or the wrong section. Do not preserve the old numbers in a comment — they are wrong, and the anchor says what was meant.
 
-Lines 106–114 are table rows. Keep the surrounding cell text and the `configs/<family>/` and `src/eval/` references intact; replace only the citation.
+Lines 107–115 are table rows. Keep the surrounding cell text and the `configs/<family>/` and `src/eval/` references intact; replace only the citation.
 
 - [ ] **Step 4: Run to verify the anchors resolve**
 
@@ -430,7 +454,7 @@ Expected: PASS. If `test_anchor_references_resolve` fails, the heading text in `
 - [ ] **Step 5: Confirm the whole suite and lint**
 
 Run: `ruff check tests && ruff format --check tests && /home/fibonadithya/TIG/wgan-synthetic/.venv/bin/python -m pytest`
-Expected: `458 passed` (445 + 1 slug test + 12 anchor cases)
+Expected: `471 passed` (459 + 1 slug test + 11 anchor cases)
 
 - [ ] **Step 6: Commit**
 
@@ -458,11 +482,17 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ---
 
-### Task 4: The symbol check, and FOLLOWUPS.md's code citations
+### Task 4: The symbol check
+
+The four `l2_normalize` citations this task was written to convert moved into
+GitHub issue #17 when PR #24 landed, so there is nothing left in the docs to
+convert. The check still goes in: it is the enforcement mechanism for the
+`module.py::name` form that Task 1's workflow prompt tells authors to use, and
+without it that instruction is unenforced. It passes vacuously today, and the
+commit message says so rather than implying it caught something.
 
 **Files:**
 - Modify: `tests/test_docs_references.py`
-- Modify: `FOLLOWUPS.md` (lines 56–58)
 
 **Interfaces:**
 - Consumes: `REPO_ROOT`, `AUTHORITATIVE_DOCS`, `iter_refs`, `rel` from Task 2.
@@ -505,12 +535,57 @@ def test_symbol_references_resolve(doc):
     assert not broken, "symbols that do not exist: " + "; ".join(broken)
 ```
 
-- [ ] **Step 2: Run it**
+- [ ] **Step 2: Verify the resolver works in both directions**
+
+A vacuous pass is not evidence the check works — a resolver returning an empty
+set would also pass. Confirm by hand before committing:
+
+```bash
+/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/python -c "
+import sys; sys.path.insert(0, 'tests')
+from test_docs_references import module_symbols, REPO_ROOT
+syms = module_symbols(REPO_ROOT / 'src/eval/ann_difficulty.py')
+assert 'lid_mle' in syms and 'compute' in syms, 'should find functions'
+assert 'AnnMetrics' in syms, 'should find classes'
+assert 'no_such_symbol' not in syms
+print('resolver ok:', len(syms), 'symbols')
+"
+```
+
+Expected: `resolver ok: 12 symbols` (or more, if the module has grown).
+
+- [ ] **Step 3: Run the suite**
 
 Run: `/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/python -m pytest tests/test_docs_references.py -v`
-Expected: PASS, vacuously — no `::` references exist yet.
+Expected: PASS. `test_symbol_references_resolve` passes vacuously — no `::`
+reference exists in the docs today. Expected, not a failure to investigate.
 
-- [ ] **Step 3: Convert the four citations in `FOLLOWUPS.md`**
+- [ ] **Step 4: Confirm the whole suite and lint**
+
+Run: `ruff check tests && ruff format --check tests && /home/fibonadithya/TIG/wgan-synthetic/.venv/bin/python -m pytest`
+Expected: `482 passed` (471 + 11 symbol cases)
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add tests/test_docs_references.py
+git commit -m "test: resolve symbol references by parsing, not importing
+
+Enforcement for the module.py::name citation form. It passes vacuously right
+now -- the four l2_normalize citations it was written for moved into issue
+#17 when the FOLLOWUPS migration landed, so no doc currently uses the form.
+It goes in anyway because docs-review.yml tells authors to use it, and an
+unenforced instruction is one that drifts.
+
+Parsing rather than importing: these are src/eval modules, and importing
+them pulls in torch to answer a question about prose.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+```
+
+<!-- Superseded by PR #24; retained for context on what the check was for.
+
+**Original Step 3: Convert the four citations in `FOLLOWUPS.md`**
 
 In the section "Fold the remaining `l2_normalize` copies onto `eda_report.maybe_l2_normalize`", lines 56–58 currently read:
 
@@ -538,34 +613,7 @@ The follow-up itself is still open and must not be closed here: four copies do
 still exist, and `src/eval/eda_report.py::maybe_l2_normalize` is still the one
 they should fold onto.
 
-- [ ] **Step 4: Run to verify the symbols resolve**
-
-Run: `/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/python -m pytest tests/test_docs_references.py -v`
-Expected: PASS
-
-- [ ] **Step 5: Confirm the whole suite and lint**
-
-Run: `ruff check tests && ruff format --check tests && /home/fibonadithya/TIG/wgan-synthetic/.venv/bin/python -m pytest`
-Expected: `470 passed` (458 + 12 symbol cases)
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add tests/test_docs_references.py FOLLOWUPS.md
-git commit -m "docs: cite code by symbol, and check the symbols resolve
-
-The four l2_normalize copies were cited as bare filenames with no directory
-and with line numbers that had each already drifted by one or two -- the
-definitions are at 45, 31, 47 and 34, not 43, 30, 46 and 33.
-
-Symbols are checked by parsing the module rather than importing it: these
-are src/eval modules, and importing them pulls in torch to answer a question
-about prose.
-
-The follow-up stays open. Four copies still exist.
-
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
-```
+-->
 
 ---
 
@@ -612,7 +660,7 @@ Expected: PASS. A failure means Task 3 or 4 missed a citation — the message na
 - [ ] **Step 3: Confirm the whole suite and lint**
 
 Run: `make check`
-Expected: green throughout, `482 passed` (470 + 12 format cases)
+Expected: green throughout, `493 passed` (482 + 11 format cases)
 
 - [ ] **Step 4: Commit**
 
@@ -629,11 +677,14 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ---
 
-### Task 6: Correct the Issues claim, and delete the obsolete review pair
+### Task 6: Delete the obsolete review pair
+
+The Issues-claim correction this task originally carried is already done:
+PR #24 rewrote `AGENTS.md` to say Issues are the tracker on the public mirror
+and disabled on `upstream`, and deleted the `FOLLOWUPS.md` line that made the
+same claim. Only the deletions remain.
 
 **Files:**
-- Modify: `AGENTS.md:34`
-- Modify: `FOLLOWUPS.md:3`
 - Modify: `README.md:28-34`
 - Delete: `AGENTIC-REVIEW.md`
 - Delete: `docs/ai-first-development-workflow.md`
@@ -642,38 +693,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Consumes: nothing.
 - Produces: nothing.
 
-- [ ] **Step 1: Correct the GitHub Issues claim**
-
-Both documents say Issues are disabled. They are enabled on `origin`, the public mirror, and disabled on `upstream`, the private repo — so the sentence needs to name which remote it means rather than dropping the claim.
-
-`AGENTS.md:34` currently reads:
-
-```
-`FOLLOWUPS.md` is the issue tracker (GitHub Issues are disabled here). It
-```
-
-Replace with:
-
-```
-`FOLLOWUPS.md` is the issue tracker (GitHub Issues are disabled on the
-private `upstream` repo, which is where this project is developed). It
-```
-
-`FOLLOWUPS.md:3` currently reads:
-
-```
-Tracked here rather than in GitHub Issues, which are disabled on this repo.
-```
-
-Replace with:
-
-```
-Tracked here rather than in GitHub Issues, which are disabled on the private
-`upstream` repo where this project is developed. They are enabled on the
-public `origin` mirror, but the tracker of record is this file.
-```
-
-- [ ] **Step 2: Delete the two files**
+- [ ] **Step 1: Delete the two files**
 
 ```bash
 git rm AGENTIC-REVIEW.md docs/ai-first-development-workflow.md
@@ -683,7 +703,7 @@ git rm AGENTIC-REVIEW.md docs/ai-first-development-workflow.md
 
 `docs/ai-first-development-workflow.md` is vendored from the sibling `tig-cpu` repo and says in its own header that it describes no part of this project and is kept only so `AGENTIC-REVIEW.md`'s citations resolve inside a fresh clone. With the review gone, its stated reason for existing is gone.
 
-- [ ] **Step 3: Remove the README block that introduces them**
+- [ ] **Step 2: Remove the README block that introduces them**
 
 `README.md` lines 28–34 currently read:
 
@@ -700,17 +720,17 @@ Reviews and vendored external references, also **not** authoritative:
 Delete all seven lines, and the blank line separating them from the preceding
 block, so the documentation map ends with the `docs/superpowers/` entry.
 
-- [ ] **Step 4: Verify nothing still references the deleted files**
+- [ ] **Step 3: Verify nothing still references the deleted files**
 
 Run: `grep -rn "AGENTIC-REVIEW\|ai-first-development-workflow" --include="*.md" --include="*.yml" --include="*.py" . | grep -v "docs/superpowers/"`
 Expected: no output. Hits under `docs/superpowers/` are expected and must be left alone — those are dated snapshots that correctly record what existed when they were written.
 
-- [ ] **Step 5: Confirm the suite**
+- [ ] **Step 4: Confirm the suite**
 
 Run: `make check`
-Expected: green. The doc lint's `AUTHORITATIVE_DOCS` list does not name either deleted file, so no test change is needed.
+Expected: green, `493 passed`. The doc lint's `AUTHORITATIVE_DOCS` list does not name either deleted file, so no test change is needed.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -727,42 +747,47 @@ docs/ai-first-development-workflow.md goes with it. Its own header says it
 describes no part of this project and is kept only so the review's citations
 resolve. Git history keeps both.
 
-Also corrects a claim both AGENTS.md and FOLLOWUPS.md make: Issues are
-disabled on upstream, not on origin, where they are enabled.
-
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
 
 ---
 
-### Task 7: Audit FOLLOWUPS.md and the documented commands
+### Task 7: Audit the open issues and the documented commands
 
 Verification, not repair. Its deliverable is a report plus any small corrections it justifies — it may end with no doc change at all, and that is a valid outcome.
 
 **Files:**
-- Modify: `FOLLOWUPS.md` (only if an entry is found resolved)
 - Modify: `README.md` / `PROJECT_DOCUMENTATION.md` (only if a documented flag is found wrong)
 
 **Interfaces:**
 - Consumes: nothing.
 - Produces: nothing.
 
-- [ ] **Step 1: Check each FOLLOWUPS.md entry against the code**
+- [ ] **Step 1: Check each open issue against the code**
 
-Seven entries remain after Task 4's edit. For each, run the stated check and record open/resolved:
+The follow-ups are now GitHub issues #15–#23 on the public mirror, not a file
+in the repo. Read them with `gh issue list --state open` and
+`gh issue view <N>`. For each, run the stated check and record open/resolved:
 
-| Entry | Check |
+| Issue | Check |
 |---|---|
-| SIFT configs out of step | `grep -n "real_path\|output_dir" configs/sift/*.yaml` — open if they still name `data/sift_base.npy` and `runs/sift_gan_v*` |
-| Re-measure angular families | `grep -n "metric" src/eval/ann_difficulty.py` — open if it still measures L2 unconditionally |
-| Fold `l2_normalize` copies | `grep -rn "def l2_normalize" src/eval/` — open if more than zero remain |
-| `build_generator` rejects `sparse` | `grep -n "sparse\|gated" src/models/generator.py` — open if there is no `sparse` alias |
-| v2 checkpoint outside the repo | Not checkable from here; it is a claim about `tig-gpu`. Leave alone. |
-| DEEP ladder rests on one seed | Not checkable from here; needs GPU runs. Leave alone. |
-| `spectrum_reg_alpha` too small | Not checkable from here; needs GPU runs. Leave alone. |
-| `ann_difficulty.py` could inherit `--dataset` | `grep -n "dataset" src/eval/ann_difficulty.py` — open if it takes no dataset argument |
+| #15 SIFT configs out of step | `grep -n "real_path\|output_dir" configs/sift/*.yaml` — open if they still name `data/sift_base.npy` and `runs/sift_gan_v*` |
+| #16 Re-measure angular families | `grep -n "metric" src/eval/ann_difficulty.py` — open if it still measures L2 unconditionally |
+| #17 Fold `l2_normalize` copies | `grep -rn "def l2_normalize" src/eval/` — open if more than zero remain |
+| #18 `build_generator` rejects `sparse` | `grep -n "sparse\|gated" src/models/generator.py` — open if there is no `sparse` alias |
+| #19 v2 checkpoint outside the repo | Not checkable from here; a claim about `tig-gpu`. Leave alone. |
+| #20 DEEP ladder rests on one seed | Not checkable from here; needs GPU runs. Leave alone. |
+| #21 `spectrum_reg_alpha` too small | Not checkable from here; needs GPU runs. Leave alone. |
+| #22 `ann_difficulty.py` could inherit `--dataset` | `grep -n "dataset" src/eval/ann_difficulty.py` — open if it takes no dataset argument |
+| #23 `eda.pipeline.run` builds `EdaConfig` early | `grep -n "EdaConfig" src/eval/eda/pipeline.py` — open if the config is still built before the output directory |
 
-Flag anything that looks resolved. **Do not delete or close an entry.** Closing a follow-up is a judgement about whether the underlying question is settled, and `AGENTS.md` reserves that kind of call for a human. Report it and stop.
+Note #17's title now names `eda.series.maybe_l2_normalize`, not
+`eda_report.maybe_l2_normalize` — the eda split moved it. That is the issue's
+own text and correct.
+
+Report anything that looks resolved. **Do not close an issue.** Closing a
+follow-up is a judgement about whether the underlying question is settled, and
+`AGENTS.md` reserves that kind of call for a human. Report and stop.
 
 - [ ] **Step 2: Verify the documented commands against argparse**
 
@@ -794,7 +819,7 @@ git commit -m "docs: correct the follow-up and command claims the audit found st
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
 
-If they did not, make no commit and report which entries look resolved so a
+If they did not, make no commit and report which issues look resolved so a
 human can decide whether to close them.
 
 ---
@@ -805,14 +830,14 @@ After Task 7, confirm the whole change:
 
 ```bash
 make check
-git log --oneline main..HEAD
+git log --oneline origin/main..HEAD
 ```
 
 Expected: `make check` green, and a commit per task. Then confirm the sweep
 actually did what it claims:
 
 ```bash
-grep -rnE '`[A-Za-z0-9_./-]+\.(md|py|ya?ml|json)(:[0-9]+)' AGENTS.md README.md PROJECT_DOCUMENTATION.md FOLLOWUPS.md data/README.md docs/datasets/*.md
+grep -rnE '`[A-Za-z0-9_./-]+\.(md|py|ya?ml|json)(:[0-9]+)' AGENTS.md README.md PROJECT_DOCUMENTATION.md data/README.md docs/datasets/*.md
 ```
 
 Expected: no output — every citation is now an anchor or a symbol.

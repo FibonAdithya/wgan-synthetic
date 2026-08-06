@@ -68,7 +68,7 @@ whichever variants resolved.
 
 `data/sift_base.npy` is what the four trained SIFT checkpoints were actually
 trained against, not the fetcher's `data/sift_250k.npy` subset — those are
-different corpora. See `FOLLOWUPS.md` ("`data.real_path` names a file the
+different corpora. See issue #15 ("`data.real_path` names a file the
 fetcher does not produce") for why the SIFT configs still point at
 `sift_base.npy` rather than a fetched subset.
 
@@ -96,8 +96,8 @@ fetcher does not produce") for why the SIFT configs still point at
    - Check `data.real_path` in the config points at a file you have. The five
      non-SIFT families name the fetcher's output (`data/deep_1m.npy` and so
      on); the SIFT ladder configs still name `data/sift_base.npy`, the path
-     the trained runs used, so edit it if you fetched instead. See
-     `FOLLOWUPS.md` for the open question of reconciling that.
+     the trained runs used, so edit it if you fetched instead. See issue #15
+     for the open question of reconciling that.
 4. Evaluate:
    - `python -m src.eval.evaluate_distribution --real-path <path_to_real.npy_or_fvecs> --checkpoint runs/x100k_improved/best_generator.pt --config runs/x100k_improved/run_config.yaml --output-dir runs/x100k_improved/eval`
    - `python -m src.eval.evaluate_file_to_file --real-path <path_to_real.npy_or_fvecs> --synthetic-path <path_to_synthetic.npy_or_fvecs> --output-dir runs/file_eval`

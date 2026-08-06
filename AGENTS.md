@@ -31,8 +31,9 @@ the one higher in this list wins:
    `PROJECT_DOCUMENTATION.md` on any conflict. See
    `docs/superpowers/README.md:6-13`.
 
-`FOLLOWUPS.md` is the issue tracker (GitHub Issues are disabled here). It
-records known problems; it is not a description of how things work.
+GitHub Issues on the public mirror (`FibonAdithya/wgan-synthetic`) are the
+issue tracker; they are disabled on `upstream`. They record known problems;
+they are not a description of how things work.
 
 ## Five invariants
 
@@ -65,7 +66,7 @@ each is easy to break while believing you are making progress.
    `python -m src.data.fetch sift` produces `sift_250k.npy` and
    `sift_1m.npy`. The SIFT configs still name `sift_base.npy`, so a fresh
    fetch-then-train fails on a missing file until you edit the path — and
-   editing it changes which corpus the variant reproduces. See `FOLLOWUPS.md`,
+   editing it changes which corpus the variant reproduces. See issue #15,
    "SIFT configs are out of step with the per-dataset conventions".
 
 ## What "done" means
@@ -86,7 +87,7 @@ files you touched; never run it repo-wide.
 
 Do not decide these yourself. Raise them and stop.
 
-- Anything in `FOLLOWUPS.md` described as needing a decision rather than a
+- Anything in an open issue described as needing a decision rather than a
   patch. Repointing SIFT's `data.real_path` ("`data.real_path` names a file
   the fetcher does not produce") is the clearest case: it redefines what
   SIFT's `v0` reproduces, because the existing checkpoints were trained on a
@@ -114,5 +115,5 @@ Do not decide these yourself. Raise them and stop.
 | Evaluation and metric definitions | `src/eval/`, `PROJECT_DOCUMENTATION.md:323` |
 | Compare SIFT variants in one report | `src/eval/compare_variants.py` |
 | The EDA report's panels and prose | `src/eval/eda/panels.py` |
-| Known bugs and open questions | `FOLLOWUPS.md` |
+| Known bugs and open questions | GitHub Issues (`gh issue list`) |
 | Why a decision was made (non-authoritative) | `docs/superpowers/specs/` |

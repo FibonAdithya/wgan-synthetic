@@ -1,0 +1,65 @@
+# Noise-floor measurement, run A. Identical to configs/sift/v0.yaml in every
+# training hyperparameter -- this is the point of the exercise. Only three
+# things differ, and each is listed here so a reader can confirm nothing else
+# moved:
+#
+#   1. seed        42 -> 42   (unchanged; A is the reference run)
+#   2. output_dir  runs/sift_gan_v0 -> runs/sift/noisefloor_a
+#   3. real_path   data/sift_base.npy -> an absolute path (see below)
+#
+# Why this file exists rather than an edit to v0.yaml: v0 is a ladder rung,
+# and a rung is a historical record of a run that happened. Changing what it
+# points at would redefine what SIFT v0 reproduces, which AGENTS.md reserves
+# for a human decision. This config is a measurement instrument, not a rung.
+#
+# Why an absolute real_path: the gpuq runner executes each job in a fresh
+# detached git worktree cut from the pinned commit, and data/ is gitignored,
+# so a relative data/... path does not exist at run time. The corpus lives
+# outside the ephemeral tree at a shared location on the box. That makes this
+# config box-specific by construction, which is acceptable for an instrument
+# and would not be for a rung.
+#
+# On the corpus: sift_base.npy, what the v0 checkpoints trained against, is
+# no longer present on the box. data/sift_1m.npy is cut from ann-benchmarks
+# sift-128-euclidean, the same SIFT1M base set data/README.md's example
+# layout names as sift_base.fvecs, so it is very probably the same vectors.
+# That could not be verified -- the original is gone -- and the substitution
+# was an explicit decision, not an assumption.
+seed: 42
+device: auto
+output_dir: runs/sift/noisefloor_a
+
+data:
+  real_path: /workspace/data-cache/sift_1m.npy
+  format: npy
+  metric: l2
+  descriptor_dim: 128
+  holdout_fraction: 0.05
+  synthetic_if_missing: false
+  synthetic_num_vectors: 100000
+  preprocess:
+    center: false
+    whiten: false
+    l2_normalize: true
+
+model:
+  latent_dim: 128
+  generator_hidden_dims: [512, 1024, 1024]
+  critic_hidden_dims: [1024, 512, 256]
+  negative_slope: 0.2
+
+training:
+  batch_size: 512
+  num_gen_steps: 30000
+  n_critic: 3
+  lr_g: 1.0e-4
+  lr_d: 1.0e-4
+  betas: [0.0, 0.9]
+  lambda_gp: 5.0
+  distance_reg_alpha: 0.0
+  distance_reg_max_points: 128
+  num_workers: 0
+  amp: false
+  log_every: 250
+  eval_every: 1000
+  save_every: 2000

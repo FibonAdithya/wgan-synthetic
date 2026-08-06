@@ -1,6 +1,6 @@
 """Overlay every trained variant of one dataset family on its real data.
 
-src.eval.eda_report can already overlay any number of synthetic sets; this
+src.eval.eda.pipeline can already overlay any number of synthetic sets; this
 drives it across a family's named variants so the comparison does not have to
 be retyped. Each variant is one config delta from the one before it, so a
 difference visible in the report attributes to a single cause.
@@ -42,7 +42,8 @@ import torch
 import yaml
 
 from src.data.dataset import PreprocessState, invert_preprocess
-from src.eval import eda_report
+from src.eval.eda import config as eda_config
+from src.eval.eda import pipeline
 from src.eval.evaluate_distribution import get_device, load_generator
 from src.train.train_wgan_gp import sample_generator
 
@@ -434,19 +435,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--ann-k",
         type=int,
-        default=eda_report.ANN_K_DEFAULT,
+        default=eda_config.ANN_K_DEFAULT,
         help="Neighbours per query for the LID and relative-contrast panels.",
     )
     parser.add_argument(
         "--ann-hub-k",
         type=int,
-        default=eda_report.ANN_HUB_K_DEFAULT,
+        default=eda_config.ANN_HUB_K_DEFAULT,
         help="Neighbour depth for the k-occurrence count behind the hubness panel.",
     )
     parser.add_argument(
         "--ann-max-rows",
         type=int,
-        default=eda_report.ANN_MAX_ROWS_DEFAULT,
+        default=eda_config.ANN_MAX_ROWS_DEFAULT,
         help=(
             "Equal-N truncation for every ANN-difficulty metric. LID, "
             "contrast and hubness all drift with sample count, so every set "
@@ -456,7 +457,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--knn-max-rows",
         type=int,
-        default=eda_report.KNN_MAX_ROWS_DEFAULT,
+        default=eda_config.KNN_MAX_ROWS_DEFAULT,
         help=(
             "Equal-N truncation for the within-set k-NN distance panel, "
             "which is not an ANN-difficulty panel."
@@ -465,14 +466,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--ivf-nlist",
         type=int,
-        default=eda_report.IVF_NLIST_DEFAULT,
+        default=eda_config.IVF_NLIST_DEFAULT,
         help="Cluster count for the IVF cell-balance panel.",
     )
     parser.add_argument("--bins", type=int, default=80)
     parser.add_argument("--top-divergent", type=int, default=16)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
-        "--glyph-samples", type=int, default=eda_report.GLYPH_SAMPLES_DEFAULT
+        "--glyph-samples", type=int, default=eda_config.GLYPH_SAMPLES_DEFAULT
     )
     parser.add_argument("--no-png", action="store_true")
     parser.add_argument(
@@ -482,10 +483,10 @@ def parse_args() -> argparse.Namespace:
 
 
 def build_report_args(args: argparse.Namespace, specs: list[str]) -> argparse.Namespace:
-    """Build the Namespace `eda_report.run` expects from our own parsed args.
+    """Build the Namespace `eda.pipeline.run` expects from our own parsed args.
 
-    Field-for-field parity with `eda_report.parse_args` is load-bearing: if
-    `eda_report` gains a required argument and this Namespace is not updated
+    Field-for-field parity with `eda.cli.parse_args` is load-bearing: if
+    `eda.cli` gains a required argument and this Namespace is not updated
     to match, sampling hundreds of thousands of vectors will succeed before
     the mismatch surfaces as a runtime `AttributeError`. See
     `tests/test_compare_variants.py::test_report_args_match_eda_report_fields`.
@@ -561,7 +562,7 @@ def main() -> None:
         specs.append(f"{variant.name}={path}")
 
     report_args = build_report_args(args, specs)
-    report_path = eda_report.run(report_args)
+    report_path = pipeline.run(report_args)
     print(f"report: {report_path}")
 
 

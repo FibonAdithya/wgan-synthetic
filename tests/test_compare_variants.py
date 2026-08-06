@@ -9,7 +9,8 @@ import torch
 import yaml
 
 from src.eval import compare_variants as cv
-from src.eval import eda_report
+from src.eval.eda import cli
+from src.eval.eda import config as eda_config
 from src.models.generator import build_generator
 
 
@@ -149,10 +150,10 @@ def test_generate_samples_does_not_depend_on_preceding_variants(
 
 
 def test_report_args_match_eda_report_fields(monkeypatch, tmp_path):
-    """Parity check for Finding 4: compare_variants's Namespace vs eda_report's.
+    """Parity check for Finding 4: compare_variants's Namespace vs the CLI's.
 
-    `build_report_args` hand-builds the Namespace `eda_report.run` consumes.
-    If `eda_report.parse_args` gains a required field and this helper is not
+    `build_report_args` hand-builds the Namespace `eda.pipeline.run` consumes.
+    If `eda.cli.parse_args` gains a required field and this helper is not
     updated, `compare_variants` breaks at runtime only after sampling. Assert
     the field sets stay identical so drift is caught at test time instead.
     """
@@ -163,15 +164,15 @@ def test_report_args_match_eda_report_fields(monkeypatch, tmp_path):
         max_vectors=100,
         num_pairs=200,
         knn=3,
-        ann_k=eda_report.ANN_K_DEFAULT,
-        ann_hub_k=eda_report.ANN_HUB_K_DEFAULT,
-        ann_max_rows=eda_report.ANN_MAX_ROWS_DEFAULT,
-        knn_max_rows=eda_report.KNN_MAX_ROWS_DEFAULT,
-        ivf_nlist=eda_report.IVF_NLIST_DEFAULT,
+        ann_k=eda_config.ANN_K_DEFAULT,
+        ann_hub_k=eda_config.ANN_HUB_K_DEFAULT,
+        ann_max_rows=eda_config.ANN_MAX_ROWS_DEFAULT,
+        knn_max_rows=eda_config.KNN_MAX_ROWS_DEFAULT,
+        ivf_nlist=eda_config.IVF_NLIST_DEFAULT,
         bins=8,
         top_divergent=4,
         seed=42,
-        glyph_samples=eda_report.GLYPH_SAMPLES_DEFAULT,
+        glyph_samples=eda_config.GLYPH_SAMPLES_DEFAULT,
         no_png=True,
         plotlyjs="cdn",
     )
@@ -188,7 +189,7 @@ def test_report_args_match_eda_report_fields(monkeypatch, tmp_path):
             str(tmp_path / "out2"),
         ],
     )
-    eda_args = eda_report.parse_args()
+    eda_args = cli.parse_args()
 
     assert set(vars(report_args)) == set(vars(eda_args))
 
@@ -598,7 +599,7 @@ def test_main_reports_on_the_variants_a_custom_manifest_resolves(
         seen["specs"] = args.synthetic_path
         return Path(args.output_dir) / "report.html"
 
-    monkeypatch.setattr(cv.eda_report, "run", fake_run)
+    monkeypatch.setattr(cv.pipeline, "run", fake_run)
     monkeypatch.setattr(
         sys,
         "argv",

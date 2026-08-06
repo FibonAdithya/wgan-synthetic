@@ -50,10 +50,10 @@ corpus is actually searched with, and will need re-measuring so the report
 stays internally comparable. Each of those four pages now says as much in
 its "Measured profile" section.
 
-## Fold the remaining `l2_normalize` copies onto `eda_report.maybe_l2_normalize`
+## Fold the remaining `l2_normalize` copies onto `eda.series.maybe_l2_normalize`
 
-`plot_descriptor_grid` now reuses `eda_report.maybe_l2_normalize` rather than
-carrying its own copy, but four remain: `evaluate_file_to_file.py:43`,
+`plot_descriptor_grid` now reuses `src.eval.eda.series.maybe_l2_normalize`
+rather than carrying its own copy, but four remain: `evaluate_file_to_file.py:43`,
 `plot_distance_cdf.py:30`, `plot_distance_cdf_pillow.py:46` and
 `plot_embedding_clusters.py:33`. All four are byte-identical to each other
 and encode the same rule as `dataset.apply_preprocess`, so each is a place
@@ -162,3 +162,17 @@ the search metric off each config as `data.metric`. `ann_difficulty.py` still
 measures everything under L2 (phase (c), above). When it learns to read
 `data.metric`, `compare_variants` is where the value should be threaded
 through from — it already resolves the config for every variant it samples.
+
+## `eda.pipeline.run` builds `EdaConfig` before the output directory now
+
+The `eda_report.py` split (`docs/superpowers/specs/2026-08-05-eda-report-split-design.md`)
+moved `out_dir.mkdir(...)` after `EdaConfig.from_args(args)` in
+`src/eval/eda/pipeline.py::run`, whereas the pre-split code built the
+directory first. `from_args` is side-effect-free, so the only observable
+difference is that a malformed `argparse.Namespace` (missing an attribute
+`from_args` expects) now raises `AttributeError` without leaving behind an
+empty output directory, instead of creating the directory and then raising.
+No fixture reaches this path, and arguably the new order is better, but it
+is a hairline behaviour change in a change that was otherwise byte-for-byte
+on the report output. Worth a one-line note if `run` is ever touched again;
+not worth a change on its own.

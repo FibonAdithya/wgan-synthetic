@@ -184,7 +184,6 @@ they're just not runnable yet.
 
 | Module | LOC | Tests |
 |---|---|---|
-| `src/eval/eda_report.py` | 1017 | 113 lines |
 | `src/sample/generate.py` | 86 | **none** |
 | `src/eval/evaluate_file_to_file.py` | 100 | **none** |
 | `src/eval/plot_*.py` (3 files) | 522 | **none** |
@@ -194,9 +193,11 @@ they're just not runnable yet.
 project's primary deliverable. The plotting modules matter less — visual output,
 low blast radius — but sampling correctness is load-bearing.
 
-`eda_report.py` at 1017 lines is also the file most likely to be edited by an
-agent and the hardest for one to hold in context. Worth splitting when something
-next touches it; not worth a dedicated refactor.
+`eda_report.py`, formerly 1017 lines and the file most likely to be edited by
+an agent and the hardest for one to hold in context, has since been split
+into the `src/eval/eda/` package (`894e2d3^..c88ded8`, 2026-08-05, see
+`docs/superpowers/specs/2026-08-05-eda-report-split-design.md`); the
+entrypoint module is now 19 lines.
 
 ### 6. A fresh clone cannot reproduce the headline comparison
 

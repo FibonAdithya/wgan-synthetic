@@ -1,9 +1,10 @@
 """Render real and generated SIFT descriptors as a grid of orientation glyphs.
 
-Every other panel in `eda_report` is an aggregate over tens of thousands of
-vectors. All of them can look healthy while the generator produces
-descriptors that are structurally wrong, because a matched marginal says
-nothing about whether the 128 numbers form a plausible gradient histogram.
+Every other panel in the EDA report (`src/eval/eda`) is an aggregate over
+tens of thousands of vectors. All of them can look healthy while the
+generator produces descriptors that are structurally wrong, because a
+matched marginal says nothing about whether the 128 numbers form a
+plausible gradient histogram.
 This figure shows individual descriptors instead.
 
 Two rows of real descriptors are drawn, not one. Without a sense of how much
@@ -30,14 +31,16 @@ import yaml
 
 from src.data.dataset import load_descriptors
 from src.eval import compare_variants as cv
-from src.eval import eda_report
 from src.eval.descriptor_glyph import DESCRIPTOR_DIM
+from src.eval.eda import glyphs as eda_glyphs
+from src.eval.eda import html as eda_html
+from src.eval.eda import series as eda_series
 from src.eval.evaluate_distribution import get_device, load_generator
 from src.train.train_wgan_gp import sample_generator
 
 # Geometry, the negative-ray treatment and the figure itself come from
-# `eda_report`, which draws the same panel from materialised arrays.
-REAL_COLORS = eda_report.GLYPH_REAL_COLORS
+# `eda.glyphs`, which draws the same panel from materialised arrays.
+REAL_COLORS = eda_glyphs.GLYPH_REAL_COLORS
 VARIANT_COLORS = ("#ff7f0e", "#2ca02c", "#9467bd", "#8c564b")
 # Any variant not in `cv.VARIANTS`. Deliberately outside the palette above:
 # wrapping the index into it instead handed an unknown name v0's orange, and
@@ -87,11 +90,11 @@ def pick_real_rows(
 def build_figure(rows: list[tuple[str, np.ndarray, str]]) -> go.Figure:
     """Assemble the glyph grid.
 
-    The figure itself lives in `eda_report`, which draws the same panel from
+    The figure itself lives in `eda.glyphs`, which draws the same panel from
     already-materialised arrays; this module's job is getting rows out of
     generator checkpoints. One implementation, so the two cannot drift.
     """
-    return eda_report.fig_descriptor_glyphs(rows)
+    return eda_glyphs.fig_descriptor_glyphs(rows)
 
 
 def write_report(
@@ -99,7 +102,7 @@ def write_report(
 ) -> Path:
     """Write the HTML report, and optionally a static PNG beside it."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    head = eda_report.plotlyjs_head(plotlyjs_mode, out_dir)
+    head = eda_html.plotlyjs_head(plotlyjs_mode, out_dir)
     body = fig.to_html(full_html=False, include_plotlyjs=False)
     html = (
         "<!doctype html><html><head><meta charset='utf-8'>"
@@ -110,7 +113,7 @@ def write_report(
     path.write_text(html, encoding="utf-8")
     if write_png:
         try:
-            eda_report.export_pngs([("descriptor grid", "", fig)], out_dir)
+            eda_html.export_pngs([("descriptor grid", "", fig)], out_dir)
         except Exception as exc:  # kaleido needs a Chrome binary
             print(f"skipping PNG export: {exc}")
     return path
@@ -261,11 +264,11 @@ def run(args: argparse.Namespace) -> Path:
     row_a, row_b = pick_real_rows(real, args.num_samples, args.seed)
     check_finite(row_a, str(args.real_path))
     check_finite(row_b, str(args.real_path))
-    # `eda_report`'s normaliser rather than a local one: this has to match the
+    # `eda.series`'s normaliser rather than a local one: this has to match the
     # training preprocessing, and a third copy of that rule is a third place
     # for it to drift out of step with `dataset.apply_preprocess`.
-    row_a = eda_report.maybe_l2_normalize(row_a, "l2")
-    row_b = eda_report.maybe_l2_normalize(row_b, "l2")
+    row_a = eda_series.maybe_l2_normalize(row_a, "l2")
+    row_b = eda_series.maybe_l2_normalize(row_b, "l2")
 
     rows: list[tuple[str, np.ndarray, str]] = [
         ("real-a", row_a, REAL_COLORS[0]),

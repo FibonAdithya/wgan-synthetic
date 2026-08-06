@@ -16,8 +16,8 @@ measured in one run and are *not* comparable with published figures for
 SIFT1M, which are measured on the full 1M set against the real query set
 rather than on a self-queried subsample.
 
-This module deliberately does not import from eda_report: it must stay usable
-and testable without plotly or argparse.
+This module deliberately does not import from `src.eval.eda`: it must stay
+usable and testable without plotly or argparse.
 """
 
 from __future__ import annotations
@@ -231,9 +231,9 @@ class AnnMetrics:
 def _subsample(x: np.ndarray, max_rows: int, seed: int) -> np.ndarray:
     """Cut to max_rows (0 = keep all).
 
-    Deliberately duplicated from eda_report rather than imported: this module
-    must not depend on the report. It is five lines and the dependency
-    direction is worth more than the sharing.
+    Deliberately duplicated from `eda.series.subsample` rather than imported:
+    this module must not depend on the report. It is five lines and the
+    dependency direction is worth more than the sharing.
     """
     if max_rows <= 0 or x.shape[0] <= max_rows:
         return x

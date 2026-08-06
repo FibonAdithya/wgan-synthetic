@@ -113,5 +113,6 @@ Do not decide these yourself. Raise them and stop.
 | Training loop and config keys | `src/train/train_wgan_gp.py` |
 | Evaluation and metric definitions | `src/eval/`, `PROJECT_DOCUMENTATION.md:323` |
 | Compare SIFT variants in one report | `src/eval/compare_variants.py` |
+| The EDA report's panels and prose | `src/eval/eda/panels.py` |
 | Known bugs and open questions | `FOLLOWUPS.md` |
 | Why a decision was made (non-authoritative) | `docs/superpowers/specs/` |

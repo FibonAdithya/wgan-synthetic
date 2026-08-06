@@ -524,7 +524,7 @@ before transfer took the three-report set from 5.7MB to 1.5MB.
 
 - Descriptor glyph grid (standalone):
   - `src/eval/plot_descriptor_grid.py`
-  - The same figure as the `eda_report` glyph panel -- `eda_report.
+  - The same figure as the `eda_report` glyph panel -- `src.eval.eda.glyphs.
     fig_descriptor_glyphs` is the single implementation both use -- but
     sourced differently. This CLI loads generator checkpoints and samples
     them directly, so it works with no materialised `.npy` files and can read

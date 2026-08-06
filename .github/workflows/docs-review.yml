@@ -60,7 +60,7 @@ jobs:
               numbers or measured statistics, or a checkpoint separated from
               its run_config.yaml.
             - Any newly added `file.md:123` style citation. This repo cites
-              documents by anchor (`PROJECT_DOCUMENTATION.md#the-gate`) and
+              documents by anchor (`PROJECT_DOCUMENTATION.md#ann-difficulty--the-gate`) and
               code by symbol (`src/eval/ann_difficulty.py::lid_mle`), because
               line numbers silently rot when text is inserted above them.
               tests/test_docs_references.py enforces this; explain it rather

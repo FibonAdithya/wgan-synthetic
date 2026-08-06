@@ -29,7 +29,7 @@ the one higher in this list wins:
    written by Claude during development, kept for the reasoning behind
    decisions. They are not updated as the code changes, and they lose to
    `PROJECT_DOCUMENTATION.md` on any conflict. See
-   `docs/superpowers/README.md`.
+   `docs/superpowers/README.md#ai-working-notes`.
 
 GitHub Issues on the public mirror (`FibonAdithya/wgan-synthetic`) are the
 issue tracker; they are disabled on `upstream`. They record known problems;
@@ -109,7 +109,7 @@ Do not decide these yourself. Raise them and stop.
 | Get data onto disk | `data/README.md`, `src/data/fetch.py` |
 | Facts about one family (N, k, profile, bands) | `docs/datasets/<family>.md` |
 | Preprocessing contract | `data/README.md`, `src/data/dataset.py` |
-| Model architectures and `generator_type` | `src/models/generator.py`, `PROJECT_DOCUMENTATION.md#model-architecture` |
+| Model architectures and `generator_type` | `src/models/generator.py`, `PROJECT_DOCUMENTATION.md#model-architecture`, `PROJECT_DOCUMENTATION.md#generator_type` |
 | The variant ladder | `PROJECT_DOCUMENTATION.md#model-variants-the-per-dataset-ladder`, `configs/<family>/` |
 | Training loop and config keys | `src/train/train_wgan_gp.py` |
 | Evaluation and metric definitions | `src/eval/`, `PROJECT_DOCUMENTATION.md#metric-definitions` |

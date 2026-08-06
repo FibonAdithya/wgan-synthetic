@@ -40,13 +40,26 @@ AUTHORITATIVE_DOCS = [
     )
 ] + sorted((REPO_ROOT / "docs" / "datasets").glob("*.md"))
 
+
+def test_authoritative_docs_has_the_expected_count():
+    """Guard against the docs/datasets/*.md glob silently yielding nothing.
+
+    If docs/datasets were renamed, the glob above would match zero files,
+    six dataset pages would drop out of every check in this module, and the
+    suite would stay green throughout. Pin the count -- 5 named root docs
+    plus 6 dataset pages -- so that failure mode is loud instead of silent.
+    """
+    assert len(AUTHORITATIVE_DOCS) == 11
+
+
 # A backticked reference, optionally suffixed by an anchor, a symbol, or a
-# line number. The path must start with an alphanumeric or underscore, which
-# is what excludes absolute paths on other machines -- doc prose naming a run
-# config under /workspace on the GPU box is a true statement about tig-gpu,
-# not a path this repo can resolve.
+# line number. The path must start with an alphanumeric, underscore, or dot
+# -- the last so dot-rooted paths like `.github/workflows/ci.yml` are
+# covered -- but never a slash, which is what excludes absolute paths on
+# other machines. Doc prose naming a run config under /workspace on the GPU
+# box is a true statement about tig-gpu, not a path this repo can resolve.
 REFERENCE = re.compile(
-    r"`(?P<path>[A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:md|py|ya?ml|json|npy|txt|toml))"
+    r"`(?P<path>[A-Za-z0-9_.][A-Za-z0-9_./-]*\.(?:md|py|ya?ml|json|npy|txt|toml))"
     r"(?:#(?P<anchor>[A-Za-z0-9_-]+)"
     r"|::(?P<symbol>[A-Za-z_][A-Za-z0-9_]*)"
     r"|:(?P<line>\d+(?:-\d+)?))?`"
@@ -173,7 +186,31 @@ def module_symbols(path) -> set[str]:
             names.add(node.name)
         elif isinstance(node, ast.Assign):
             names.update(t.id for t in node.targets if isinstance(t, ast.Name))
+        elif isinstance(node, ast.AnnAssign):
+            if isinstance(node.target, ast.Name):
+                names.add(node.target.id)
     return names
+
+
+def test_module_symbols_finds_functions_classes_and_annotated_constants():
+    """Pin module_symbols directly, the way test_slug_matches_the_github_algorithm pins slug.
+
+    module_symbols has no live subjects in the docs today: no `::symbol`
+    reference in an authoritative doc exercises it, so
+    test_symbol_references_resolve stays green regardless of what this
+    function does. A regression here -- say, losing the AnnAssign branch
+    again -- would go unnoticed until the day a real citation happens to
+    hit it. This test is the only thing pinning the resolver's behaviour
+    until then.
+    """
+    ann_difficulty = module_symbols(REPO_ROOT / "src/eval/ann_difficulty.py")
+    assert "lid_mle" in ann_difficulty
+    assert "compute" in ann_difficulty
+    assert "AnnMetrics" in ann_difficulty
+    assert "not_a_real_symbol" not in ann_difficulty
+
+    compare_variants = module_symbols(REPO_ROOT / "src/eval/compare_variants.py")
+    assert "VARIANTS" in compare_variants
 
 
 @pytest.mark.parametrize("doc", AUTHORITATIVE_DOCS, ids=rel)

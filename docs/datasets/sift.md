@@ -113,3 +113,44 @@ exits non-zero when the run fails -- or, as now, when the bands are still
 unset, which is verdict `unset` and exit code 2. Pass `--allow-unset` to get
 the report without the non-zero exit, and `--stats-name <label>` to check a
 synthetic series rather than `real`.
+
+## Noise floor
+
+How far each gated statistic moves when *nothing* changes but the seed. A band
+tighter than this is unenforceable, and a ladder rung whose improvement is
+smaller than this is indistinguishable from a reseed. Measured 2026-08-06 from
+two 30k-step `v0` runs identical in every training hyperparameter except seed
+(42 and 43), configs `configs/sift/noisefloor_{a,b}.yaml`. Both were sampled at
+a *fixed* seed of 42, so only the training seed varies, and both were measured
+in a single `eda_report` invocation under the canonical conditions above.
+
+| Statistic | Seed-to-seed spread | As % of real | Distance from real, in units of that spread |
+|---|---|---|---|
+| LID median | 0.164 | 0.9% | 2.7x |
+| Relative contrast median | 0.048 | 2.1% | **0.4x -- noise exceeds signal** |
+| Hubness skew | 0.062 | 3.3% | 1.5x |
+| IVF cell-balance Gini | 0.007 | 2.3% | **0.6x -- noise exceeds signal** |
+
+The last column is the one that matters: it compares the seed-to-seed spread
+against how far the generator sits from the real corpus. For relative contrast
+and IVF Gini, reseeding moves the statistic *further than the generator's entire
+deviation from SIFT*. The two runs do not even agree on the sign of the contrast
+gap -- one lands above the real value, the other below. Neither statistic can
+carry a meaningful band at this ladder's current distance from real, and neither
+should be used to attribute a rung-to-rung improvement. LID median is the one
+comfortably usable statistic; hubness skew is marginal.
+
+**This is n=2.** A single paired difference has one degree of freedom: it
+establishes the floor's order of magnitude and nothing more, and the true spread
+could be wider. Three to five seeds are needed before any of these numbers
+justifies writing a band into `gates/sift.yaml`. No band was set from this
+measurement -- `gates/sift.yaml` is unchanged and every band there is still null.
+
+Reproduce with:
+
+    python -m src.train.train_wgan_gp --config configs/sift/noisefloor_a.yaml
+    python -m src.train.train_wgan_gp --config configs/sift/noisefloor_b.yaml
+
+then sample each `best_generator.pt` at a fixed seed, pass both to one
+`eda_report --synthetic-path LABEL=PATH`, and difference the two labels'
+entries in `summary.json`. A 30k-step run is ~34 min on one RTX 4060.

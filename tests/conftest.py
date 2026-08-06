@@ -6,14 +6,50 @@ loads a state dict into it -- a fake file would only exercise the path
 lookup, not the round trip.
 """
 
+import argparse
+
+import numpy as np
 import pytest
 import torch
 import yaml
 
 from src.eval import compare_variants as cv
+from src.eval import eda_report
 from src.models.critic import Critic
 from src.models.generator import build_generator
 from src.train.train_wgan_gp import save_checkpoint
+
+
+def make_args(tmp_path, real, synthetic):
+    real_path = tmp_path / "real.npy"
+    np.save(real_path, real)
+    specs = []
+    for label, arr in synthetic.items():
+        p = tmp_path / f"{label}.npy"
+        np.save(p, arr)
+        specs.append(f"{label}={p}")
+    return argparse.Namespace(
+        real_path=str(real_path),
+        real_format="npy",
+        synthetic_path=specs,
+        synthetic_format="npy",
+        output_dir=str(tmp_path / "out"),
+        preprocess="l2",
+        max_vectors=200,
+        num_pairs=500,
+        knn=3,
+        ann_k=eda_report.ANN_K_DEFAULT,
+        ann_hub_k=eda_report.ANN_HUB_K_DEFAULT,
+        ann_max_rows=eda_report.ANN_MAX_ROWS_DEFAULT,
+        knn_max_rows=eda_report.KNN_MAX_ROWS_DEFAULT,
+        ivf_nlist=eda_report.IVF_NLIST_DEFAULT,
+        bins=16,
+        top_divergent=4,
+        seed=42,
+        glyph_samples=eda_report.GLYPH_SAMPLES_DEFAULT,
+        no_png=True,
+        plotlyjs="cdn",
+    )
 
 
 @pytest.fixture

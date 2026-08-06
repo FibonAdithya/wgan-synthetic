@@ -1,6 +1,6 @@
 """Render real and generated SIFT descriptors as a grid of orientation glyphs.
 
-Every other panel in `eda_report` is an aggregate over tens of thousands of
+Every other panel in `eda.glyphs` is an aggregate over tens of thousands of
 vectors. All of them can look healthy while the generator produces
 descriptors that are structurally wrong, because a matched marginal says
 nothing about whether the 128 numbers form a plausible gradient histogram.
@@ -32,13 +32,14 @@ from src.data.dataset import load_descriptors
 from src.eval import compare_variants as cv
 from src.eval import eda_report
 from src.eval.descriptor_glyph import DESCRIPTOR_DIM
+from src.eval.eda import glyphs as eda_glyphs
 from src.eval.eda import series as eda_series
 from src.eval.evaluate_distribution import get_device, load_generator
 from src.train.train_wgan_gp import sample_generator
 
 # Geometry, the negative-ray treatment and the figure itself come from
-# `eda_report`, which draws the same panel from materialised arrays.
-REAL_COLORS = eda_report.GLYPH_REAL_COLORS
+# `eda.glyphs`, which draws the same panel from materialised arrays.
+REAL_COLORS = eda_glyphs.GLYPH_REAL_COLORS
 VARIANT_COLORS = ("#ff7f0e", "#2ca02c", "#9467bd", "#8c564b")
 # Any variant not in `cv.VARIANTS`. Deliberately outside the palette above:
 # wrapping the index into it instead handed an unknown name v0's orange, and
@@ -88,11 +89,11 @@ def pick_real_rows(
 def build_figure(rows: list[tuple[str, np.ndarray, str]]) -> go.Figure:
     """Assemble the glyph grid.
 
-    The figure itself lives in `eda_report`, which draws the same panel from
+    The figure itself lives in `eda.glyphs`, which draws the same panel from
     already-materialised arrays; this module's job is getting rows out of
     generator checkpoints. One implementation, so the two cannot drift.
     """
-    return eda_report.fig_descriptor_glyphs(rows)
+    return eda_glyphs.fig_descriptor_glyphs(rows)
 
 
 def write_report(

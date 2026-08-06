@@ -96,3 +96,64 @@ def test_path_references_resolve(doc):
         and not (REPO_ROOT / match.group("path")).exists()
     ]
     assert not broken, "references to paths that do not exist: " + "; ".join(broken)
+
+
+def slug(heading: str) -> str:
+    """Slug a markdown heading the way GitHub does when it builds an anchor.
+
+    Lowercase, drop everything that is not a letter, digit, space, hyphen or
+    underscore, then spaces to hyphens. Dropped punctuation leaves its spaces
+    behind, which is why `## ANN difficulty -- the gate` (with an em dash)
+    slugs to `ann-difficulty--the-gate`, with two hyphens.
+    """
+    text = heading.strip().lower()
+    text = re.sub(r"[^\w\s-]", "", text)
+    return text.replace(" ", "-")
+
+
+HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*$")
+
+
+def headings(path) -> set[str]:
+    """Every heading in a markdown file, slugged, ignoring fenced code."""
+    found = set()
+    fenced = False
+    for line in path.read_text().splitlines():
+        if line.lstrip().startswith("```"):
+            fenced = not fenced
+            continue
+        if fenced:
+            continue
+        match = HEADING.match(line)
+        if match:
+            found.add(slug(match.group(2)))
+    return found
+
+
+def test_slug_matches_the_github_algorithm():
+    assert slug("Documentation map") == "documentation-map"
+    assert slug("Model architecture") == "model-architecture"
+    assert slug("Metric definitions") == "metric-definitions"
+    assert slug("`generator_type`") == "generator_type"
+    assert slug("Model variants: the per-dataset ladder") == (
+        "model-variants-the-per-dataset-ladder"
+    )
+    # The awkward one: the em dash is dropped and leaves its two spaces, so
+    # the slug carries a double hyphen. Getting this wrong would give a test
+    # that passes while the rendered link 404s.
+    assert slug("ANN difficulty — the gate") == "ann-difficulty--the-gate"
+
+
+@pytest.mark.parametrize("doc", AUTHORITATIVE_DOCS, ids=rel)
+def test_anchor_references_resolve(doc):
+    broken = []
+    for lineno, match in iter_refs(doc):
+        anchor = match.group("anchor")
+        if anchor is None:
+            continue
+        target = REPO_ROOT / match.group("path")
+        if not target.exists():
+            broken.append(f"{rel(doc)}:{lineno} -> missing file {match.group('path')}")
+        elif anchor not in headings(target):
+            broken.append(f"{rel(doc)}:{lineno} -> {match.group('path')}#{anchor}")
+    assert not broken, "anchors that match no heading: " + "; ".join(broken)

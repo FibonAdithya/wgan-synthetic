@@ -16,7 +16,7 @@ the other five families have a `v0` config and a documented profile.
 
 ## Source of truth, in order
 
-`README.md:10-26` holds the documentation map. When two documents disagree,
+`README.md#documentation-map` holds the documentation map. When two documents disagree,
 the one higher in this list wins:
 
 1. **The code** in `src/` and the configs in `configs/`. If the docs describe
@@ -29,7 +29,7 @@ the one higher in this list wins:
    written by Claude during development, kept for the reasoning behind
    decisions. They are not updated as the code changes, and they lose to
    `PROJECT_DOCUMENTATION.md` on any conflict. See
-   `docs/superpowers/README.md:6-13`.
+   `docs/superpowers/README.md`.
 
 GitHub Issues on the public mirror (`FibonAdithya/wgan-synthetic`) are the
 issue tracker; they are disabled on `upstream`. They record known problems;
@@ -46,11 +46,11 @@ each is easy to break while believing you are making progress.
    compared against a per-family band. `mmd_rbf`, `cov_fro`,
    `pairwise_hist_l1` and the rest are diagnostics that explain *why* a gate
    failed. Reporting "MMD improved, looks good" is a misreading of the
-   project. See `PROJECT_DOCUMENTATION.md:274`.
+   project. See `PROJECT_DOCUMENTATION.md#ann-difficulty--the-gate`.
 2. **Variant numbers are per-family.** Each family's ladder is numbered
    independently from `v0`. SIFT `v2` and a future GIST `v2` are unrelated,
    and comparing variant numbers across families is meaningless. Compare
-   within one family only. See `PROJECT_DOCUMENTATION.md:172`.
+   within one family only. See `PROJECT_DOCUMENTATION.md#model-variants-the-per-dataset-ladder`.
 3. **Canonical N and k are locked per dataset, and the measured statistics
    are self-queried subsample figures.** They have no absolute meaning and
    are **not** comparable with published benchmark values, which are measured
@@ -60,7 +60,7 @@ each is easy to break while believing you are making progress.
 4. **A checkpoint is only loadable beside its `run_config.yaml`.**
    `generator_type` is not recorded in the checkpoint; the architecture is
    rebuilt from the run config at load time. Moving a `.pt` file away from
-   its config makes it unloadable. See `PROJECT_DOCUMENTATION.md:216`.
+   its config makes it unloadable. See `PROJECT_DOCUMENTATION.md#generator_type`.
 5. **`data/sift_base.npy` and `data/sift_250k.npy` are different corpora.**
    `sift_base.npy` is what the trained SIFT checkpoints were fit against;
    `python -m src.data.fetch sift` produces `sift_250k.npy` and
@@ -104,15 +104,15 @@ Do not decide these yourself. Raise them and stop.
 
 | Task | Start here |
 |---|---|
-| Understand the goal and the gate | `PROJECT_DOCUMENTATION.md:274` |
+| Understand the goal and the gate | `PROJECT_DOCUMENTATION.md#ann-difficulty--the-gate` |
 | Set up and run day-to-day commands | `README.md` (quick start) |
 | Get data onto disk | `data/README.md`, `src/data/fetch.py` |
 | Facts about one family (N, k, profile, bands) | `docs/datasets/<family>.md` |
 | Preprocessing contract | `data/README.md`, `src/data/dataset.py` |
-| Model architectures and `generator_type` | `src/models/generator.py`, `PROJECT_DOCUMENTATION.md:146` |
-| The variant ladder | `PROJECT_DOCUMENTATION.md:172`, `configs/<family>/` |
+| Model architectures and `generator_type` | `src/models/generator.py`, `PROJECT_DOCUMENTATION.md#model-architecture` |
+| The variant ladder | `PROJECT_DOCUMENTATION.md#model-variants-the-per-dataset-ladder`, `configs/<family>/` |
 | Training loop and config keys | `src/train/train_wgan_gp.py` |
-| Evaluation and metric definitions | `src/eval/`, `PROJECT_DOCUMENTATION.md:323` |
+| Evaluation and metric definitions | `src/eval/`, `PROJECT_DOCUMENTATION.md#metric-definitions` |
 | Compare SIFT variants in one report | `src/eval/compare_variants.py` |
 | The EDA report's panels and prose | `src/eval/eda/panels.py` |
 | Known bugs and open questions | GitHub Issues (`gh issue list`) |

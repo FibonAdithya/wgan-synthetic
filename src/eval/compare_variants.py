@@ -1,6 +1,6 @@
 """Overlay every trained variant of one dataset family on its real data.
 
-src.eval.eda can already overlay any number of synthetic sets; this
+src.eval.eda.pipeline can already overlay any number of synthetic sets; this
 drives it across a family's named variants so the comparison does not have to
 be retyped. Each variant is one config delta from the one before it, so a
 difference visible in the report attributes to a single cause.

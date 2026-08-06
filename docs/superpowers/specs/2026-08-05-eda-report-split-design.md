@@ -1,7 +1,7 @@
 # Splitting `eda_report.py` into a panel package
 
 Date: 2026-08-05
-Status: design approved, not yet implemented
+Status: implemented 2026-08-05, see src/eval/eda/
 
 ## Problem
 

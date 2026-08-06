@@ -16,6 +16,7 @@ the code. That is not mechanically detectable, and it is the docs-review
 workflow's job.
 """
 
+import ast
 import re
 from pathlib import Path
 
@@ -157,3 +158,35 @@ def test_anchor_references_resolve(doc):
         elif anchor not in headings(target):
             broken.append(f"{rel(doc)}:{lineno} -> {match.group('path')}#{anchor}")
     assert not broken, "anchors that match no heading: " + "; ".join(broken)
+
+
+def module_symbols(path) -> set[str]:
+    """Top-level function, class and assignment names in a Python module.
+
+    Parsed rather than imported: importing src.eval modules pulls in torch and
+    runs module-level code, which is far too much machinery for a docs test.
+    """
+    tree = ast.parse(path.read_text())
+    names = set()
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.add(node.name)
+        elif isinstance(node, ast.Assign):
+            names.update(t.id for t in node.targets if isinstance(t, ast.Name))
+    return names
+
+
+@pytest.mark.parametrize("doc", AUTHORITATIVE_DOCS, ids=rel)
+def test_symbol_references_resolve(doc):
+    broken = []
+    for lineno, match in iter_refs(doc):
+        symbol = match.group("symbol")
+        if symbol is None:
+            continue
+        path = match.group("path")
+        target = REPO_ROOT / path
+        if not target.exists():
+            broken.append(f"{rel(doc)}:{lineno} -> missing file {path}")
+        elif symbol not in module_symbols(target):
+            broken.append(f"{rel(doc)}:{lineno} -> {path}::{symbol}")
+    assert not broken, "symbols that do not exist: " + "; ".join(broken)

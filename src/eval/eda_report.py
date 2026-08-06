@@ -27,11 +27,8 @@ import argparse
 import json
 from pathlib import Path
 
-import numpy as np
-import plotly.graph_objects as go
-
 from src.eval import ann_difficulty
-from src.eval.eda import figures, glyphs, html, metrics, notes
+from src.eval.eda import html, metrics, panels
 from src.eval.eda.config import (
     ANN_HUB_K_DEFAULT,
     ANN_K_DEFAULT,
@@ -206,214 +203,22 @@ def run(args: argparse.Namespace) -> Path:
         for s in series
     ]
 
-    sections: list[tuple[str, str, go.Figure]] = []
-
-    # First, because it frames everything after it: every other panel is an
-    # aggregate that can look healthy while individual descriptors are
-    # structurally wrong.
-    rows = glyphs.glyph_rows(series, cfg.glyph_samples, cfg.seed)
-    if rows:
-        sections.append(
-            (
-                glyphs.GLYPH_SECTION_TITLE,
-                "Individual descriptors, not an aggregate. Each 128-value vector "
-                "is drawn as a 4x4 grid of spatial cells, each cell an 8-ray star, "
-                "one ray per orientation bin. Real SIFT is sparse and spiky, with "
-                "most cells dominated by one or two directions; even, bushy stars "
-                "mean a generator matched the marginals without the structure. "
-                "<b>Red rays are negative bins, impossible for a gradient "
-                "histogram</b>, and are drawn at a minimum length so they stay "
-                "visible -- read their presence and count, not their size. The "
-                "<code>real-a</code>/<code>real-b</code> pair is the baseline for "
-                "how much natural variation to expect before judging a synthetic "
-                "row. Ray length is otherwise a shared percentile scale across "
-                "every descriptor here, so rows stay comparable. This panel "
-                "assumes the vectors are raw descriptors: a set that was centered "
-                "or whitened before being written out no longer maps dimension to "
-                "(cell, orientation bin), and would be drawn as a plausible-looking "
-                "lie.",
-                glyphs.fig_descriptor_glyphs(rows),
-            )
-        )
-
-    sections.append(
-        (
-            "Local intrinsic dimensionality",
-            "How locally high-dimensional the neighbourhood of a typical query "
-            "is, and the strongest single predictor of how hard an index will "
-            "find this data. A synthetic set landing well below real is easier "
-            "to search and would understate any index's difficulty; well above "
-            "and it overstates it. Relative contrast sits alongside: values "
-            "near 1 mean the nearest neighbour is barely closer than an "
-            "arbitrary point, leaving an index little to exploit."
-            + notes.ann_condition_note(
-                series, ann_metrics, (("num_rows", "rows"), ("k", "k"))
-            )
-            + notes.ann_discarded_note(series, ann_metrics)
-            + notes.ANN_NOTE_SUFFIX,
-            figures.fig_ann_profile(series, ann_metrics, args.bins),
-        )
+    ctx = panels.Context(
+        config=cfg,
+        series=series,
+        ann_metrics=ann_metrics,
+        divergence=(
+            metrics.dimension_divergence(series, cfg.top_divergent)
+            if len(series) > 1
+            else None
+        ),
     )
-    sections.append(
-        (
-            "Hubness",
-            "How often each point turns up in other points' neighbour lists. A "
-            "long right tail means a few hubs dominate, which is what stalls "
-            "graph indexes like HNSW. A generator gets no direct training "
-            "pressure to reproduce this, so matching it is genuine evidence "
-            "rather than a fitted artefact."
-            + notes.ann_condition_note(series, ann_metrics, (("num_rows", "rows"),))
-            + notes.ANN_NOTE_SUFFIX,
-            figures.overlay_hist_fig(
-                [
-                    (
-                        s.name,
-                        ann_metrics[s.name].k_occurrence.astype(np.float64),
-                        s.color,
-                    )
-                    for s in series
-                ],
-                args.bins,
-                f"k-occurrence at k={args.ann_hub_k} (log density)",
-                "times appearing in a neighbour list",
-                log_y=True,
-            ),
-        )
-    )
-    sections.append(
-        (
-            "IVF cell balance",
-            "How evenly k-means would partition each set, which drives how many "
-            "cells an IVF query has to probe. Each set is clustered on its own, "
-            "because an index would be built on whichever set you shipped."
-            + notes.ann_condition_note(series, ann_metrics, (("nlist", "nlist"),))
-            + notes.ANN_NOTE_SUFFIX,
-            figures.fig_ivf_balance(series, ann_metrics),
-        )
-    )
-
-    sections.append(
-        (
-            "Pooled value distribution",
-            "Every coordinate of every vector flattened into one histogram -- the "
-            "equal-weight mixture of all per-dimension marginals. Raw SIFT is "
-            "quantized with heavy mass at exactly zero, so a smooth unimodal blob "
-            "here is wrong regardless of what the critic score says.",
-            figures.fig_value_distribution(series, args.bins),
-        )
-    )
-    sections.append(
-        (
-            "Per-dimension marginals",
-            "The same histogram split by dimension; use the dropdown to page "
-            "through. Aggregate overlap can hide compensating per-dimension error.",
-            figures.fig_per_dim_marginals(series, args.bins),
-        )
-    )
-    sections.append(
-        (
-            "Per-dimension profiles",
-            "Mean, spread and exact-zero rate across dimensions. SIFT's zero rate "
-            "varies strongly by dimension -- corner cells of the 4x4 grid are "
-            "emptier than central ones -- so a flat profile means the generator "
-            "learned an average rather than the descriptor layout.",
-            figures.fig_dim_profiles(series),
-        )
-    )
-    sections.append(
-        (
-            "Pairwise distances",
-            "Distances between random pairs: the global geometry, and what "
-            "downstream ANN benchmarking depends on.",
-            figures.overlay_hist_fig(
-                [
-                    (
-                        s.name,
-                        metrics.pairwise_distance_sample(
-                            s.x, args.num_pairs, args.seed
-                        ),
-                        s.color,
-                    )
-                    for s in series
-                ],
-                args.bins,
-                "Pairwise Euclidean distance",
-                "distance",
-            ),
-        )
-    )
-    sections.append(
-        (
-            f"Within-set {args.knn}-NN distances",
-            "Each set measured against itself, not against real. Local packing "
-            "rather than global spread, and the clearest mode-collapse tell: a "
-            "collapsed generator crowds its samples, pushing this left of real. "
-            "All sets are cut to equal N first, since k-NN distance shrinks as "
-            "sample count grows.",
-            figures.overlay_hist_fig(
-                [
-                    (
-                        s.name,
-                        metrics.nn_distances(
-                            s.x, args.knn, args.seed, args.knn_max_rows
-                        ),
-                        s.color,
-                    )
-                    for s in series
-                ],
-                args.bins,
-                f"Distance to {args.knn}-th nearest neighbour within set",
-                "distance",
-            ),
-        )
-    )
-
-    if args.preprocess == "none":
-        sections.append(
-            (
-                "Vector norms",
-                "Only informative without L2 normalization.",
-                figures.overlay_hist_fig(
-                    [(s.name, np.linalg.norm(s.x, axis=1), s.color) for s in series],
-                    args.bins,
-                    "L2 norm",
-                    "norm",
-                ),
-            )
-        )
-
-    sections.append(
-        (
-            "PCA spectrum",
-            "A generator covering fewer effective directions than the data falls "
-            "off more steeply and saturates earlier in the cumulative curve.",
-            figures.fig_pca_spectrum(series),
-        )
-    )
-    sections.append(
-        (
-            "Correlation structure",
-            "SIFT is 4x4 spatial cells x 8 orientation bins, which produces "
-            "visible block structure. Each synthetic is shown as a difference "
-            "against real, which is what localizes the error.",
-            figures.fig_correlation(series),
-        )
-    )
-
-    worst_dims: dict[str, list[dict]] = {}
-    if has_synth:
-        divergence = metrics.dimension_divergence(series, args.top_divergent)
-        worst_dims = divergence.worst
-        div_fig = figures.fig_dim_divergence(divergence, series)
-        sections.append(
-            (
-                "Per-dimension mismatch",
-                "Dimensions ordered by the worst mismatch across all synthetic "
-                "sets, so bars line up across series. Cross-reference the leaders "
-                "against the marginals dropdown above.",
-                div_fig,
-            )
-        )
+    sections = [
+        (panel.resolve_title(ctx), panel.resolve_note(ctx), fig)
+        for panel in panels.PANELS
+        if (fig := panel.build(ctx)) is not None
+    ]
+    worst_dims = ctx.divergence.worst if ctx.divergence else {}
 
     synth_desc = (
         " &middot; ".join(f"{s.name}" for s in series if not s.is_real)

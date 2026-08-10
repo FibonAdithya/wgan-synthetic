@@ -34,6 +34,7 @@ pytest.importorskip(
 )
 
 from src.eval import plot_distance_cdf as pdc  # noqa: E402
+from src.eval.eda import series as eda_series  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -140,17 +141,6 @@ def test_main_refuses_a_one_dimensional_synthetic_array(tmp_path: Path, monkeypa
     assert not out.exists()
 
 
-def test_l2_normalize_gives_unit_rows():
-    x = np.random.default_rng(4).random((5, 16)).astype(np.float32) + 0.1
-    assert np.linalg.norm(pdc.l2_normalize(x), axis=1) == pytest.approx(1.0, rel=1e-6)
-
-
-def test_l2_normalize_leaves_an_all_zero_row_finite():
-    """Dividing by the raw norm would give NaN and poison every quantile."""
-    x = np.zeros((2, 16), dtype=np.float32)
-    assert np.all(np.isfinite(pdc.l2_normalize(x)))
-
-
 def test_sampled_indices_returns_every_row_when_k_is_not_smaller_than_n():
     rng = np.random.default_rng(5)
     assert np.array_equal(pdc.sampled_indices(4, 10, rng), np.arange(4))
@@ -163,7 +153,9 @@ def test_sampled_indices_draws_k_distinct_rows():
 
 
 def test_quantile_curves_are_ordered_and_the_cdf_axis_spans_zero_to_one():
-    x = pdc.l2_normalize(np.random.default_rng(7).random((40, 16)).astype(np.float32))
+    x = eda_series.maybe_l2_normalize(
+        np.random.default_rng(7).random((40, 16)).astype(np.float32), "l2"
+    )
     y, q10, q50, q90 = pdc.query_cdf_quantiles(
         x, num_queries=8, num_targets=20, rng=np.random.default_rng(8)
     )
@@ -177,7 +169,9 @@ def test_a_query_is_not_counted_as_its_own_nearest_neighbour():
     in the target set, and a retained self-distance of 0 would drag the whole
     left edge of the CDF down. The curve then reports a density the data does
     not have, which is the one thing this figure exists to show."""
-    x = pdc.l2_normalize(np.random.default_rng(9).random((30, 16)).astype(np.float32))
+    x = eda_series.maybe_l2_normalize(
+        np.random.default_rng(9).random((30, 16)).astype(np.float32), "l2"
+    )
     y, q10, _, _ = pdc.query_cdf_quantiles(
         x, num_queries=30, num_targets=30, rng=np.random.default_rng(10)
     )

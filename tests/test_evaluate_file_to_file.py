@@ -380,32 +380,10 @@ def test_gamma_flag_reaches_the_rbf_kernel_behind_mmd(tmp_path: Path, monkeypatc
     assert metrics["mmd_rbf"] == pytest.approx(2.0 - 2.0 * math.exp(-4.0), rel=1e-6)
 
 
-def test_l2_normalize_rescales_every_row_to_unit_length():
-    rng = np.random.default_rng(9)
-    x = rng.normal(size=(25, 6)) * rng.uniform(0.1, 50.0, size=(25, 1))
-
-    normalized = eff.l2_normalize(x)
-
-    np.testing.assert_allclose(np.linalg.norm(normalized, axis=1), 1.0, rtol=1e-6)
-
-
-def test_l2_normalize_preserves_direction_while_dropping_magnitude():
-    rng = np.random.default_rng(10)
-    x = rng.normal(size=(15, 4))
-
-    normalized = eff.l2_normalize(x)
-
-    cosines = (x * normalized).sum(axis=1) / np.linalg.norm(x, axis=1)
-    np.testing.assert_allclose(cosines, 1.0, rtol=1e-6)
-
-
-def test_l2_normalize_leaves_a_zero_vector_at_zero_instead_of_dividing_by_zero():
-    x = np.zeros((3, 5))
-
-    normalized = eff.l2_normalize(x)
-
-    assert np.isfinite(normalized).all(), "the eps clamp must prevent 0/0 -> nan"
-    np.testing.assert_array_equal(normalized, np.zeros((3, 5)))
+# The three normalisation tests that lived here moved to
+# tests/test_normalisation_is_shared.py when this module stopped carrying its
+# own copy of the rule. The `--skip-l2-normalize` behaviour, which is this
+# module's own, is still covered above.
 
 
 def test_random_sample_returns_the_whole_array_when_n_is_not_smaller():

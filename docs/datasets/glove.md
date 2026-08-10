@@ -45,9 +45,10 @@ locked here so a gate result stays readable against an older one.
 
 Measured over 50,000 vectors at `preprocess: l2`, `seed: 42`, `nlist: 256`,
 subsampled from `glove_250k.npy`. The report output these came from is
-committed as
-`docs/datasets/glove_profile_summary.json`, so every figure on this page is
-checkable without access to the training box. Reproduce the real column with:
+committed as `docs/datasets/glove_profile_summary.json`, and the noise-floor
+draws below as `docs/datasets/glove_noise_floor.json`, so both of those tables
+are checkable without access to the training box. Reproduce the real column
+with:
 
     python -m src.eval.eda_report \
         --real-path data/glove_250k.npy \
@@ -55,12 +56,6 @@ checkable without access to the training box. Reproduce the real column with:
         --ann-max-rows 20000 --ann-k 100 --ann-hub-k 10
 
 Read the four values out of runs/glove/profile/summary.json (written by the command above).
-
-`deep` is the only other family with a measured real column, and it is the
-fair comparison: same metric, same conditions, similar ambient dimension.
-GloVe is harder than it in all four directions at once -- twice the LID, lower
-contrast, roughly three times the hubness skew, twice the Gini. Expect `v0` to
-miss by more than `deep`'s did.
 
 ### Hubness skew is below the noise floor at this N
 
@@ -92,8 +87,16 @@ human. See the `## Gate` section.
 
 `ann_difficulty.py` measures everything under L2, including this family's
 `angular` corpus, so these numbers will need re-measuring once angular
-distance support lands (phase (c)). Measured against one draw, that re-measure
-moves less than the follow-up assumes:
+distance support lands (phase (c)).
+
+Two of the four will not move at all. On L2-normalized vectors the two
+distances are related by a strictly monotone map, and hubness skew and Gini
+read only neighbour identity and cluster assignment, which such a map cannot
+reorder. That is an argument, not a measurement, and it holds for any corpus
+preprocessed this way.
+
+One draw measured against both distances agrees, and puts a size on the two
+that do move:
 
 | Statistic | under L2 | under angular | change |
 |---|---|---|---|
@@ -102,10 +105,11 @@ moves less than the follow-up assumes:
 | Relative contrast | 1.38872 | 1.33333 | -3.99% |
 | LID median | 35.2928 | 31.4624 | -10.85% |
 
-On L2-normalized vectors the two distances are related by a strictly monotone
-map, and hubness and Gini read only neighbour identity and cluster
-assignment, which such a map cannot reorder. Only the two ratio-based
-statistics move.
+Unlike the two tables above, these eight figures are not backed by anything
+committed here: they came from a one-off script that is not in this tree, so
+they cannot be reproduced from a pinned commit. Treat the two percentages as
+indicative and re-measure them when phase (c) lands. The zeroes are the part
+that does not need re-measuring, for the reason given above.
 
 ## Model family
 

@@ -86,7 +86,10 @@ def run(args: argparse.Namespace) -> Path:
     )
 
     report_html = html.build_report(
-        sections, meta_html, html.plotlyjs_head(cfg.plotlyjs, out_dir)
+        sections,
+        meta_html,
+        html.plotlyjs_head(cfg.plotlyjs, out_dir),
+        heading=f"Descriptor EDA: {Path(cfg.real_path).stem}",
     )
     report_path = out_dir / "eda_report.html"
     report_path.write_text(report_html, encoding="utf-8")

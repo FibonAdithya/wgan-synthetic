@@ -17,7 +17,11 @@ and without loading any vectors.
 
 from __future__ import annotations
 
+import argparse
+import json
 import statistics
+import sys
+from pathlib import Path
 from typing import Sequence
 
 # Named exactly as `src/eval/ann_difficulty.py::summary()` returns them, which
@@ -156,3 +160,62 @@ def compute_floor(
         "distance_from_real": distance_from_real,
         "distance_in_spreads": distance_in_spreads,
     }
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--summary",
+        type=str,
+        required=True,
+        help="summary.json written by eda_report, holding every series.",
+    )
+    parser.add_argument(
+        "--series",
+        type=str,
+        action="append",
+        required=True,
+        metavar="NAME",
+        help=(
+            "Repeatable. One --series per seeded run, named as it was labelled "
+            "in eda_report's --synthetic-path LABEL=PATH."
+        ),
+    )
+    parser.add_argument(
+        "--real-name",
+        type=str,
+        default=REAL_NAME,
+        help=f"Series to measure the distance against. Default {REAL_NAME!r}.",
+    )
+    parser.add_argument(
+        "--output",
+        type=str,
+        default=None,
+        help="Also write the JSON floor to this path.",
+    )
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    try:
+        summary = json.loads(Path(args.summary).read_text(encoding="utf-8"))
+        floor = compute_floor(summary, args.series, real_name=args.real_name)
+    except (NoiseFloorError, OSError, json.JSONDecodeError) as exc:
+        # stderr, so stdout stays parseable as JSON or empty, never half a
+        # report.
+        print(f"noise_floor: {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
+
+    if args.output is not None:
+        output_path = Path(args.output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(json.dumps(floor, indent=2), encoding="utf-8")
+
+    print(json.dumps(floor, indent=2))
+
+
+if __name__ == "__main__":
+    main()

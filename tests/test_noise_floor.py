@@ -4,9 +4,16 @@ The numbers here are hand-computed, not measured from anything: these tests
 are about the arithmetic, not about GloVe.
 """
 
+import json
+import subprocess
+import sys
+from pathlib import Path
+
 import pytest
 
 from src.eval import noise_floor
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_summarize_spread_reports_hand_computed_values():
@@ -127,3 +134,57 @@ def test_a_none_statistic_is_an_error():
     )
     with pytest.raises(noise_floor.NoiseFloorError, match="lid_median"):
         noise_floor.compute_floor(summary, ["s42", "s43"])
+
+
+def test_cli_writes_the_floor_to_a_file(tmp_path):
+    summary_path = tmp_path / "summary.json"
+    summary_path.write_text(
+        json.dumps(
+            _summary(
+                BASE,
+                {
+                    "s42": {**BASE, "lid_median": 12.0},
+                    "s43": {**BASE, "lid_median": 14.0},
+                },
+            )
+        ),
+        encoding="utf-8",
+    )
+    out_path = tmp_path / "floor.json"
+
+    result = subprocess.run(
+        [
+            sys.executable, "-m", "src.eval.noise_floor",
+            "--summary", str(summary_path),
+            "--series", "s42",
+            "--series", "s43",
+            "--output", str(out_path),
+        ],
+        cwd=REPO_ROOT, capture_output=True, text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    written = json.loads(out_path.read_text(encoding="utf-8"))
+    assert written["series"] == ["s42", "s43"]
+    assert written["spread"]["lid_median"]["mean"] == pytest.approx(13.0)
+    # stdout stays parseable as JSON on its own.
+    assert json.loads(result.stdout)["series"] == ["s42", "s43"]
+
+
+def test_cli_exits_nonzero_on_a_missing_series(tmp_path):
+    summary_path = tmp_path / "summary.json"
+    summary_path.write_text(json.dumps(_summary(BASE, {"s42": BASE, "s43": BASE})), encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable, "-m", "src.eval.noise_floor",
+            "--summary", str(summary_path),
+            "--series", "s42",
+            "--series", "s99",
+        ],
+        cwd=REPO_ROOT, capture_output=True, text=True,
+    )
+
+    assert result.returncode == 1
+    assert "s99" in result.stderr
+    assert result.stdout == ""

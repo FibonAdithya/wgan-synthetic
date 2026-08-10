@@ -62,3 +62,97 @@ def summarize_spread(values: Sequence[float]) -> dict[str, float]:
         "range_pct_of_mean": (high - low) / mean * 100.0,
         "cv_pct": std / mean * 100.0,
     }
+
+
+# summary.json key -> the name this module reports it under. Mirrors
+# check_gate.CONDITION_KEYS: k_hub is absent because eda_report records no
+# post-clamp actual for the hubness depth.
+CONDITION_KEYS = {
+    "ann_measured_rows": "n",
+    "ann_measured_k": "k",
+    "ann_measured_nlist": "nlist",
+}
+
+
+def _entry(summary: dict, name: str) -> dict:
+    for entry in summary.get("stats", []):
+        if entry.get("name") == name:
+            return entry
+    raise NoiseFloorError(f"no series named {name!r} in summary.json")
+
+
+def _value(entry: dict, statistic: str) -> float:
+    if statistic not in entry:
+        raise NoiseFloorError(
+            f"series {entry.get('name')!r} has no {statistic!r}"
+        )
+    value = entry[statistic]
+    if value is None:
+        # ann_difficulty writes null when every query was discarded. That is a
+        # measurement that did not happen, and averaging it as 0.0 would put a
+        # number nobody measured into a committed floor.
+        raise NoiseFloorError(
+            f"series {entry.get('name')!r} has {statistic!r} = null; "
+            "the statistic was not measurable on that run"
+        )
+    return float(value)
+
+
+def compute_floor(
+    summary: dict,
+    series_names: Sequence[str],
+    *,
+    real_name: str = REAL_NAME,
+) -> dict:
+    """Spread across seeds, and how far real sits from them in units of it.
+
+    The last of those is the column that decides whether a future ladder rung
+    could be told from a reseed at all.
+    """
+    if len(series_names) < 2:
+        raise NoiseFloorError(
+            f"a floor needs at least two series, got {len(series_names)}"
+        )
+
+    real_entry = _entry(summary, real_name)
+    entries = [_entry(summary, name) for name in series_names]
+
+    real: dict[str, float] = {}
+    per_seed: list[dict[str, float]] = [{} for _ in entries]
+    spread: dict[str, dict[str, float]] = {}
+    distance_from_real: dict[str, float] = {}
+    distance_in_spreads: dict[str, float | None] = {}
+
+    for statistic in GATE_STATISTICS:
+        values = [_value(entry, statistic) for entry in entries]
+        for row, value in zip(per_seed, values):
+            row[statistic] = value
+
+        real_value = _value(real_entry, statistic)
+        real[statistic] = real_value
+
+        summarized = summarize_spread(values)
+        spread[statistic] = summarized
+
+        gap = summarized["mean"] - real_value
+        distance_from_real[statistic] = gap
+
+        spread_range = summarized["max"] - summarized["min"]
+        distance_in_spreads[statistic] = (
+            None if spread_range == 0.0 else abs(gap) / spread_range
+        )
+
+    return {
+        "series": list(series_names),
+        "real_name": real_name,
+        "conditions": {
+            reported: real_entry[key]
+            for key, reported in CONDITION_KEYS.items()
+            if key in real_entry
+        },
+        "real": real,
+        "per_seed": per_seed,
+        "spread": spread,
+        "distance_from_real": distance_from_real,
+        "distance_in_spreads": distance_in_spreads,
+    }

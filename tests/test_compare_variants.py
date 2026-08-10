@@ -175,6 +175,7 @@ def test_report_args_match_eda_report_fields(monkeypatch, tmp_path):
         glyph_samples=eda_config.GLYPH_SAMPLES_DEFAULT,
         no_png=True,
         plotlyjs="cdn",
+        max_panel_dim=eda_config.MAX_PANEL_DIM_DEFAULT,
     )
     report_args = cv.build_report_args(args, specs=["v0=a.npy"])
 

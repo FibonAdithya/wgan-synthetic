@@ -475,6 +475,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--glyph-samples", type=int, default=eda_config.GLYPH_SAMPLES_DEFAULT
     )
+    parser.add_argument(
+        "--max-panel-dim", type=int, default=eda_config.MAX_PANEL_DIM_DEFAULT
+    )
     parser.add_argument("--no-png", action="store_true")
     parser.add_argument(
         "--plotlyjs", type=str, default="inline", choices=["inline", "cdn", "directory"]
@@ -512,6 +515,7 @@ def build_report_args(args: argparse.Namespace, specs: list[str]) -> argparse.Na
         glyph_samples=args.glyph_samples,
         no_png=args.no_png,
         plotlyjs=args.plotlyjs,
+        max_panel_dim=args.max_panel_dim,
     )
 
 

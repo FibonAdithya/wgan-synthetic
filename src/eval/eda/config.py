@@ -26,6 +26,18 @@ KNN_MAX_ROWS_DEFAULT = ANN_MAX_ROWS_DEFAULT
 
 GLYPH_SAMPLES_DEFAULT = 8
 
+# Above this width the per-dimension marginals and correlation panels are
+# dropped. Both scale with the square of the dimension -- the marginals
+# dropdown carries one visibility flag per (button, trace) pair, and the
+# correlation heatmap is dim x dim -- so at 1536 they cost tens of megabytes
+# of report each. They also say least at that width: a 1536-entry dropdown is
+# not something a reader pages through, and per-dimension marginals of a text
+# embedding carry almost no signal.
+#
+# 256 keeps both panels for sift (128), deep (96), glove (100) and nytimes
+# (256), and drops them for gist (960) and openai (1536).
+MAX_PANEL_DIM_DEFAULT = 256
+
 
 @dataclass(frozen=True)
 class EdaConfig:
@@ -51,14 +63,16 @@ class EdaConfig:
     no_png: bool
     glyph_samples: int
     plotlyjs: str
+    max_panel_dim: int
 
     @classmethod
     def from_args(cls, args: argparse.Namespace) -> EdaConfig:
         """Build from the Namespace `pipeline.run` was handed.
 
-        `glyph_samples` is read defensively because `compare_variants` has
-        built Namespaces without it; every other field is required, so a
-        Namespace missing one fails here rather than deep inside a panel.
+        `glyph_samples` and `max_panel_dim` are read defensively because
+        `compare_variants` has built Namespaces without them; every other
+        field is required, so a Namespace missing one fails here rather than
+        deep inside a panel.
         """
         return cls(
             real_path=args.real_path,
@@ -81,4 +95,5 @@ class EdaConfig:
             no_png=args.no_png,
             glyph_samples=getattr(args, "glyph_samples", GLYPH_SAMPLES_DEFAULT),
             plotlyjs=args.plotlyjs,
+            max_panel_dim=getattr(args, "max_panel_dim", MAX_PANEL_DIM_DEFAULT),
         )

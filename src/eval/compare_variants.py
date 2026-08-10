@@ -179,6 +179,46 @@ def resolve_variants(
     return found, skipped
 
 
+def family_metric(variants: Sequence[Variant], root: Path) -> str:
+    """The distance this family's corpus is searched under.
+
+    Read from each variant's repo config, never from
+    `run_dir/run_config.yaml`. Run configs predate the `data.metric` field, so
+    a run trained before it existed would fall back to `l2` -- silently wrong
+    for exactly the angular families this exists for. A run config is evidence
+    of what ran, not a statement about what the corpus is.
+
+    Every manifest entry is read, not only the ones whose checkpoints resolved
+    on this box, so the geometry a report is measured under cannot depend on
+    which runs happen to be present.
+    """
+    by_metric: dict[str, list[str]] = {}
+    for variant in variants:
+        path = root / variant.config_path
+        if not path.is_file():
+            raise SystemExit(
+                f"no config at {path} for variant {variant.name!r}. The "
+                "manifest names it, and its data.metric decides the distance "
+                "the report measures under."
+            )
+        doc = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        metric = str((doc.get("data") or {}).get("metric", eda_config.METRIC_DEFAULT))
+        by_metric.setdefault(metric, []).append(variant.name)
+
+    if len(by_metric) > 1:
+        detail = "; ".join(
+            f"{metric}: {', '.join(names)}"
+            for metric, names in sorted(by_metric.items())
+        )
+        raise SystemExit(
+            "variants disagree on data.metric, so there is no single distance "
+            f"to measure this family under ({detail}). Variant numbers are "
+            "per-family, so one ladder is one corpus and one metric; fix the "
+            "configs, or compare only the variants that agree."
+        )
+    return next(iter(by_metric))
+
+
 def _needs_inversion(run_config: Path) -> bool:
     """True when a run's preprocessing has to be undone at sample time.
 
@@ -482,7 +522,9 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def build_report_args(args: argparse.Namespace, specs: list[str]) -> argparse.Namespace:
+def build_report_args(
+    args: argparse.Namespace, specs: list[str], metric: str
+) -> argparse.Namespace:
     """Build the Namespace `eda.pipeline.run` expects from our own parsed args.
 
     Field-for-field parity with `eda.cli.parse_args` is load-bearing: if
@@ -490,6 +532,10 @@ def build_report_args(args: argparse.Namespace, specs: list[str]) -> argparse.Na
     to match, sampling hundreds of thousands of vectors will succeed before
     the mismatch surfaces as a runtime `AttributeError`. See
     `tests/test_compare_variants.py::test_report_args_match_eda_report_fields`.
+
+    `metric` is passed rather than read off `args` because it is a property of
+    the corpus, recorded per family in config. A `--metric` flag would be a
+    second place to state it, and so a place for it to go stale.
     """
     return argparse.Namespace(
         real_path=args.real_path,
@@ -498,6 +544,7 @@ def build_report_args(args: argparse.Namespace, specs: list[str]) -> argparse.Na
         synthetic_format="npy",
         output_dir=args.output_dir,
         preprocess="l2",
+        metric=metric,
         max_vectors=args.max_vectors,
         num_pairs=args.num_pairs,
         knn=args.knn,
@@ -545,6 +592,11 @@ def main() -> None:
             " with --allow-missing."
         )
 
+    # After the resolve checks, so a fresh clone still hears about missing
+    # runs first; before sampling, so a config problem does not cost the
+    # caller several hundred thousand vectors.
+    metric = family_metric(variants, root)
+
     samples_dir = out_dir / "samples"
     samples_dir.mkdir(parents=True, exist_ok=True)
 
@@ -561,7 +613,7 @@ def main() -> None:
         )
         specs.append(f"{variant.name}={path}")
 
-    report_args = build_report_args(args, specs)
+    report_args = build_report_args(args, specs, metric)
     report_path = pipeline.run(report_args)
     print(f"report: {report_path}")
 

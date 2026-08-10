@@ -18,6 +18,10 @@ ANN_K_DEFAULT = 100
 ANN_HUB_K_DEFAULT = 10
 ANN_MAX_ROWS_DEFAULT = 20000
 IVF_NLIST_DEFAULT = 256
+# The distance the corpus is searched under, from its config's `data.metric`.
+# Shared with compare_variants for the same reason as the ANN defaults above.
+# `l2` is the default because it is what every pre-existing report measured.
+METRIC_DEFAULT = "l2"
 # The within-set k-NN distance panel is not an ANN-difficulty panel, so it
 # gets its own knob rather than riding on --ann-max-rows: tuning the cost of
 # the difficulty metrics should not silently move a pre-existing panel. The
@@ -37,6 +41,7 @@ class EdaConfig:
     synthetic_format: str
     output_dir: str
     preprocess: str
+    metric: str
     max_vectors: int
     num_pairs: int
     knn: int
@@ -67,6 +72,7 @@ class EdaConfig:
             synthetic_format=args.synthetic_format,
             output_dir=args.output_dir,
             preprocess=args.preprocess,
+            metric=args.metric,
             max_vectors=args.max_vectors,
             num_pairs=args.num_pairs,
             knn=args.knn,

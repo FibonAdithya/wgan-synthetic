@@ -19,6 +19,7 @@ import yaml
 from PIL import Image, ImageDraw
 
 from src.eval import plot_distance_cdf_pillow as pdcp
+from src.eval.eda import series as eda_series
 
 
 def _write_npy(tmp_path: Path, name: str, n: int = 60, dim: int = 16, seed: int = 0):
@@ -127,7 +128,9 @@ def test_main_refuses_a_one_dimensional_synthetic_array(tmp_path: Path, monkeypa
 
 
 def test_quantile_curves_are_ordered_and_the_cdf_axis_starts_at_zero():
-    x = pdcp.l2_normalize(np.random.default_rng(4).random((40, 16)).astype(np.float32))
+    x = eda_series.maybe_l2_normalize(
+        np.random.default_rng(4).random((40, 16)).astype(np.float32), "l2"
+    )
     y, q10, q50, q90 = pdcp.query_cdf_quantiles(
         x, num_queries=8, num_targets=20, rng=np.random.default_rng(5)
     )

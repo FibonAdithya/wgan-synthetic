@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 
 from src.data.dataset import load_descriptors, train_holdout_split
+from src.eval.eda import series as eda_series
 from src.eval.evaluate_distribution import (
     ann_proxy_recall,
     covariance_fro,
@@ -42,11 +43,6 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def l2_normalize(x: np.ndarray, eps: float = 1.0e-8) -> np.ndarray:
-    norm = np.linalg.norm(x, axis=1, keepdims=True)
-    return x / np.clip(norm, eps, None)
-
-
 def random_sample(x: np.ndarray, n: int, rng: np.random.Generator) -> np.ndarray:
     if n >= x.shape[0]:
         return x
@@ -72,9 +68,9 @@ def main() -> None:
             f"Dimension mismatch: real dim={real.shape[1]} vs synthetic dim={synthetic.shape[1]}"
         )
 
-    if not args.skip_l2_normalize:
-        real = l2_normalize(real)
-        synthetic = l2_normalize(synthetic)
+    mode = "none" if args.skip_l2_normalize else "l2"
+    real = eda_series.maybe_l2_normalize(real, mode)
+    synthetic = eda_series.maybe_l2_normalize(synthetic, mode)
 
     real_train, real_holdout = train_holdout_split(
         real, holdout_fraction=args.holdout_fraction, seed=args.seed

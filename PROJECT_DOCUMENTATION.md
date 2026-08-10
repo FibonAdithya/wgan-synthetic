@@ -261,6 +261,13 @@ alongside the `run_config.yaml` written next to it. Checkpoints do record
 `generator_weights` (`"live"` or `"ema"`), which says which weights the file
 holds, not which architecture produced them.
 
+`gated` was called `sparse` until `b29e317`, and `sparse` is still accepted as
+a deprecated alias for it. Because the architecture is rebuilt from the run
+config, dropping the old name would have made every checkpoint written before
+that rename unloadable — including v2's, whose `run_config.yaml` still says
+`sparse`. Write `gated` in new configs; the alias exists for the ones already
+on disk.
+
 ---
 
 ## Optimizer and training setup

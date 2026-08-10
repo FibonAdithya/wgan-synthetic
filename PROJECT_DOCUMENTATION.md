@@ -355,7 +355,9 @@ Both terms are logged per step alongside `wasserstein` and `adv_loss`, as
 `distance_reg` is one scalar; `log_ratio_penalty` is an L1 *sum* over `k − 1`
 components — 19 of them at the default `k` — so it sits on a different scale
 and grows with `k`. Pick it from a measured `lid_reg` value on real batches at
-the config's actual `lid_reg_k`. See `FOLLOWUPS.md`.
+the config's actual `lid_reg_k`, using `tools/probes/lid_reg_scale_probe.py`.
+The measurement that sized the shipped `0.015`, and the arithmetic against
+`|adv_loss|` behind it, is in the header of `configs/sift/v4.yaml`.
 
 Degenerate batches are dropped rather than clamped, matching
 `src.eval.ann_difficulty.survivor_mask`: a query whose nearest neighbour sits

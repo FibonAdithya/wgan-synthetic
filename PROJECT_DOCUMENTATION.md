@@ -171,9 +171,12 @@ time against the two accepted strings.
 threads it into `src/eval/ann_difficulty.py`, so difficulty is measured under
 the metric the corpus is actually searched with. `angular` is measured as L2
 between unit-norm rows, which orders neighbours exactly as cosine does;
-`compute` refuses rows that are not unit-norm rather than normalizing them,
-so a report's `preprocess` setting cannot disagree with the geometry it
-measured under.
+`compute` refuses rows that are neither unit-norm nor exactly zero rather
+than normalizing them, so a report's `preprocess` setting cannot disagree
+with the geometry it measured under. Exact zeros are accepted because
+`eda.series.maybe_l2_normalize` clamps its divisor rather than dividing by
+~0, so a zero row is an output of our own preprocessing rather than a caller
+mistake.
 
 ---
 

@@ -85,7 +85,9 @@ Read the four values out of runs/deep/profile/summary.json (written by the comma
 is a strictly increasing function of cosine distance, so it ranks neighbours
 identically -- the corpus is measured under the distance it is searched with.
 Measuring requires `--preprocess l2`, and `ann_difficulty.compute` refuses
-rows that are not on the sphere rather than normalizing them itself.
+rows that are neither unit-norm nor exactly zero rather than normalizing
+them itself -- an exact zero is what `maybe_l2_normalize` leaves behind, so
+it is accepted rather than treated as a caller mistake.
 
 The figures above were measured at `preprocess: l2`, as
 `deep_ladder_summary.json` records, so they were already measured under this

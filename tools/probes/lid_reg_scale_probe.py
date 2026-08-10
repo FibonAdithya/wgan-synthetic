@@ -22,7 +22,7 @@ at launch rather than dominating or vanishing.
 Run on the GPU box, where data/sift_base.npy lives:
 
     /venv/main/bin/python tools/probes/lid_reg_scale_probe.py \
-        --config configs/sift_gan_v4.yaml
+        --config configs/sift/v4.yaml
 """
 from __future__ import annotations
 
@@ -65,7 +65,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--config", required=True)
     ap.add_argument("--v2-checkpoint", default=None, help="Trained v2 generator .pt")
-    ap.add_argument("--v2-config", default="configs/sift_gan_v2.yaml")
+    ap.add_argument("--v2-config", default="configs/sift/v2.yaml")
     ap.add_argument("--trials", type=int, default=80)
     ap.add_argument("--target-fraction", type=float, default=0.05,
                     help="Share of |adv_loss| the penalty should contribute at launch.")

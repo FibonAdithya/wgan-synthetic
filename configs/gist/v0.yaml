@@ -1,0 +1,42 @@
+# GIST v0 -- plain WGAN-GP baseline. Every dataset's ladder starts here
+# so each later rung is one attributable delta. Untrained: this config
+# defines the starting point, it does not record a result.
+seed: 42
+device: auto
+output_dir: runs/gist/v0
+
+data:
+  real_path: data/gist_250k.npy
+  format: npy
+  metric: l2
+  descriptor_dim: 960
+  holdout_fraction: 0.05
+  synthetic_if_missing: false
+  synthetic_num_vectors: 100000
+  preprocess:
+    center: false
+    whiten: false
+    l2_normalize: true
+
+model:
+  latent_dim: 512
+  generator_hidden_dims: [1024, 2048, 2048]
+  critic_hidden_dims: [2048, 1024, 512]
+  negative_slope: 0.2
+  generator_type: mlp
+
+training:
+  batch_size: 512
+  num_gen_steps: 30000
+  n_critic: 3
+  lr_g: 1.0e-4
+  lr_d: 1.0e-4
+  betas: [0.0, 0.9]
+  lambda_gp: 5.0
+  distance_reg_alpha: 0.0
+  distance_reg_max_points: 256
+  num_workers: 0
+  amp: false
+  log_every: 250
+  eval_every: 1000
+  save_every: 2000

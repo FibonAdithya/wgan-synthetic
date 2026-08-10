@@ -16,14 +16,13 @@ measured in one run and are *not* comparable with published figures for
 SIFT1M, which are measured on the full 1M set against the real query set
 rather than on a self-queried subsample.
 
-This module deliberately does not import from eda_report: it must stay usable
-and testable without plotly or argparse.
+This module deliberately does not import from `src.eval.eda`: it must stay
+usable and testable without plotly or argparse.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple
 
 import numpy as np
 from sklearn.cluster import MiniBatchKMeans
@@ -46,7 +45,7 @@ def gini(occupancy: np.ndarray) -> float:
     return float(2.0 * np.sum(index * x) / (n * total) - (n + 1.0) / n)
 
 
-def knn(x: np.ndarray, k: int) -> Tuple[np.ndarray, np.ndarray, int]:
+def knn(x: np.ndarray, k: int) -> tuple[np.ndarray, np.ndarray, int]:
     """Nearest neighbours of every row among the *other* rows.
 
     Returns (distances, indices, k_eff). k is clamped to n-1 when the set is
@@ -187,7 +186,7 @@ def hubness_skew(counts: np.ndarray) -> float:
     return float(np.mean(((x - x.mean()) / spread) ** 3))
 
 
-def cell_occupancy(x: np.ndarray, nlist: int, seed: int) -> Tuple[np.ndarray, int]:
+def cell_occupancy(x: np.ndarray, nlist: int, seed: int) -> tuple[np.ndarray, int]:
     """Points per cluster under a k-means partition, sorted ascending.
 
     Stands in for how an IVF index would carve up the set. Each set is
@@ -232,9 +231,9 @@ class AnnMetrics:
 def _subsample(x: np.ndarray, max_rows: int, seed: int) -> np.ndarray:
     """Cut to max_rows (0 = keep all).
 
-    Deliberately duplicated from eda_report rather than imported: this module
-    must not depend on the report. It is five lines and the dependency
-    direction is worth more than the sharing.
+    Deliberately duplicated from `eda.series.subsample` rather than imported:
+    this module must not depend on the report. It is five lines and the
+    dependency direction is worth more than the sharing.
     """
     if max_rows <= 0 or x.shape[0] <= max_rows:
         return x
@@ -280,12 +279,16 @@ def compute(
     )
 
 
-def summary(m: AnnMetrics) -> Dict[str, Optional[float]]:
+def summary(m: AnnMetrics) -> dict[str, float | int | None]:
     """Scalars for the report's statistics table and summary.json.
 
     lid_median and relative_contrast_median are None when every query was
     discarded, which happens only for a fully degenerate set. Callers must
     render None rather than assuming a float.
+
+    lid_discarded_queries is a count, so it is an int and not a float: at a
+    million rows `format(1200000.0, '.6g')` renders `1.2e+06`, which reads as
+    a measurement rather than a tally.
     """
     has_queries = m.lid.size > 0
     return {
@@ -295,5 +298,5 @@ def summary(m: AnnMetrics) -> Dict[str, Optional[float]]:
         ),
         "hubness_skew": hubness_skew(m.k_occurrence),
         "ivf_gini": gini(m.cell_occupancy),
-        "lid_discarded_queries": float(m.discarded_queries),
+        "lid_discarded_queries": int(m.discarded_queries),
     }

@@ -4,10 +4,10 @@ import fcntl
 import json
 import os
 import time
+from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Iterator, Optional
 
 import torch
 
@@ -20,7 +20,7 @@ def _lock_dir() -> Path:
     return Path(os.environ.get("WGAN_GPU_LOCK_DIR", "/tmp"))
 
 
-def gpu_lock_key(device: torch.device) -> Optional[str]:
+def gpu_lock_key(device: torch.device) -> str | None:
     """Stable identifier for the physical card behind `device`.
 
     Keyed on the GPU UUID, not the index. Two processes with different
@@ -88,7 +88,7 @@ def _claim_key(
                 {
                     "pid": os.getpid(),
                     "run_dir": str(run_dir),
-                    "started": datetime.now(timezone.utc).isoformat(),
+                    "started": datetime.now(UTC).isoformat(),
                 }
             )
         )
@@ -106,7 +106,7 @@ def claim_gpu(
     run_dir: Path,
     timeout_s: float = 0.0,
     poll_s: float = 5.0,
-) -> Iterator[Optional[Path]]:
+) -> Iterator[Path | None]:
     """Hold the GPU behind `device` for the duration of the block."""
     key = gpu_lock_key(device)
     if key is None:

@@ -136,10 +136,17 @@ change in the discrepancy being measured.
 
 ## Reproducing
 
-Both training arms, from this commit, on the box:
+Both training arms, on the box:
 
-    python -m src.train.train_wgan_gp --config configs/sift_gan_v3_sift1m.yaml
-    python -m src.train.train_wgan_gp --config configs/sift_gan_v4_sift1m.yaml
+    python -m src.train.train_wgan_gp --config configs/sift/v3_sift1m.yaml
+    python -m src.train.train_wgan_gp --config configs/sift/v4_sift1m.yaml
+
+Those are the paths *now*. At `a86c2ba`, the commit the runs were actually pinned
+to, these files were `configs/sift_gan_v{3,4}_sift1m.yaml` — the SIFT ladder was
+moved into `configs/sift/` when this branch was reconciled onto main, which had
+already made that move for `v0`–`v2`. `jobs/gpuq_job_specs.txt` records the
+original invocations unedited, so it names the old paths. The file contents are
+unchanged by the move.
 
 Then sample 20,000 from each at seed 7 and measure both in one report. Seed 7
 matches `docs/results/v3-structured/logs/eval_v3.sh`, which is why the v3 column

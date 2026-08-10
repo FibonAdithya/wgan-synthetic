@@ -1,0 +1,27 @@
+# Tool configuration only. This project is not packaged: there is no build
+# backend and nothing here declares distribution metadata. Dependencies stay in
+# requirements.txt, which README.md and the venv setup already point at.
+
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# Deliberately a starting ruleset, not a maximal one. pyflakes (F) catches real
+# defects -- unused imports, undefined names, f-strings with no placeholders.
+# pycodestyle (E) and isort (I) are mechanical. Everything here is either a bug
+# or trivially auto-fixable, so the gate stays honest without becoming a style
+# argument. Tighten in a later pass once this is green and merged.
+select = ["E", "F", "I", "W", "UP"]
+
+# E501 (line too long) is handled by the formatter, which wraps what it can and
+# leaves long string literals and URLs alone. Flagging what the formatter has
+# already decided to keep would make `make check` unpassable.
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
+
+[tool.ruff.format]
+docstring-code-format = true

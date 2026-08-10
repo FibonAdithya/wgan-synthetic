@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Iterable, List, Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -16,7 +17,7 @@ class Generator(nn.Module):
         negative_slope: float = 0.2,
     ):
         super().__init__()
-        dims: List[int] = [latent_dim, *list(hidden_dims), output_dim]
+        dims: list[int] = [latent_dim, *list(hidden_dims), output_dim]
         layers = []
         for i in range(len(dims) - 2):
             layers.append(nn.Linear(dims[i], dims[i + 1]))
@@ -65,7 +66,7 @@ class GatedGenerator(nn.Module):
         if eps <= 0:
             raise ValueError("eps must be greater than zero")
 
-        dims: List[int] = [latent_dim, *hidden_dims]
+        dims: list[int] = [latent_dim, *hidden_dims]
         layers = []
         for i in range(len(dims) - 1):
             layers.append(nn.Linear(dims[i], dims[i + 1]))
@@ -99,9 +100,9 @@ class GatedGenerator(nn.Module):
         # row is off. This is vanishingly rare at 128 dimensions but otherwise
         # silently produces an invalid zero vector.
         empty = hard.sum(dim=1, keepdim=True) == 0
-        fallback = F.one_hot(
-            sample_logits.argmax(dim=1), sample_logits.shape[1]
-        ).to(hard.dtype)
+        fallback = F.one_hot(sample_logits.argmax(dim=1), sample_logits.shape[1]).to(
+            hard.dtype
+        )
         # Note: on a rescued row the straight-through gradient still comes from
         # `soft`, i.e. from the gate the forward pass did *not* take. This is
         # the one place forward and backward genuinely disagree. It is harmless
@@ -171,7 +172,9 @@ class StructuredGateGenerator(nn.Module):
         if latent_dim <= 0 or output_dim <= 0 or any(dim <= 0 for dim in hidden_dims):
             raise ValueError("model dimensions must be greater than zero")
         if not hidden_dims:
-            raise ValueError("StructuredGateGenerator requires at least one hidden dimension")
+            raise ValueError(
+                "StructuredGateGenerator requires at least one hidden dimension"
+            )
         if negative_slope < 0:
             raise ValueError("negative_slope must not be negative")
         if gate_temperature <= 0:
@@ -188,11 +191,13 @@ class StructuredGateGenerator(nn.Module):
                 f"but output_dim is {output_dim}"
             )
         if gate_kernel < 1 or gate_kernel % 2 == 0:
-            raise ValueError(f"gate_kernel must be a positive odd number, got {gate_kernel}")
+            raise ValueError(
+                f"gate_kernel must be a positive odd number, got {gate_kernel}"
+            )
         if noise_kernel_sigma <= 0:
             raise ValueError("noise_kernel_sigma must be greater than zero")
 
-        dims: List[int] = [latent_dim, *hidden_dims]
+        dims: list[int] = [latent_dim, *hidden_dims]
         layers = []
         for i in range(len(dims) - 1):
             layers.append(nn.Linear(dims[i], dims[i + 1]))
@@ -294,9 +299,9 @@ class StructuredGateGenerator(nn.Module):
         hard = (soft > 0.5).to(soft.dtype)
         # Preserve the unit-norm contract even if every gate in a row closes.
         empty = hard.sum(dim=1, keepdim=True) == 0
-        fallback = F.one_hot(
-            sample_logits.argmax(dim=1), sample_logits.shape[1]
-        ).to(hard.dtype)
+        fallback = F.one_hot(sample_logits.argmax(dim=1), sample_logits.shape[1]).to(
+            hard.dtype
+        )
         hard = torch.where(empty, fallback, hard)
         return (hard + soft - soft.detach()).to(logits.dtype)
 
@@ -357,9 +362,17 @@ class StructuredGateGenerator(nn.Module):
         return x / torch.clamp(norm, min=self.eps)
 
 
+# `gated` was called `sparse` before b29e317. The rename changed the code but
+# not the run configs already on disk, and a run config is the historical
+# record of a run that happened -- so the old name still has to build the
+# architecture it named, or those checkpoints become unloadable.
+GENERATOR_TYPE_ALIASES = {"sparse": "gated"}
+
+
 def build_generator(model_cfg: Mapping[str, Any], output_dim: int) -> nn.Module:
     """Build the configured generator, defaulting to the legacy MLP."""
     kind = model_cfg.get("generator_type", "mlp")
+    kind = GENERATOR_TYPE_ALIASES.get(kind, kind)
     common = {
         "latent_dim": int(model_cfg["latent_dim"]),
         "output_dim": output_dim,

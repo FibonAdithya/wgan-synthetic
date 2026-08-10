@@ -9,6 +9,13 @@ def test_explicit_device_is_returned_verbatim():
     assert resolve_device("cpu") == torch.device("cpu")
 
 
+def test_explicit_device_beats_an_available_accelerator(monkeypatch):
+    # An explicit config must win over autodetection, not merely agree with it
+    # on a box that has no accelerator to detect.
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    assert resolve_device("cpu") == torch.device("cpu")
+
+
 def test_auto_falls_back_to_cpu_without_accelerators(monkeypatch):
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     monkeypatch.setattr(torch.backends.mps, "is_available", lambda: False)
@@ -17,6 +24,12 @@ def test_auto_falls_back_to_cpu_without_accelerators(monkeypatch):
 
 def test_auto_picks_cuda_when_available(monkeypatch):
     monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    assert resolve_device("auto") == torch.device("cuda")
+
+
+def test_auto_prefers_cuda_over_mps_when_both_are_available(monkeypatch):
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.backends.mps, "is_available", lambda: True)
     assert resolve_device("auto") == torch.device("cuda")
 
 

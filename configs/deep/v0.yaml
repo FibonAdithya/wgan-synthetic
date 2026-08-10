@@ -1,0 +1,55 @@
+# DEEP v0 -- plain WGAN-GP baseline, the first rung of the DEEP ladder.
+#
+# Hyperparameters are carried over from configs/sift/v1.yaml -- the SIFT rung
+# that has generator EMA but not the pairwise-distance regularizer -- rather
+# than re-ablated, because the SIFT track already answered them.
+#
+# No spherical generator is needed here. normalize_l2 is already applied
+# wherever the generator's output is consumed in train_wgan_gp.py, and it sits
+# in the autograd graph, so a plain MLP is trained against the unit sphere.
+seed: 42
+device: auto
+output_dir: runs/deep/v0
+
+data:
+  real_path: data/deep_1m.npy
+  format: npy
+  metric: angular
+  descriptor_dim: 96
+  holdout_fraction: 0.05
+  synthetic_if_missing: false
+  synthetic_num_vectors: 100000
+  preprocess:
+    center: false
+    whiten: false
+    l2_normalize: true
+
+model:
+  # Matches descriptor_dim, as every other family's config does. An earlier
+  # draft of this ladder carried 128 over from configs/sift/v1.yaml, where it
+  # is SIFT's descriptor_dim -- a coincidence of that family, not a tuned
+  # value, and over-parameterized against a 96-D unit-sphere target whose
+  # measured effective rank is 65.
+  latent_dim: 96
+  generator_hidden_dims: [512, 1024, 1024]
+  critic_hidden_dims: [1024, 512, 256]
+  negative_slope: 0.2
+  generator_type: mlp
+
+training:
+  batch_size: 512
+  num_gen_steps: 30000
+  n_critic: 3
+  lr_g: 1.0e-4
+  lr_d: 1.0e-4
+  betas: [0.0, 0.9]
+  lambda_gp: 5.0
+  ema_decay: 0.999
+  distance_reg_alpha: 0.0
+  distance_reg_max_points: 256
+  spectrum_reg_alpha: 0.0
+  num_workers: 0
+  amp: false
+  log_every: 250
+  eval_every: 1000
+  save_every: 2000

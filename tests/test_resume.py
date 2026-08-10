@@ -19,8 +19,15 @@ def test_checkpoint_carries_the_ema_shadow_and_best_cov(tmp_path):
     ema = {name: p.detach().clone() for name, p in generator.named_parameters()}
 
     save_checkpoint(
-        generator, critic, optim_g, optim_d, tmp_path, step=500,
-        ema_params=ema, ema_step=500, best_cov=0.25,
+        generator,
+        critic,
+        optim_g,
+        optim_d,
+        tmp_path,
+        step=500,
+        ema_params=ema,
+        ema_step=500,
+        best_cov=0.25,
     )
 
     ckpt = torch.load(tmp_path / "checkpoint_step_500.pt", weights_only=False)
@@ -62,11 +69,21 @@ def _smoke_config(tmp_path, num_gen_steps, save_every):
             "negative_slope": 0.2,
         },
         "training": {
-            "batch_size": 16, "num_gen_steps": num_gen_steps, "n_critic": 1,
-            "lr_g": 1e-4, "lr_d": 1e-4, "betas": [0.0, 0.9], "lambda_gp": 5.0,
-            "ema_decay": 0.9, "num_workers": 0, "distance_reg_alpha": 0.0,
-            "distance_reg_max_points": 16, "amp": False,
-            "log_every": 100, "eval_every": 100, "save_every": save_every,
+            "batch_size": 16,
+            "num_gen_steps": num_gen_steps,
+            "n_critic": 1,
+            "lr_g": 1e-4,
+            "lr_d": 1e-4,
+            "betas": [0.0, 0.9],
+            "lambda_gp": 5.0,
+            "ema_decay": 0.9,
+            "num_workers": 0,
+            "distance_reg_alpha": 0.0,
+            "distance_reg_max_points": 16,
+            "amp": False,
+            "log_every": 100,
+            "eval_every": 100,
+            "save_every": save_every,
         },
     }
 
@@ -101,8 +118,10 @@ def test_resuming_past_the_step_budget_is_rejected(tmp_path):
     # Asking to resume into a budget already exhausted is a config mistake,
     # not a no-op: silently doing nothing would look like a successful run.
     with pytest.raises(ValueError, match="already at or past"):
-        train(_smoke_config(tmp_path, num_gen_steps=4, save_every=2),
-              resume=str(ckpt_path))
+        train(
+            _smoke_config(tmp_path, num_gen_steps=4, save_every=2),
+            resume=str(ckpt_path),
+        )
 
 
 def test_resuming_does_not_redo_steps(tmp_path):
@@ -213,8 +232,14 @@ def test_resume_refuses_a_checkpoint_without_an_ema_shadow(tmp_path):
     generator, critic, optim_g, optim_d = _tiny_setup()
     out_dir = tmp_path / "run"
     save_checkpoint(
-        generator, critic, optim_g, optim_d, out_dir, step=2,
-        ema_params={}, ema_step=0,
+        generator,
+        critic,
+        optim_g,
+        optim_d,
+        out_dir,
+        step=2,
+        ema_params={},
+        ema_step=0,
     )
     cfg = _smoke_config(tmp_path, num_gen_steps=4, save_every=2)
     with pytest.raises(ValueError, match="no EMA shadow"):
@@ -226,8 +251,15 @@ def test_resume_refuses_a_checkpoint_holding_ema_generator_weights(tmp_path):
     out_dir = tmp_path / "run"
     ema = {name: p.detach().clone() for name, p in generator.named_parameters()}
     save_checkpoint(
-        generator, critic, optim_g, optim_d, out_dir, step=2,
-        generator_weights="ema", ema_params=ema, ema_step=2,
+        generator,
+        critic,
+        optim_g,
+        optim_d,
+        out_dir,
+        step=2,
+        generator_weights="ema",
+        ema_params=ema,
+        ema_step=2,
     )
     cfg = _smoke_config(tmp_path, num_gen_steps=4, save_every=2)
     with pytest.raises(ValueError, match="'live'"):

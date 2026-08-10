@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 import torch
 from torch import Tensor
 
@@ -11,7 +9,7 @@ def batch_log_ratio_profile(
     k: int,
     max_points: int = 0,
     eps: float = 1.0e-12,
-) -> Optional[Tensor]:
+) -> Tensor | None:
     """Mean ``log(r_i / r_k)`` over a batch's within-batch neighbours.
 
     Returns one entry per ``i = 1 .. k-1``, or ``None`` when the batch is too
@@ -86,7 +84,7 @@ class LogRatioTarget:
         if not 0.0 <= decay < 1.0:
             raise ValueError(f"decay must be in [0, 1), got {decay}")
         self.decay = float(decay)
-        self.value: Optional[Tensor] = None
+        self.value: Tensor | None = None
 
     def update(self, profile: Tensor) -> Tensor:
         observed = profile.detach()

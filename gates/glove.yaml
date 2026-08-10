@@ -1,0 +1,73 @@
+# Gate bands for the glove family -- the machine-readable form of the
+# `## Gate` section in docs/datasets/glove.md. Checked by:
+#
+#     python -m src.eval.check_gate --dataset glove --run-dir <run_dir>
+#
+# Pass bands are per statistic, not a combined score, because the four fail in
+# different directions: a set can be too easy on contrast while being too
+# clustered on Gini, and one number would hide that.
+#
+# EVERY BAND BELOW IS UNSET (null). Bands are set once this family has a
+# trained ladder to show what is achievable; inventing numbers before that
+# would gate against a guess. While they are null, `check_gate` reports each
+# statistic as "unset" and exits non-zero with verdict "unset" -- an
+# unenforceable gate must not be mistaken for a passing one. Pass
+# `--allow-unset` to run the checker for its report alone.
+#
+# To set a band, replace min and/or max with numbers. A band with one bound is
+# legal and counts as set: several of these statistics only fail in one
+# direction. Bounds are inclusive.
+
+dataset: glove
+
+# Locked measurement conditions. A statistic measured under different
+# conditions is not comparable with one measured under these -- LID, contrast
+# and hubness all drift with sample count and with k -- so `check_gate`
+# compares these against the post-clamp actuals recorded in summary.json
+# (`ann_measured_rows`, `ann_measured_k`, `ann_measured_nlist`) and fails on a
+# mismatch. These match the eda_report defaults and docs/datasets/glove.md.
+#
+# k_hub is recorded for completeness only: eda_report does not write a
+# post-clamp actual for the hubness depth, so there is nothing to check it
+# against.
+canonical:
+  n: 20000
+  k: 100
+  k_hub: 10
+  nlist: 256
+
+# Named exactly as `src/eval/ann_difficulty.py::summary()` returns them, which
+# is how they reach `stats` in summary.json.
+statistics:
+  # Local intrinsic dimensionality, median over surviving queries. Too low
+  # means the synthetic set is easier to search than the real one.
+  lid_median:
+    min: null
+    max: null
+
+  # Median (mean distance / nearest distance). Collapses toward 1.0 when
+  # neighbours stop being distinguishable from the bulk.
+  relative_contrast_median:
+    min: null
+    max: null
+
+  # Skew of the k-occurrence distribution. High skew means a few hub vectors
+  # dominate neighbour lists, which is a real property of glove and not
+  # something a generator gets for free.
+  #
+  # Careful with this one. Eight 20000-row draws of the *real* corpus scored
+  # 3.46 to 8.33 -- a spread of 108% of the mean, against 0.5% for lid_median
+  # -- because the skew is a third moment set by a handful of tail hubs. A
+  # band wide enough not to reject real data against itself would pass nearly
+  # any generator, so it would be measuring the draw rather than the model.
+  # See the "Hubness skew is below the noise floor at this N" section of
+  # docs/datasets/glove.md, and docs/datasets/glove_noise_floor.json.
+  hubness_skew:
+    min: null
+    max: null
+
+  # Gini of IVF cell occupancy at nlist above. 0.0 is a perfectly even
+  # partition; a lopsided one drives how many cells a query must probe.
+  ivf_gini:
+    min: null
+    max: null

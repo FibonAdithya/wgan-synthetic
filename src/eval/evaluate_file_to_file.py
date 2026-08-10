@@ -6,7 +6,8 @@ from pathlib import Path
 
 import numpy as np
 
-from src.data.sift1m_dataset import load_descriptors, train_holdout_split
+from src.data.dataset import load_descriptors, train_holdout_split
+from src.eval.eda import series as eda_series
 from src.eval.evaluate_distribution import (
     ann_proxy_recall,
     covariance_fro,
@@ -23,7 +24,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--real-path", type=str, required=True)
     parser.add_argument("--synthetic-path", type=str, required=True)
-    parser.add_argument("--real-format", type=str, default="auto", choices=["auto", "npy", "fvecs"])
+    parser.add_argument(
+        "--real-format", type=str, default="auto", choices=["auto", "npy", "fvecs"]
+    )
     parser.add_argument(
         "--synthetic-format", type=str, default="auto", choices=["auto", "npy", "fvecs"]
     )
@@ -38,11 +41,6 @@ def parse_args() -> argparse.Namespace:
         help="Disable per-vector L2 normalization before evaluation.",
     )
     return parser.parse_args()
-
-
-def l2_normalize(x: np.ndarray, eps: float = 1.0e-8) -> np.ndarray:
-    norm = np.linalg.norm(x, axis=1, keepdims=True)
-    return x / np.clip(norm, eps, None)
 
 
 def random_sample(x: np.ndarray, n: int, rng: np.random.Generator) -> np.ndarray:
@@ -70,9 +68,9 @@ def main() -> None:
             f"Dimension mismatch: real dim={real.shape[1]} vs synthetic dim={synthetic.shape[1]}"
         )
 
-    if not args.skip_l2_normalize:
-        real = l2_normalize(real)
-        synthetic = l2_normalize(synthetic)
+    mode = "none" if args.skip_l2_normalize else "l2"
+    real = eda_series.maybe_l2_normalize(real, mode)
+    synthetic = eda_series.maybe_l2_normalize(synthetic, mode)
 
     real_train, real_holdout = train_holdout_split(
         real, holdout_fraction=args.holdout_fraction, seed=args.seed
@@ -87,7 +85,9 @@ def main() -> None:
     metrics["mmd_rbf"] = mmd_rbf(real_eval, fake_eval, gamma=float(args.gamma))
     metrics["pairwise_hist_l1"] = pairwise_hist_l1(real_eval, fake_eval)
     metrics["knn_recall"] = knn_recall(real_train, real_eval, fake_eval, k=10)
-    metrics["ann_proxy_recall"] = ann_proxy_recall(real_train, fake_eval, real_eval, k=10)
+    metrics["ann_proxy_recall"] = ann_proxy_recall(
+        real_train, fake_eval, real_eval, k=10
+    )
     metrics["num_samples_used"] = int(n)
 
     with (out_dir / "metrics.json").open("w", encoding="utf-8") as f:

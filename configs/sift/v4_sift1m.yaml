@@ -1,0 +1,86 @@
+# v4 on sift_1m -- the paired arm to configs/sift/v3_sift1m.yaml. Identical
+# to configs/sift/v4.yaml in every model and training hyperparameter.
+# Exactly two things differ, listed here so a reader can confirm nothing else
+# moved:
+#
+#   1. real_path   data/sift_base.npy -> /workspace/data-cache/sift_1m.npy
+#   2. output_dir  runs/sift_gan_v4   -> runs/sift/v4_sift1m
+#
+# The reasoning for both -- why an instrument rather than an edit to the rung,
+# why the path is absolute, and what is known and not known about substituting
+# sift_1m for the missing sift_base -- is written out in the v3 companion file
+# and is not repeated here. Read that one first.
+#
+# Against its v3 companion this config is exactly one change, lid_reg_alpha off
+# the floor, plus the two keys that change parameterises. Both arms train on the
+# same corpus from the same commit, so a difference between them is attributable
+# to the regularizer.
+#
+# HOW TO READ THE RESULT. v4 trains on LID's sufficient statistic, so its
+# lid_median is a fitted number, not evidence -- this is the config's own
+# warning and it still holds. The independent statistics are hubness_skew,
+# ivf_gini and relative_contrast.
+#
+# What the v4 config could not know, because it predates the measurement: the
+# seed-to-seed noise floor recorded in docs/datasets/sift.md on 2026-08-06 puts
+# relative contrast at 0.4x and IVF Gini at 0.6x their own spread -- reseeding
+# moves each further than the generator's entire deviation from real SIFT --
+# and calls hubness skew, at 1.5x, marginal. So all three of the statistics this
+# arm was designed to be judged on sit between unusable and marginal, and the
+# one comfortably readable statistic is the one v4 fits directly.
+#
+# That is not a reason to skip the run, but it is the reason not to read a small
+# move in any single column as a result. Hubness skew is the only independent
+# statistic with any headroom, and it needs a move well clear of 0.062 before it
+# means anything.
+seed: 42
+device: cuda:0
+output_dir: runs/sift/v4_sift1m
+
+data:
+  real_path: /workspace/data-cache/sift_1m.npy
+  format: npy
+  descriptor_dim: 128
+  holdout_fraction: 0.05
+  synthetic_if_missing: false
+  synthetic_num_vectors: 100000
+  preprocess:
+    center: false
+    whiten: false
+    l2_normalize: true
+
+model:
+  latent_dim: 128
+  generator_hidden_dims: [512, 1024, 1024]
+  critic_hidden_dims: [1024, 512, 256]
+  negative_slope: 0.2
+  generator_type: structured_gated
+  gate_temperature: 0.5
+  logit_clamp: 4.0
+  layout: [4, 4, 8]
+  gate_kernel: 3
+  noise_kernel_sigma: 0.65
+
+training:
+  batch_size: 512
+  num_gen_steps: 30000
+  n_critic: 3
+  lr_g: 1.0e-4
+  lr_d: 1.0e-4
+  betas: [0.0, 0.9]
+  lambda_gp: 5.0
+  ema_decay: 0.999
+  distance_reg_alpha: 0.1
+  distance_reg_max_points: 256
+  # Scale argued in configs/sift/v4.yaml against a measured probe
+  # (tools/probes/lid_reg_scale_probe.py): real-vs-real floor 0.126 +/- 0.080,
+  # untrained v3 0.994 +/- 0.018. 0.015 contributes ~2.5% of |adv_loss| at
+  # initialisation and ~1.2% at the floor. Unchanged here.
+  lid_reg_alpha: 0.015
+  lid_reg_k: 20
+  lid_reg_max_points: 256
+  num_workers: 0
+  amp: false
+  log_every: 250
+  eval_every: 1000
+  save_every: 2000

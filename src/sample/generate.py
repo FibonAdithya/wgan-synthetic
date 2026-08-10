@@ -1,3 +1,15 @@
+"""Draw vectors from one trained generator checkpoint.
+
+Emits samples in whatever space the run was trained in. That is the same
+space as the real corpus for any config preprocessing with L2 normalization
+alone -- every SIFT variant and the first two DEEP rungs -- but NOT for a
+config setting `preprocess.whiten` or `preprocess.center`. For those, use
+`python -m src.eval.compare_variants --dataset <family>`, which reads the
+fitted transform out of the run's `run_metadata.json` and inverts it. This
+script has no access to that transform and would emit vectors in whitened
+coordinates without saying so.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -13,7 +25,9 @@ from src.models.generator import build_generator
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Generate synthetic descriptors from trained generator.")
+    parser = argparse.ArgumentParser(
+        description="Generate synthetic descriptors from trained generator."
+    )
     parser.add_argument("--checkpoint", type=str, required=True)
     parser.add_argument("--config", type=str, required=True)
     parser.add_argument("--num-samples", type=int, required=True)
@@ -52,7 +66,9 @@ def main() -> None:
             cur = min(args.batch_size, args.num_samples - generated)
             z = torch.randn(cur, int(model_cfg["latent_dim"]), device=device)
             x = generator(z)
-            x = x / torch.clamp(torch.linalg.vector_norm(x, dim=1, keepdim=True), min=1.0e-8)
+            x = x / torch.clamp(
+                torch.linalg.vector_norm(x, dim=1, keepdim=True), min=1.0e-8
+            )
             x = x.cpu().numpy().astype(np.float32, copy=False)
             out.append(x)
             generated += cur

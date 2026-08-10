@@ -5,17 +5,18 @@ import contextlib
 import json
 import math
 import random
+from collections.abc import Iterator
+from functools import partial
 from pathlib import Path
-from typing import Dict, Iterator, Optional, Tuple
 
 import numpy as np
 import torch
 import yaml
 from torch import Tensor, nn
 from torch.amp import GradScaler, autocast
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset, RandomSampler
 
-from src.data.sift1m_dataset import (
+from src.data.dataset import (
     NumpyTensorDataset,
     PreprocessConfig,
     build_training_data,
@@ -25,9 +26,10 @@ from src.models.critic import Critic
 from src.models.generator import build_generator
 from src.train.gpu_lock import claim_gpu, gpu_lock_key
 from src.train.log_ratio import LogRatioTarget, log_ratio_penalty
+from src.train.spectrum import spectrum_distance
 
 
-def gpu_preflight(device: torch.device) -> Dict[str, object]:
+def gpu_preflight(device: torch.device) -> dict[str, object]:
     """Snapshot of the card at launch, for `run_metadata.json`.
 
     Costs nothing and turns "the run died at step 60k" into an answerable
@@ -39,7 +41,7 @@ def gpu_preflight(device: torch.device) -> Dict[str, object]:
     `memory_total_bytes` at launch already says someone else is resident,
     which is the only part that changes a decision.
     """
-    meta: Dict[str, object] = {"device": str(device)}
+    meta: dict[str, object] = {"device": str(device)}
     if device.type != "cuda":
         return meta
     props = torch.cuda.get_device_properties(device)
@@ -62,7 +64,63 @@ def set_seed(seed: int) -> None:
     torch.cuda.manual_seed_all(seed)
 
 
-def gradient_penalty(critic: Critic, real: Tensor, fake: Tensor, device: torch.device) -> Tensor:
+def seed_dataloader_worker(worker_id: int, base_seed: int) -> None:
+    """Reseed the RNGs inside a DataLoader worker process.
+
+    Workers are forked *after* `set_seed` ran in the parent, so without this
+    every worker starts from an identical `random`/numpy state -- any sampling
+    done inside the dataset would be duplicated across them. Deriving the
+    worker state from the run seed plus the worker id (rather than from process
+    or wall-clock entropy) keeps it a pure function of the config.
+    """
+    worker_seed = (base_seed + worker_id) % 2**32
+    random.seed(worker_seed)
+    np.random.seed(worker_seed)
+    torch.manual_seed(worker_seed)
+
+
+def build_dataloader(
+    dataset: Dataset,
+    *,
+    batch_size: int,
+    num_workers: int,
+    seed: int,
+    pin_memory: bool = False,
+) -> DataLoader:
+    """Build the shuffling training loader with a reproducible batch order.
+
+    The sampler is constructed by hand, with a generator of its own, rather than
+    passing `shuffle=True` plus `generator=`. Both give the permutation a seeded
+    source, but DataLoader's own `generator` is *also* what the multiprocessing
+    iterator draws its worker base seed from -- and with `persistent_workers` it
+    draws that once, while the single-process iterator redraws it on every
+    epoch. Sharing one generator therefore desynchronises the two after the
+    first epoch. A generator dedicated to the sampler is consumed only by the
+    per-epoch permutation, so the batch order depends on `seed` alone and not on
+    how many workers the machine happens to be configured for.
+    """
+    sampler_generator = torch.Generator()
+    sampler_generator.manual_seed(seed)
+    loader_generator = torch.Generator()
+    loader_generator.manual_seed(seed)
+    return DataLoader(
+        dataset,
+        batch_size=batch_size,
+        sampler=RandomSampler(dataset, generator=sampler_generator),
+        drop_last=True,
+        num_workers=num_workers,
+        # Keep workers alive across epochs: the loop re-creates the iterator on
+        # StopIteration, which would otherwise respawn the pool every epoch.
+        persistent_workers=num_workers > 0,
+        pin_memory=pin_memory,
+        generator=loader_generator,
+        worker_init_fn=partial(seed_dataloader_worker, base_seed=seed),
+    )
+
+
+def gradient_penalty(
+    critic: Critic, real: Tensor, fake: Tensor, device: torch.device
+) -> Tensor:
     batch_size = real.shape[0]
     alpha = torch.rand(batch_size, 1, device=device)
     alpha = alpha.expand_as(real)
@@ -84,7 +142,7 @@ def gradient_penalty(critic: Critic, real: Tensor, fake: Tensor, device: torch.d
     return ((norms - 1.0) ** 2).mean()
 
 
-def tensor_stats(real: np.ndarray, fake: np.ndarray) -> Dict[str, float]:
+def tensor_stats(real: np.ndarray, fake: np.ndarray) -> dict[str, float]:
     # zero_fraction_gap, negative_fraction, per_dim_zero_rate_l1, and
     # nnz_std_gap exist because raw SIFT descriptors carry heavy mass at
     # exactly zero, which a dense MLP generator cannot reproduce and the
@@ -125,10 +183,12 @@ def batch_pairwise_distance_mean(x: Tensor, max_points: int = 128) -> Tensor:
         idx = torch.randperm(n, device=x.device)[:max_points]
         x = x[idx]
     pd = torch.pdist(x, p=2)
-    return pd.mean() if pd.numel() > 0 else torch.zeros((), device=x.device, dtype=x.dtype)
+    return (
+        pd.mean() if pd.numel() > 0 else torch.zeros((), device=x.device, dtype=x.dtype)
+    )
 
 
-def collapse_stats(fake: np.ndarray, max_points: int = 512) -> Dict[str, float]:
+def collapse_stats(fake: np.ndarray, max_points: int = 512) -> dict[str, float]:
     """Lightweight mode-collapse monitor.
 
     A healthy generator spreads samples across the descriptor space; a
@@ -164,7 +224,7 @@ def collapse_stats(fake: np.ndarray, max_points: int = 512) -> Dict[str, float]:
 EMA_BIAS_CORRECTION_EPS = 1.0e-8
 
 
-def init_ema_params(model: torch.nn.Module) -> Dict[str, Tensor]:
+def init_ema_params(model: torch.nn.Module) -> dict[str, Tensor]:
     """Zero-initialised EMA accumulator for the trainable params of `model`.
 
     Zero (rather than "a copy of the initial weights") is what makes the
@@ -180,7 +240,9 @@ def init_ema_params(model: torch.nn.Module) -> Dict[str, Tensor]:
     }
 
 
-def ema_update(ema_params: Dict[str, Tensor], model: torch.nn.Module, decay: float) -> None:
+def ema_update(
+    ema_params: dict[str, Tensor], model: torch.nn.Module, decay: float
+) -> None:
     """In-place exponential moving average of model parameters.
 
     The accumulator is left *uncorrected*; bias correction is applied only
@@ -207,7 +269,7 @@ def ema_bias_correction(decay: float, ema_step: int) -> float:
 
 
 def load_ema_into_model(
-    ema_params: Dict[str, Tensor],
+    ema_params: dict[str, Tensor],
     model: torch.nn.Module,
     decay: float = 0.0,
     ema_step: int = 0,
@@ -230,7 +292,7 @@ def load_ema_into_model(
 @contextlib.contextmanager
 def ema_weights(
     model: torch.nn.Module,
-    ema_params: Dict[str, Tensor],
+    ema_params: dict[str, Tensor],
     decay: float = 0.0,
     ema_step: int = 0,
 ) -> Iterator[None]:
@@ -264,7 +326,7 @@ def save_checkpoint(
     step: int,
     best: bool = False,
     generator_weights: str = "live",
-    ema_params: Optional[Dict[str, Tensor]] = None,
+    ema_params: dict[str, Tensor] | None = None,
     ema_step: int = 0,
     best_cov: float = float("inf"),
 ) -> None:
@@ -282,7 +344,9 @@ def save_checkpoint(
     weights the damage only shows up in the final artifact.
     """
     if generator_weights not in ("live", "ema"):
-        raise ValueError(f"generator_weights must be 'live' or 'ema', got {generator_weights!r}")
+        raise ValueError(
+            f"generator_weights must be 'live' or 'ema', got {generator_weights!r}"
+        )
     ckpt = {
         "step": step,
         "generator_weights": generator_weights,
@@ -328,7 +392,7 @@ def sample_generator(
     return np.concatenate(out, axis=0)[:num_samples]
 
 
-def train(config: Dict, resume: Optional[str] = None) -> Tuple[Path, Dict]:
+def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
     seed = int(config["seed"])
     set_seed(seed)
     device = resolve_device(config["device"], strict=True)
@@ -347,7 +411,9 @@ def train(config: Dict, resume: Optional[str] = None) -> Tuple[Path, Dict]:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     data_cfg = config["data"]
-    preprocess_cfg = PreprocessConfig(**data_cfg["preprocess"])
+    preprocess_cfg = PreprocessConfig(
+        **data_cfg["preprocess"], metric=data_cfg.get("metric", "l2")
+    )
     x_train, x_holdout, preprocess_state = build_training_data(
         descriptor_path=data_cfg["real_path"],
         file_format=data_cfg["format"],
@@ -379,15 +445,11 @@ def train(config: Dict, resume: Optional[str] = None) -> Tuple[Path, Dict]:
 
     dataset = NumpyTensorDataset(x_train)
     num_workers = int(train_cfg.get("num_workers", 0))
-    loader = DataLoader(
+    loader = build_dataloader(
         dataset,
         batch_size=int(train_cfg["batch_size"]),
-        shuffle=True,
-        drop_last=True,
         num_workers=num_workers,
-        # Keep workers alive across epochs: the loop re-creates the iterator on
-        # StopIteration, which would otherwise respawn the pool every epoch.
-        persistent_workers=num_workers > 0,
+        seed=seed,
         pin_memory=(device.type == "cuda"),
     )
     data_iter = iter(loader)
@@ -400,7 +462,7 @@ def train(config: Dict, resume: Optional[str] = None) -> Tuple[Path, Dict]:
     # would silently come from an all-zero generator. Reject it up front.
     if use_ema and ema_decay >= 1.0:
         raise ValueError(f"ema_decay must be < 1.0 to accumulate, got {ema_decay}")
-    ema_params: Dict[str, Tensor] = init_ema_params(generator) if use_ema else {}
+    ema_params: dict[str, Tensor] = init_ema_params(generator) if use_ema else {}
     ema_step = 0
 
     amp = bool(train_cfg["amp"] and device.type == "cuda")
@@ -419,6 +481,7 @@ def train(config: Dict, resume: Optional[str] = None) -> Tuple[Path, Dict]:
     lid_reg_k = int(train_cfg.get("lid_reg_k", 20))
     lid_reg_max_points = int(train_cfg.get("lid_reg_max_points", 256))
     lid_reg_target = LogRatioTarget()
+    spectrum_reg_alpha = float(train_cfg.get("spectrum_reg_alpha", 0.0))
 
     run_meta = {
         "seed": seed,
@@ -529,12 +592,18 @@ def train(config: Dict, resume: Optional[str] = None) -> Tuple[Path, Dict]:
             z = torch.randn(batch_size, latent_dim, device=device)
             fake = normalize_l2(generator(z))
             adv_loss = -critic(fake).mean()
-            # A single transfer shared by both regularizers below -- but only
-            # when at least one is enabled, so the alpha-zero path still does
-            # not touch real_batch at all.
+            g_loss = adv_loss
+            # Transferred once and shared: the regularizers all want the same
+            # batch, and doing it per-branch pays for a host-to-device copy per
+            # enabled term on every generator step. Gated on all three, so the
+            # all-alphas-zero path still does not touch real_batch at all.
             real_for_reg = (
                 real_batch.to(device)
-                if (distance_reg_alpha > 0.0 or lid_reg_alpha > 0.0)
+                if (
+                    distance_reg_alpha > 0.0
+                    or lid_reg_alpha > 0.0
+                    or spectrum_reg_alpha > 0.0
+                )
                 else None
             )
             if distance_reg_alpha > 0.0:
@@ -545,10 +614,9 @@ def train(config: Dict, resume: Optional[str] = None) -> Tuple[Path, Dict]:
                     fake, max_points=distance_reg_max_points
                 )
                 distance_reg = torch.abs(dist_real - dist_fake)
-                g_loss = adv_loss + distance_reg_alpha * distance_reg
+                g_loss = g_loss + distance_reg_alpha * distance_reg
             else:
                 distance_reg = torch.zeros((), device=device, dtype=fake.dtype)
-                g_loss = adv_loss
             if lid_reg_alpha > 0.0:
                 # Reduction-heavy pairwise-distance numerics: run this outside
                 # autocast rather than inheriting the enclosing fp16 region.
@@ -570,6 +638,14 @@ def train(config: Dict, resume: Optional[str] = None) -> Tuple[Path, Dict]:
                 g_loss = g_loss + lid_reg_alpha * lid_reg
             else:
                 lid_reg = torch.zeros((), device=device, dtype=fake.dtype)
+            if spectrum_reg_alpha > 0.0:
+                spectrum_reg = spectrum_distance(real_for_reg, fake)
+                g_loss = g_loss + spectrum_reg_alpha * spectrum_reg
+            else:
+                # float32, not fake.dtype: spectrum_distance returns float32
+                # even under autocast, so the disabled placeholder should not
+                # be the one value of this metric that is fp16.
+                spectrum_reg = torch.zeros((), device=device, dtype=torch.float32)
         scaler_g.scale(g_loss).backward()
         scaler_g.step(optim_g)
         scaler_g.update()
@@ -588,6 +664,7 @@ def train(config: Dict, resume: Optional[str] = None) -> Tuple[Path, Dict]:
                 "adv_loss": float(adv_loss.item()),
                 "distance_reg": float(distance_reg.item()),
                 "lid_reg": float(lid_reg.item()),
+                "spectrum_reg": float(spectrum_reg.item()),
             }
             run_meta["metrics"].append(msg)
             print(json.dumps(msg))
@@ -658,14 +735,18 @@ def train(config: Dict, resume: Optional[str] = None) -> Tuple[Path, Dict]:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Train WGAN-GP for SIFT1M-like descriptors.")
-    parser.add_argument("--config", type=str, required=True, help="Path to YAML config.")
+    parser = argparse.ArgumentParser(
+        description="Train WGAN-GP for SIFT1M-like descriptors."
+    )
+    parser.add_argument(
+        "--config", type=str, required=True, help="Path to YAML config."
+    )
     parser.add_argument(
         "--resume",
         type=str,
         default=None,
         help="Checkpoint to continue from. The config's num_gen_steps is the "
-             "target total, not an additional budget.",
+        "target total, not an additional budget.",
     )
     return parser.parse_args()
 

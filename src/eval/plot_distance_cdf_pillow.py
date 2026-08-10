@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Dict, Tuple
 
 import numpy as np
-from PIL import Image, ImageDraw
 import yaml
+from PIL import Image, ImageDraw
 
-from src.data.sift1m_dataset import load_descriptors
+from src.data.dataset import load_descriptors
+from src.eval.eda import series as eda_series
 
 
 def parse_args() -> argparse.Namespace:
@@ -16,7 +16,9 @@ def parse_args() -> argparse.Namespace:
         description="Plot distance CDF percentile curves (10/50/90) for SIFT vs generated data."
     )
     parser.add_argument("--real-path", type=str, required=True)
-    parser.add_argument("--real-format", type=str, default="auto", choices=["auto", "npy", "fvecs"])
+    parser.add_argument(
+        "--real-format", type=str, default="auto", choices=["auto", "npy", "fvecs"]
+    )
     parser.add_argument("--synthetic-path", type=str, required=True)
     parser.add_argument(
         "--config-path",
@@ -43,11 +45,6 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def l2_normalize(x: np.ndarray, eps: float = 1.0e-8) -> np.ndarray:
-    n = np.linalg.norm(x, axis=1, keepdims=True)
-    return x / np.clip(n, eps, None)
-
-
 def sampled_indices(n: int, k: int, rng: np.random.Generator) -> np.ndarray:
     if k >= n:
         return np.arange(n)
@@ -59,7 +56,7 @@ def query_cdf_quantiles(
     num_queries: int,
     num_targets: int,
     rng: np.random.Generator,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     q_idx = sampled_indices(x.shape[0], num_queries, rng)
     t_idx = sampled_indices(x.shape[0], num_targets, rng)
     queries = x[q_idx]
@@ -107,7 +104,12 @@ def data_to_pixels(
     return np.stack([px, py], axis=1)
 
 
-def draw_curve(draw: ImageDraw.ImageDraw, pts: np.ndarray, color: Tuple[int, int, int], width: int = 2) -> None:
+def draw_curve(
+    draw: ImageDraw.ImageDraw,
+    pts: np.ndarray,
+    color: tuple[int, int, int],
+    width: int = 2,
+) -> None:
     if len(pts) < 2:
         return
     draw.line([tuple(p.tolist()) for p in pts], fill=color, width=width)
@@ -135,11 +137,15 @@ def main() -> None:
 
     real = load_descriptors(Path(args.real_path), file_format=args.real_format)
     synthetic = np.load(args.synthetic_path).astype(np.float32, copy=False)
-    real = l2_normalize(real.astype(np.float32, copy=False))
-    synthetic = l2_normalize(synthetic)
+    real = eda_series.maybe_l2_normalize(real.astype(np.float32, copy=False), "l2")
+    synthetic = eda_series.maybe_l2_normalize(synthetic, "l2")
 
-    y_r, r10, r50, r90 = query_cdf_quantiles(real, args.num_queries, args.num_targets, rng)
-    y_s, s10, s50, s90 = query_cdf_quantiles(synthetic, args.num_queries, args.num_targets, rng)
+    y_r, r10, r50, r90 = query_cdf_quantiles(
+        real, args.num_queries, args.num_targets, rng
+    )
+    y_s, s10, s50, s90 = query_cdf_quantiles(
+        synthetic, args.num_queries, args.num_targets, rng
+    )
 
     x_min = float(min(r10.min(), r50.min(), r90.min(), s10.min(), s50.min(), s90.min()))
     x_max = float(max(r10.max(), r50.max(), r90.max(), s10.max(), s50.max(), s90.max()))
@@ -161,7 +167,7 @@ def main() -> None:
         x = int(ml + t * (width - ml - mr))
         draw.line([(x, mt), (x, height - mb)], fill=(235, 235, 235), width=1)
 
-    colors: Dict[str, Tuple[int, int, int]] = {
+    colors: dict[str, tuple[int, int, int]] = {
         "r10": (31, 119, 180),
         "r50": (31, 119, 180),
         "r90": (31, 119, 180),
@@ -208,7 +214,11 @@ def main() -> None:
     )
 
     # Labels and simple legend
-    draw.text((width // 2 - 110, 18), "Distance CDF from Random Query to Dataset", fill=(0, 0, 0))
+    draw.text(
+        (width // 2 - 110, 18),
+        "Distance CDF from Random Query to Dataset",
+        fill=(0, 0, 0),
+    )
     subtitle_parts = []
     model_label = generator_model_label_from_config(args.config_path)
     if model_label:
@@ -227,7 +237,9 @@ def main() -> None:
     legend_y = mt + 10
     draw.rectangle([(ml + 20, legend_y), (ml + 40, legend_y + 20)], fill=(31, 119, 180))
     draw.text((ml + 48, legend_y + 2), "SIFT q10/q50/q90", fill=(0, 0, 0))
-    draw.rectangle([(ml + 220, legend_y), (ml + 240, legend_y + 20)], fill=(214, 39, 40))
+    draw.rectangle(
+        [(ml + 220, legend_y), (ml + 240, legend_y + 20)], fill=(214, 39, 40)
+    )
     draw.text((ml + 248, legend_y + 2), "Generated q10/q50/q90", fill=(0, 0, 0))
 
     out = Path(args.output_path)

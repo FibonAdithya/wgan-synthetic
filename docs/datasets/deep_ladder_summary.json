@@ -1,0 +1,320 @@
+{
+  "real_path": "data/deep_1m.npy",
+  "synthetic_paths": [
+    "v0=runs/eda_deep/samples/v0.npy",
+    "v1=runs/eda_deep/samples/v1.npy",
+    "v2=runs/eda_deep/samples/v2.npy"
+  ],
+  "preprocess": "l2",
+  "seed": 42,
+  "ann_settings": {
+    "k": 100,
+    "k_hub": 10,
+    "max_rows": 20000,
+    "nlist": 256
+  },
+  "stats": [
+    {
+      "name": "real",
+      "num_vectors": 50000,
+      "dim": 96,
+      "value_mean": -0.0019279925618320704,
+      "value_std": 0.10204386711120605,
+      "value_min": -0.5248451232910156,
+      "value_max": 0.5033246278762817,
+      "exact_zero_fraction": 0.0,
+      "negative_fraction": 0.508081875,
+      "norm_mean": 1.0,
+      "norm_std": 2.194228265750553e-08,
+      "duplicate_row_fraction": 4.0000000000040004e-05,
+      "median_pairwise_distance": 1.3817121982574463,
+      "median_5nn_distance": 0.8164510428905487,
+      "effective_rank": 65.29979705810547,
+      "lid_median": 17.561217517448775,
+      "relative_contrast_median": 1.832255907114832,
+      "hubness_skew": 1.940139334633094,
+      "ivf_gini": 0.30457578125000007,
+      "lid_discarded_queries": 0.0,
+      "ann_measured_rows": 20000,
+      "ann_measured_k": 100,
+      "ann_measured_nlist": 256
+    },
+    {
+      "name": "v0",
+      "num_vectors": 50000,
+      "dim": 96,
+      "value_mean": -0.0020424979738891125,
+      "value_std": 0.10204163193702698,
+      "value_min": -0.5101938843727112,
+      "value_max": 0.49475666880607605,
+      "exact_zero_fraction": 0.0,
+      "negative_fraction": 0.508625,
+      "norm_mean": 1.0,
+      "norm_std": 2.1979490227863607e-08,
+      "duplicate_row_fraction": 0.0,
+      "median_pairwise_distance": 1.3808132410049438,
+      "median_5nn_distance": 0.7965518534183502,
+      "effective_rank": 63.342811584472656,
+      "lid_median": 16.72490986344011,
+      "relative_contrast_median": 1.880937493341726,
+      "hubness_skew": 1.8949166690478196,
+      "ivf_gini": 0.30292304687499993,
+      "lid_discarded_queries": 0.0,
+      "ann_measured_rows": 20000,
+      "ann_measured_k": 100,
+      "ann_measured_nlist": 256
+    },
+    {
+      "name": "v1",
+      "num_vectors": 50000,
+      "dim": 96,
+      "value_mean": -0.0020042064134031534,
+      "value_std": 0.10204239189624786,
+      "value_min": -0.5072731375694275,
+      "value_max": 0.529404878616333,
+      "exact_zero_fraction": 0.0,
+      "negative_fraction": 0.5083485416666667,
+      "norm_mean": 1.0,
+      "norm_std": 2.2215827399918453e-08,
+      "duplicate_row_fraction": 0.0,
+      "median_pairwise_distance": 1.381058692932129,
+      "median_5nn_distance": 0.7991619408130646,
+      "effective_rank": 63.36238479614258,
+      "lid_median": 16.812982655441694,
+      "relative_contrast_median": 1.8702855264864273,
+      "hubness_skew": 1.939737152519379,
+      "ivf_gini": 0.2966015625,
+      "lid_discarded_queries": 0.0,
+      "ann_measured_rows": 20000,
+      "ann_measured_k": 100,
+      "ann_measured_nlist": 256
+    },
+    {
+      "name": "v2",
+      "num_vectors": 50000,
+      "dim": 96,
+      "value_mean": -0.0020002557430416346,
+      "value_std": 0.10204247385263443,
+      "value_min": -0.49054014682769775,
+      "value_max": 0.48893314599990845,
+      "exact_zero_fraction": 0.0,
+      "negative_fraction": 0.508564375,
+      "norm_mean": 1.0,
+      "norm_std": 3.662073666532706e-08,
+      "duplicate_row_fraction": 0.0,
+      "median_pairwise_distance": 1.3813555240631104,
+      "median_5nn_distance": 0.8015694618225098,
+      "effective_rank": 64.22249603271484,
+      "lid_median": 16.93570795767198,
+      "relative_contrast_median": 1.8647158370131591,
+      "hubness_skew": 1.981680213494866,
+      "ivf_gini": 0.31105273437500003,
+      "lid_discarded_queries": 0.0,
+      "ann_measured_rows": 20000,
+      "ann_measured_k": 100,
+      "ann_measured_nlist": 256
+    }
+  ],
+  "worst_dimensions": {
+    "v0": [
+      {
+        "dim": 45,
+        "wasserstein1": 0.0014243616532668669
+      },
+      {
+        "dim": 69,
+        "wasserstein1": 0.002451097606011925
+      },
+      {
+        "dim": 28,
+        "wasserstein1": 0.0014630708896342809
+      },
+      {
+        "dim": 2,
+        "wasserstein1": 0.002359522853534625
+      },
+      {
+        "dim": 47,
+        "wasserstein1": 0.0021341531922007533
+      },
+      {
+        "dim": 42,
+        "wasserstein1": 0.0013127293778604234
+      },
+      {
+        "dim": 71,
+        "wasserstein1": 0.0014428415224779282
+      },
+      {
+        "dim": 48,
+        "wasserstein1": 0.0007983879523093582
+      },
+      {
+        "dim": 13,
+        "wasserstein1": 0.0017602190604360905
+      },
+      {
+        "dim": 90,
+        "wasserstein1": 0.001989409537463301
+      },
+      {
+        "dim": 21,
+        "wasserstein1": 0.0019648223513841234
+      },
+      {
+        "dim": 41,
+        "wasserstein1": 0.001963482270301101
+      },
+      {
+        "dim": 66,
+        "wasserstein1": 0.0008212295748792329
+      },
+      {
+        "dim": 29,
+        "wasserstein1": 0.0018932520104726867
+      },
+      {
+        "dim": 39,
+        "wasserstein1": 0.00118737835947736
+      },
+      {
+        "dim": 73,
+        "wasserstein1": 0.0018713204504764408
+      }
+    ],
+    "v1": [
+      {
+        "dim": 45,
+        "wasserstein1": 0.0012028097181903692
+      },
+      {
+        "dim": 69,
+        "wasserstein1": 0.001894291522838558
+      },
+      {
+        "dim": 28,
+        "wasserstein1": 0.0016001214994955369
+      },
+      {
+        "dim": 2,
+        "wasserstein1": 0.001673192217912461
+      },
+      {
+        "dim": 47,
+        "wasserstein1": 0.0013933946140219566
+      },
+      {
+        "dim": 42,
+        "wasserstein1": 0.0015236476149534202
+      },
+      {
+        "dim": 71,
+        "wasserstein1": 0.0020906903257619895
+      },
+      {
+        "dim": 48,
+        "wasserstein1": 0.002015253761044736
+      },
+      {
+        "dim": 13,
+        "wasserstein1": 0.0020011125024008195
+      },
+      {
+        "dim": 90,
+        "wasserstein1": 0.0011353477048057275
+      },
+      {
+        "dim": 21,
+        "wasserstein1": 0.0012922258510464958
+      },
+      {
+        "dim": 41,
+        "wasserstein1": 0.001528742028473705
+      },
+      {
+        "dim": 66,
+        "wasserstein1": 0.0019447328027311476
+      },
+      {
+        "dim": 29,
+        "wasserstein1": 0.0018509971131221382
+      },
+      {
+        "dim": 39,
+        "wasserstein1": 0.001888949767545473
+      },
+      {
+        "dim": 73,
+        "wasserstein1": 0.0008566400532753365
+      }
+    ],
+    "v2": [
+      {
+        "dim": 45,
+        "wasserstein1": 0.0025168292612524987
+      },
+      {
+        "dim": 69,
+        "wasserstein1": 0.0019188203936856601
+      },
+      {
+        "dim": 28,
+        "wasserstein1": 0.002386202115006083
+      },
+      {
+        "dim": 2,
+        "wasserstein1": 0.0011804904830560845
+      },
+      {
+        "dim": 47,
+        "wasserstein1": 0.001469942023915487
+      },
+      {
+        "dim": 42,
+        "wasserstein1": 0.0021133144238487285
+      },
+      {
+        "dim": 71,
+        "wasserstein1": 0.0010719780360805863
+      },
+      {
+        "dim": 48,
+        "wasserstein1": 0.0015210107301794915
+      },
+      {
+        "dim": 13,
+        "wasserstein1": 0.0013922032763868165
+      },
+      {
+        "dim": 90,
+        "wasserstein1": 0.0011534238016429987
+      },
+      {
+        "dim": 21,
+        "wasserstein1": 0.0013188816918539399
+      },
+      {
+        "dim": 41,
+        "wasserstein1": 0.001936635565714306
+      },
+      {
+        "dim": 66,
+        "wasserstein1": 0.0010655963336356285
+      },
+      {
+        "dim": 29,
+        "wasserstein1": 0.0010611824512090891
+      },
+      {
+        "dim": 39,
+        "wasserstein1": 0.0011105518534108214
+      },
+      {
+        "dim": 73,
+        "wasserstein1": 0.0012234206335379504
+      }
+    ]
+  },
+  "report_html": "runs/eda_deep/eda_report.html",
+  "png_files": []
+}

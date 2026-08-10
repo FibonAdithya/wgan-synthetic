@@ -1,6 +1,5 @@
 import os
 import time
-from pathlib import Path
 
 import pytest
 import torch
@@ -27,8 +26,9 @@ def test_second_concurrent_claim_fails_and_names_the_holder(tmp_path, monkeypatc
     run_a = tmp_path / "run_a"
     with _claim_key("fake-uuid", run_dir=run_a, timeout_s=0.0, poll_s=0.01):
         with pytest.raises(GpuBusyError) as excinfo:
-            with _claim_key("fake-uuid", run_dir=tmp_path / "run_b",
-                            timeout_s=0.0, poll_s=0.01):
+            with _claim_key(
+                "fake-uuid", run_dir=tmp_path / "run_b", timeout_s=0.0, poll_s=0.01
+            ):
                 pass
     # A refusal that does not say who is holding the card is useless to an
     # operator deciding whether to wait or kill.
@@ -49,8 +49,7 @@ def test_timeout_gives_up_rather_than_waiting_forever(tmp_path, monkeypatch):
     with _claim_key("fake-uuid", run_dir=tmp_path, timeout_s=0.0, poll_s=0.01):
         started = time.monotonic()
         with pytest.raises(GpuBusyError):
-            with _claim_key("fake-uuid", run_dir=tmp_path,
-                            timeout_s=0.3, poll_s=0.05):
+            with _claim_key("fake-uuid", run_dir=tmp_path, timeout_s=0.3, poll_s=0.05):
                 pass
         waited = time.monotonic() - started
     assert 0.25 <= waited < 3.0

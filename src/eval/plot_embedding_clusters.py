@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Tuple
 
 import numpy as np
 from PIL import Image, ImageDraw
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 
-from src.data.sift1m_dataset import load_descriptors
+from src.data.dataset import load_descriptors
+from src.eval.eda import series as eda_series
 
 
 def parse_args() -> argparse.Namespace:
@@ -17,7 +17,9 @@ def parse_args() -> argparse.Namespace:
         description="Create t-SNE/UMAP embedding visualizations for real and synthetic datasets."
     )
     parser.add_argument("--real-path", type=str, required=True)
-    parser.add_argument("--real-format", type=str, default="auto", choices=["auto", "npy", "fvecs"])
+    parser.add_argument(
+        "--real-format", type=str, default="auto", choices=["auto", "npy", "fvecs"]
+    )
     parser.add_argument("--synthetic-path", type=str, required=True)
     parser.add_argument(
         "--synthetic-format", type=str, default="auto", choices=["auto", "npy", "fvecs"]
@@ -30,12 +32,9 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def l2_normalize(x: np.ndarray, eps: float = 1.0e-8) -> np.ndarray:
-    norm = np.linalg.norm(x, axis=1, keepdims=True)
-    return x / np.clip(norm, eps, None)
-
-
-def sample_rows(x: np.ndarray, sample_size: int, rng: np.random.Generator) -> np.ndarray:
+def sample_rows(
+    x: np.ndarray, sample_size: int, rng: np.random.Generator
+) -> np.ndarray:
     if sample_size >= x.shape[0]:
         return x
     idx = rng.choice(x.shape[0], size=sample_size, replace=False)
@@ -60,7 +59,7 @@ def compute_embedding(
             init="pca",
             learning_rate="auto",
             random_state=seed,
-            n_iter=1000,
+            max_iter=1000,
             verbose=0,
         )
         return model.fit_transform(x).astype(np.float32, copy=False)
@@ -90,7 +89,7 @@ def draw_scatter(
     points: np.ndarray,
     title: str,
     output_path: Path,
-    color: Tuple[int, int, int],
+    color: tuple[int, int, int],
 ) -> None:
     width, height = 1200, 900
     margin = 70
@@ -104,7 +103,11 @@ def draw_scatter(
     x_span = max(x_max - x_min, 1.0e-8)
     y_span = max(y_max - y_min, 1.0e-8)
 
-    draw.rectangle([(margin, margin), (width - margin, height - margin)], outline=(0, 0, 0), width=2)
+    draw.rectangle(
+        [(margin, margin), (width - margin, height - margin)],
+        outline=(0, 0, 0),
+        width=2,
+    )
 
     for px, py in points:
         sx = margin + (float(px) - x_min) / x_span * (width - 2 * margin)
@@ -133,8 +136,8 @@ def main() -> None:
         Path(args.synthetic_path), file_format=args.synthetic_format
     ).astype(np.float32, copy=False)
 
-    real = l2_normalize(real)
-    synthetic = l2_normalize(synthetic)
+    real = eda_series.maybe_l2_normalize(real, "l2")
+    synthetic = eda_series.maybe_l2_normalize(synthetic, "l2")
 
     real_sample = sample_rows(real, args.sample_size, rng)
     synth_sample = sample_rows(synthetic, args.sample_size, rng)
@@ -149,7 +152,12 @@ def main() -> None:
     real_path = output_dir / f"{args.method}_sift_real.png"
     synth_path = output_dir / f"{args.method}_synthetic.png"
 
-    draw_scatter(real_emb, f"{args.method.upper()} - SIFT Real ({real_sample.shape[0]} samples)", real_path, (31, 119, 180))
+    draw_scatter(
+        real_emb,
+        f"{args.method.upper()} - SIFT Real ({real_sample.shape[0]} samples)",
+        real_path,
+        (31, 119, 180),
+    )
     draw_scatter(
         synth_emb,
         f"{args.method.upper()} - Synthetic ({synth_sample.shape[0]} samples)",

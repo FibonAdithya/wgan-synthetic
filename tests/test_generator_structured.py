@@ -1,6 +1,5 @@
 import pytest
 import torch
-import torch.nn.functional as F
 
 from src.models.generator import GatedGenerator, StructuredGateGenerator
 
@@ -160,10 +159,13 @@ def test_v2_gate_stays_near_the_binomial_baseline():
     assert observed < 1.5 * binomial
 
 
-@pytest.mark.parametrize("dtype, atol", [
-    pytest.param(torch.bfloat16, 3e-2, id="bfloat16"),
-    pytest.param(torch.float16, 5e-3, id="float16"),
-])
+@pytest.mark.parametrize(
+    "dtype, atol",
+    [
+        pytest.param(torch.bfloat16, 3e-2, id="bfloat16"),
+        pytest.param(torch.float16, 5e-3, id="float16"),
+    ],
+)
 def test_low_precision_forward_preserves_dtype(dtype, atol):
     torch.manual_seed(6)
     generator = build().to(dtype)

@@ -2,7 +2,11 @@ import numpy as np
 import torch
 
 from src.eval.ann_difficulty import knn, survivor_mask
-from src.train.log_ratio import LogRatioTarget, batch_log_ratio_profile, log_ratio_penalty
+from src.train.log_ratio import (
+    LogRatioTarget,
+    batch_log_ratio_profile,
+    log_ratio_penalty,
+)
 
 
 def _blob(n=128, d=8, seed=0):
@@ -32,9 +36,7 @@ def test_profile_matches_the_numpy_reference():
 
     dist, _, _ = knn(x.numpy().astype(np.float32), k=12)
     kept = dist[survivor_mask(dist)]
-    reference = np.log(
-        np.clip(kept[:, :-1] / kept[:, -1:], 1e-12, 1.0)
-    ).mean(axis=0)
+    reference = np.log(np.clip(kept[:, :-1] / kept[:, -1:], 1e-12, 1.0)).mean(axis=0)
 
     assert np.allclose(profile.numpy(), reference, atol=1e-4)
 

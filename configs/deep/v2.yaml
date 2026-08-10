@@ -1,0 +1,60 @@
+# DEEP v2 -- v1 plus PCA whitening of the training space. Where v1 pushes the
+# variance decay in with a penalty, v2 makes it exact by construction: the
+# generator learns an isotropic target and the anisotropy lives in a fixed
+# linear map, inverted at sample time. Sole delta from v1:
+# data.preprocess.whiten.
+#
+# This rung REQUIRES a sampler that inverts the transform. Draw its samples
+# with `python -m src.eval.compare_variants --dataset deep`, which does so via
+# invert_samples. src/sample/generate.py does not, and would emit vectors in
+# whitened space.
+#
+# center stays false: with a mean subtracted, inverting after L2 normalization
+# no longer recovers directions exactly, and compare_variants refuses the
+# combination rather than returning quietly-wrong vectors.
+seed: 42
+device: auto
+output_dir: runs/deep/v2
+
+data:
+  real_path: data/deep_1m.npy
+  format: npy
+  metric: angular
+  descriptor_dim: 96
+  holdout_fraction: 0.05
+  synthetic_if_missing: false
+  synthetic_num_vectors: 100000
+  preprocess:
+    center: false
+    whiten: true
+    l2_normalize: true
+
+model:
+  # Matches descriptor_dim, as every other family's config does. An earlier
+  # draft of this ladder carried 128 over from configs/sift/v1.yaml, where it
+  # is SIFT's descriptor_dim -- a coincidence of that family, not a tuned
+  # value, and over-parameterized against a 96-D unit-sphere target whose
+  # measured effective rank is 65.
+  latent_dim: 96
+  generator_hidden_dims: [512, 1024, 1024]
+  critic_hidden_dims: [1024, 512, 256]
+  negative_slope: 0.2
+  generator_type: mlp
+
+training:
+  batch_size: 512
+  num_gen_steps: 30000
+  n_critic: 3
+  lr_g: 1.0e-4
+  lr_d: 1.0e-4
+  betas: [0.0, 0.9]
+  lambda_gp: 5.0
+  ema_decay: 0.999
+  distance_reg_alpha: 0.0
+  distance_reg_max_points: 256
+  spectrum_reg_alpha: 0.1
+  num_workers: 0
+  amp: false
+  log_every: 250
+  eval_every: 1000
+  save_every: 2000

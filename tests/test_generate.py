@@ -126,29 +126,11 @@ def _generate(
     return np.load(out_path.with_suffix(".npy"))
 
 
-def test_get_device_returns_the_explicitly_configured_device(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
-    assert generate.get_device("cpu") == torch.device("cpu"), (
-        "an explicit device config must win over accelerator autodetection"
-    )
-
-
-def test_get_device_falls_back_to_cpu_when_auto_finds_no_accelerator(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
-    monkeypatch.setattr(torch.backends.mps, "is_available", lambda: False)
-    assert generate.get_device("auto") == torch.device("cpu")
-
-
-def test_get_device_prefers_cuda_over_mps_when_both_are_available(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
-    monkeypatch.setattr(torch.backends.mps, "is_available", lambda: True)
-    assert generate.get_device("auto") == torch.device("cuda")
+# Device resolution used to be a per-module `get_device` copy, one of three.
+# It is now the single `src.device.resolve_device`, and its tests live beside
+# it in tests/test_device.py -- including the two cases this file used to be
+# the only one to cover (an explicit device beating an available accelerator,
+# and CUDA winning over MPS when both are present).
 
 
 def test_generate_writes_exactly_the_requested_number_of_vectors(

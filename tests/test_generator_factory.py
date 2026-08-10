@@ -2,7 +2,12 @@ from types import MappingProxyType
 
 import pytest
 
-from src.models.generator import GatedGenerator, Generator, build_generator
+from src.models.generator import (
+    GatedGenerator,
+    Generator,
+    StructuredGateGenerator,
+    build_generator,
+)
 
 BASE_CFG = {
     "latent_dim": 16,
@@ -86,3 +91,51 @@ def test_checkpoint_mismatch_fails_loudly():
         mlp.load_state_dict(gated.state_dict())
     with pytest.raises(RuntimeError):
         gated.load_state_dict(mlp.state_dict())
+
+
+def test_structured_gated():
+    cfg = dict(BASE_CFG, generator_type="structured_gated")
+    generator = build_generator(cfg, output_dim=128)
+    assert isinstance(generator, StructuredGateGenerator)
+    assert generator.layout == (4, 4, 8)
+    assert generator.gate_kernel == 3
+    assert generator.gate_temperature == 0.5
+    assert generator.logit_clamp == 10.0
+
+
+def test_structured_gated_honours_overrides():
+    cfg = dict(
+        BASE_CFG,
+        generator_type="structured_gated",
+        layout=[2, 4, 8],
+        gate_kernel=1,
+        noise_kernel_sigma=1.5,
+        logit_clamp=4.0,
+    )
+    generator = build_generator(cfg, output_dim=64)
+    assert generator.layout == (2, 4, 8)
+    assert generator.gate_kernel == 1
+    assert generator.noise_kernel_sigma == 1.5
+    assert generator.logit_clamp == 4.0
+
+
+def test_structured_gated_rejects_a_layout_that_does_not_match_output_dim():
+    cfg = dict(BASE_CFG, generator_type="structured_gated", layout=[4, 4, 8])
+    with pytest.raises(ValueError, match="layout"):
+        build_generator(cfg, output_dim=64)
+
+
+def test_structured_and_gated_checkpoints_do_not_interchange():
+    structured = build_generator(
+        dict(BASE_CFG, generator_type="structured_gated"), output_dim=128
+    )
+    gated = build_generator(dict(BASE_CFG, generator_type="gated"), output_dim=128)
+    # The learned structure is what separates them, not the fixed noise kernel:
+    # that is deliberately non-persistent, so it cannot be what raises here.
+    keys = structured.state_dict().keys()
+    assert "noise_kernel" not in keys
+    assert {"sparsity_head.weight", "gate_coupling.weight"} <= set(keys)
+    with pytest.raises(RuntimeError):
+        gated.load_state_dict(structured.state_dict())
+    with pytest.raises(RuntimeError):
+        structured.load_state_dict(gated.state_dict())

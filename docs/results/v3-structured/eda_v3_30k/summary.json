@@ -1,0 +1,137 @@
+{
+  "real_path": "data/sift_base.npy",
+  "synthetic_paths": [
+    "samples_v3_30k.npy"
+  ],
+  "preprocess": "l2",
+  "seed": 42,
+  "ann_settings": {
+    "k": 100,
+    "k_hub": 10,
+    "max_rows": 20000,
+    "nlist": 256
+  },
+  "stats": [
+    {
+      "name": "real",
+      "num_vectors": 50000,
+      "dim": 128,
+      "value_mean": 0.05232822149991989,
+      "value_std": 0.07123381644487381,
+      "value_min": 0.0,
+      "value_max": 0.4153096377849579,
+      "exact_zero_fraction": 0.22980328125,
+      "negative_fraction": 0.0,
+      "norm_mean": 1.0,
+      "norm_std": 3.108712220978305e-08,
+      "duplicate_row_fraction": 0.0006199999999999539,
+      "median_pairwise_distance": 1.0995333194732666,
+      "median_5nn_distance": 0.5153149664402008,
+      "effective_rank": 27.99394989013672,
+      "lid_median": 17.738288203443098,
+      "relative_contrast_median": 2.267281799988775,
+      "hubness_skew": 1.8839015220354034,
+      "ivf_gini": 0.30403671874999993,
+      "lid_discarded_queries": 6.0,
+      "ann_measured_rows": 20000,
+      "ann_measured_k": 100,
+      "ann_measured_nlist": 256
+    },
+    {
+      "name": "samples_v3_30k",
+      "num_vectors": 20000,
+      "dim": 128,
+      "value_mean": 0.052197229117155075,
+      "value_std": 0.07132986187934875,
+      "value_min": 0.0,
+      "value_max": 0.5125455856323242,
+      "exact_zero_fraction": 0.178829296875,
+      "negative_fraction": 0.0,
+      "norm_mean": 1.0,
+      "norm_std": 2.1341458378287825e-08,
+      "duplicate_row_fraction": 0.0,
+      "median_pairwise_distance": 1.0908913612365723,
+      "median_5nn_distance": 0.40097369253635406,
+      "effective_rank": 22.12143325805664,
+      "lid_median": 10.630491726908193,
+      "relative_contrast_median": 3.1410750194994677,
+      "hubness_skew": 0.855075017911471,
+      "ivf_gini": 0.2608335937499999,
+      "lid_discarded_queries": 0.0,
+      "ann_measured_rows": 20000,
+      "ann_measured_k": 100,
+      "ann_measured_nlist": 256
+    }
+  ],
+  "worst_dimensions": {
+    "samples_v3_30k": [
+      {
+        "dim": 32,
+        "wasserstein1": 0.008271301001600128
+      },
+      {
+        "dim": 64,
+        "wasserstein1": 0.008048758502055182
+      },
+      {
+        "dim": 40,
+        "wasserstein1": 0.007331803300447096
+      },
+      {
+        "dim": 72,
+        "wasserstein1": 0.007113190695855333
+      },
+      {
+        "dim": 88,
+        "wasserstein1": 0.006971468581983092
+      },
+      {
+        "dim": 56,
+        "wasserstein1": 0.006562953865242518
+      },
+      {
+        "dim": 41,
+        "wasserstein1": 0.006449516530272647
+      },
+      {
+        "dim": 118,
+        "wasserstein1": 0.006418893629111555
+      },
+      {
+        "dim": 10,
+        "wasserstein1": 0.006135407500975196
+      },
+      {
+        "dim": 51,
+        "wasserstein1": 0.006024126122804572
+      },
+      {
+        "dim": 75,
+        "wasserstein1": 0.005918661780168861
+      },
+      {
+        "dim": 18,
+        "wasserstein1": 0.005857339817493372
+      },
+      {
+        "dim": 111,
+        "wasserstein1": 0.005831082619555372
+      },
+      {
+        "dim": 79,
+        "wasserstein1": 0.005822522516568428
+      },
+      {
+        "dim": 104,
+        "wasserstein1": 0.005724433958406379
+      },
+      {
+        "dim": 23,
+        "wasserstein1": 0.005423699506184853
+      }
+    ]
+  },
+  "report_html": "eda_v3_30k/eda_report.html",
+  "png_files": [],
+  "png_error": "\n\nKaleido requires Google Chrome to be installed.\n\nEither download and install Chrome yourself following Google's instructions for your operating system,\nor install it from your terminal by running:\n\n    $ plotly_get_chrome\n\n"
+}

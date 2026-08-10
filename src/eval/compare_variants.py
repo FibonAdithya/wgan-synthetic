@@ -42,9 +42,10 @@ import torch
 import yaml
 
 from src.data.dataset import PreprocessState, invert_preprocess
+from src.device import resolve_device
 from src.eval.eda import config as eda_config
 from src.eval.eda import pipeline
-from src.eval.evaluate_distribution import get_device, load_generator
+from src.eval.evaluate_distribution import load_generator
 from src.train.train_wgan_gp import sample_generator
 
 
@@ -357,7 +358,7 @@ def generate_samples(
     """
     run_dir = root / variant.run_dir
     config = yaml.safe_load((run_dir / RUN_CONFIG_NAME).read_text(encoding="utf-8"))
-    device = get_device(config["device"])
+    device = resolve_device(config["device"])
     generator = load_generator(config, run_dir / CHECKPOINT_NAME, device)
     torch.manual_seed(variant_seed(seed, variant.name))
     x = sample_generator(

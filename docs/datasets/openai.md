@@ -60,6 +60,26 @@ Fill the real column with:
 
 Read the four values out of runs/openai/profile/summary.json (written by the command above).
 
+At this width the report drops its per-dimension marginals and correlation
+panels, which are quadratic in the dimension and say little here; pass
+`--max-panel-dim 1536` to force them back on.
+
+## Structural profile
+
+The four gate statistics say how hard this corpus is to search. They do not
+say what a generator for it should look like. That question -- how many
+directions the data actually uses, whether it fills the sphere or a cone,
+and which statistics are stable enough to gate on -- is answered by:
+
+    python -m src.eval.openai_structure \
+        --real-path data/openai_250k.npy \
+        --output-dir runs/openai/structure
+
+It writes `openai_structure.html` and `structure.json`, and reports the
+noise floor: the spread of each gate statistic across disjoint draws of the
+same real corpus. A band narrower than that spread would reject real data,
+so it bounds how tight any band can be. It sets no bands.
+
 `ann_difficulty.py` currently measures everything under L2, including this
 family's `angular` corpus, so these numbers will need re-measuring once
 angular distance support lands (phase (c)).

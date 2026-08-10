@@ -93,6 +93,23 @@ def parse_args() -> argparse.Namespace:
 # --------------------------------------------------------------------------
 
 
+def sample_rows(x: np.ndarray, count: int, seed: int) -> np.ndarray:
+    """A random `count`-row subsample. Never a prefix.
+
+    openai_250k.npy is written by subset_parquet, which sorts its random
+    draw back into corpus order before saving. Its rows are therefore in
+    ascending original-corpus index order, so `x[:50000]` is the *first*
+    fifth of the corpus as DBpedia orders it, not a sample of it. DBpedia
+    entities are not shuffled, so that prefix can be topically skewed --
+    the same failure the fetcher avoids by sampling across all 26 shards
+    instead of reading the first few.
+    """
+    if count <= 0 or x.shape[0] <= count:
+        return x
+    rng = np.random.default_rng(seed)
+    return x[np.sort(rng.choice(x.shape[0], size=count, replace=False))]
+
+
 def norm_facts(x: np.ndarray) -> dict[str, float]:
     """Whether the corpus really is unit-norm, rather than said to be.
 
@@ -328,7 +345,7 @@ def _cosine_knn(x: np.ndarray, k: int) -> tuple[np.ndarray, np.ndarray]:
 
 
 def angular_vs_l2(
-    x: np.ndarray, seed: int, k: int = CANONICAL_K_HUB
+    x: np.ndarray, seed: int, k: int = CANONICAL_K, k_hub: int = CANONICAL_K_HUB
 ) -> dict[str, float]:
     """How much the L2-versus-angular choice changes what gets measured.
 
@@ -338,10 +355,14 @@ def angular_vs_l2(
     statistics to rescale. Measured rather than asserted, because if it does
     not hold, every number this family records under L2 has to be remeasured
     when phase (c) lands rather than merely reinterpreted.
+
+    Each statistic is measured at the k the gate measures it at -- LID at
+    CANONICAL_K, hubness at CANONICAL_K_HUB -- so the numbers here are
+    comparable with the ones in the profile table. Measuring both at one
+    convenient k would produce an internally consistent comparison whose
+    LID was not the LID anything else reports.
     """
-    rng = np.random.default_rng(seed)
-    if x.shape[0] > CANONICAL_N:
-        x = x[np.sort(rng.choice(x.shape[0], size=CANONICAL_N, replace=False))]
+    x = sample_rows(x, CANONICAL_N, seed)
 
     l2_dist, l2_idx, _ = ann_difficulty.knn(x, k)
     cos_dist, cos_idx = _cosine_knn(x, k)
@@ -353,12 +374,16 @@ def angular_vs_l2(
     l2_survivors = ann_difficulty.survivor_mask(l2_dist)
     cos_survivors = ann_difficulty.survivor_mask(cos_dist)
     return {
+        "angular_k": k,
+        "angular_k_hub": k_hub,
         "neighbour_set_agreement": agreement,
+        # Sliced to k_hub from the same cache, exactly as ann_difficulty.compute
+        # does, so these are the gate's hubness numbers under each metric.
         "hubness_skew_l2": ann_difficulty.hubness_skew(
-            ann_difficulty.k_occurrence(l2_idx, x.shape[0], k)
+            ann_difficulty.k_occurrence(l2_idx, x.shape[0], k_hub)
         ),
         "hubness_skew_cosine": ann_difficulty.hubness_skew(
-            np.bincount(cos_idx.ravel(), minlength=x.shape[0])
+            np.bincount(cos_idx[:, :k_hub].ravel(), minlength=x.shape[0])
         ),
         "lid_median_l2": float(
             np.median(ann_difficulty.lid_mle(l2_dist[l2_survivors]))
@@ -500,7 +525,7 @@ def main() -> None:
     facts["pairwise_cos_median"] = float(np.median(pairs))
     facts["pairwise_cos_p99"] = float(np.percentile(pairs, 99))
 
-    pca_rows = x[: args.pca_rows]
+    pca_rows = sample_rows(x, args.pca_rows, args.seed)
     raw_facts, raw_ratio = spectrum_facts(pca_rows, "raw", center=False)
     centered_facts, centered_ratio = spectrum_facts(pca_rows, "centered", center=True)
     facts.update(raw_facts)
@@ -525,7 +550,7 @@ def main() -> None:
             "holds, v0's <code>l2_normalize</code> constrains only the "
             "generator's output, not the real side.",
             fig_histogram(
-                np.linalg.norm(x[: args.pca_rows], axis=1),
+                np.linalg.norm(pca_rows, axis=1),
                 args.bins,
                 "L2 norm",
                 "norm",
@@ -540,7 +565,7 @@ def main() -> None:
             "the sphere only by dividing at the end is aiming most of its "
             "output space outside the data.",
             fig_histogram(
-                cos_to_mean[: args.pca_rows],
+                sample_rows(cos_to_mean, args.pca_rows, args.seed),
                 args.bins,
                 "cosine to mean direction",
                 "cos",

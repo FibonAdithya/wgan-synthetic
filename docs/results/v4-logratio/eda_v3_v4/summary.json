@@ -1,0 +1,240 @@
+{
+  "real_path": "/workspace/data-cache/sift_1m.npy",
+  "synthetic_paths": [
+    "v3=/workspace/keep/v34-sift1m/samples_v3.npy",
+    "v4=/workspace/keep/v34-sift1m/samples_v4.npy"
+  ],
+  "preprocess": "l2",
+  "seed": 42,
+  "ann_settings": {
+    "k": 100,
+    "k_hub": 10,
+    "max_rows": 20000,
+    "nlist": 256
+  },
+  "stats": [
+    {
+      "name": "real",
+      "num_vectors": 50000,
+      "dim": 128,
+      "value_mean": 0.05232822149991989,
+      "value_std": 0.07123381644487381,
+      "value_min": 0.0,
+      "value_max": 0.4153096377849579,
+      "exact_zero_fraction": 0.22980328125,
+      "negative_fraction": 0.0,
+      "norm_mean": 1.0,
+      "norm_std": 3.108712220978305e-08,
+      "duplicate_row_fraction": 0.0006199999999999539,
+      "median_pairwise_distance": 1.0995333194732666,
+      "median_5nn_distance": 0.5153149664402008,
+      "effective_rank": 27.99394989013672,
+      "lid_median": 17.738288203443098,
+      "relative_contrast_median": 2.267281799988775,
+      "hubness_skew": 1.8839015220354034,
+      "ivf_gini": 0.30403671874999993,
+      "lid_discarded_queries": 6.0,
+      "ann_measured_rows": 20000,
+      "ann_measured_k": 100,
+      "ann_measured_nlist": 256
+    },
+    {
+      "name": "v3",
+      "num_vectors": 20000,
+      "dim": 128,
+      "value_mean": 0.052282530814409256,
+      "value_std": 0.07126736640930176,
+      "value_min": 0.0,
+      "value_max": 0.4623183310031891,
+      "exact_zero_fraction": 0.179096875,
+      "negative_fraction": 0.0,
+      "norm_mean": 1.0,
+      "norm_std": 2.0621829577294193e-08,
+      "duplicate_row_fraction": 0.0,
+      "median_pairwise_distance": 1.091138482093811,
+      "median_5nn_distance": 0.405476376414299,
+      "effective_rank": 22.341129302978516,
+      "lid_median": 10.723445842821572,
+      "relative_contrast_median": 3.120817879524794,
+      "hubness_skew": 0.8932778778546333,
+      "ivf_gini": 0.24777539062499998,
+      "lid_discarded_queries": 0.0,
+      "ann_measured_rows": 20000,
+      "ann_measured_k": 100,
+      "ann_measured_nlist": 256
+    },
+    {
+      "name": "v4",
+      "num_vectors": 20000,
+      "dim": 128,
+      "value_mean": 0.05252346768975258,
+      "value_std": 0.0710899829864502,
+      "value_min": 0.0,
+      "value_max": 0.49485498666763306,
+      "exact_zero_fraction": 0.2440859375,
+      "negative_fraction": 0.0,
+      "norm_mean": 1.0,
+      "norm_std": 1.998756360421794e-08,
+      "duplicate_row_fraction": 0.0,
+      "median_pairwise_distance": 1.0983940362930298,
+      "median_5nn_distance": 0.4893931448459625,
+      "effective_rank": 26.809654235839844,
+      "lid_median": 15.546456641121368,
+      "relative_contrast_median": 2.4140057994823017,
+      "hubness_skew": 1.5984088831923262,
+      "ivf_gini": 0.2681191406250001,
+      "lid_discarded_queries": 0.0,
+      "ann_measured_rows": 20000,
+      "ann_measured_k": 100,
+      "ann_measured_nlist": 256
+    }
+  ],
+  "worst_dimensions": {
+    "v3": [
+      {
+        "dim": 88,
+        "wasserstein1": 0.00781636848305782
+      },
+      {
+        "dim": 32,
+        "wasserstein1": 0.006847692596282858
+      },
+      {
+        "dim": 81,
+        "wasserstein1": 0.007137576264483071
+      },
+      {
+        "dim": 64,
+        "wasserstein1": 0.006904038900423385
+      },
+      {
+        "dim": 56,
+        "wasserstein1": 0.006013424233454713
+      },
+      {
+        "dim": 80,
+        "wasserstein1": 0.006177419877204663
+      },
+      {
+        "dim": 104,
+        "wasserstein1": 0.00437277220139463
+      },
+      {
+        "dim": 55,
+        "wasserstein1": 0.006117565315282741
+      },
+      {
+        "dim": 106,
+        "wasserstein1": 0.005996220156354988
+      },
+      {
+        "dim": 48,
+        "wasserstein1": 0.00599142202932292
+      },
+      {
+        "dim": 75,
+        "wasserstein1": 0.005970544512480609
+      },
+      {
+        "dim": 51,
+        "wasserstein1": 0.005900149434341263
+      },
+      {
+        "dim": 14,
+        "wasserstein1": 0.004706861700652217
+      },
+      {
+        "dim": 45,
+        "wasserstein1": 0.005860868832411446
+      },
+      {
+        "dim": 16,
+        "wasserstein1": 0.0049099374440279364
+      },
+      {
+        "dim": 10,
+        "wasserstein1": 0.005019101959637134
+      }
+    ],
+    "v4": [
+      {
+        "dim": 88,
+        "wasserstein1": 0.007407275140742862
+      },
+      {
+        "dim": 32,
+        "wasserstein1": 0.007144404036812075
+      },
+      {
+        "dim": 81,
+        "wasserstein1": 0.004948901759451213
+      },
+      {
+        "dim": 64,
+        "wasserstein1": 0.00655028451856208
+      },
+      {
+        "dim": 56,
+        "wasserstein1": 0.006861386665756242
+      },
+      {
+        "dim": 80,
+        "wasserstein1": 0.005948235521670528
+      },
+      {
+        "dim": 104,
+        "wasserstein1": 0.006149613064700903
+      },
+      {
+        "dim": 55,
+        "wasserstein1": 0.005626097457257819
+      },
+      {
+        "dim": 106,
+        "wasserstein1": 0.004699008911097479
+      },
+      {
+        "dim": 48,
+        "wasserstein1": 0.005248517453019329
+      },
+      {
+        "dim": 75,
+        "wasserstein1": 0.0054755835266738166
+      },
+      {
+        "dim": 51,
+        "wasserstein1": 0.00590044150636963
+      },
+      {
+        "dim": 14,
+        "wasserstein1": 0.00586936964849037
+      },
+      {
+        "dim": 45,
+        "wasserstein1": 0.005090598827020588
+      },
+      {
+        "dim": 16,
+        "wasserstein1": 0.005543392765608611
+      },
+      {
+        "dim": 10,
+        "wasserstein1": 0.005501334775068616
+      }
+    ]
+  },
+  "report_html": "/workspace/keep/v34-sift1m/eda/eda_report.html",
+  "png_files": [
+    "/workspace/keep/v34-sift1m/eda/png/01_local_intrinsic_dimensionality.png",
+    "/workspace/keep/v34-sift1m/eda/png/02_hubness.png",
+    "/workspace/keep/v34-sift1m/eda/png/03_ivf_cell_balance.png",
+    "/workspace/keep/v34-sift1m/eda/png/04_pooled_value_distribution.png",
+    "/workspace/keep/v34-sift1m/eda/png/05_per-dimension_marginals.png",
+    "/workspace/keep/v34-sift1m/eda/png/06_per-dimension_profiles.png",
+    "/workspace/keep/v34-sift1m/eda/png/07_pairwise_distances.png",
+    "/workspace/keep/v34-sift1m/eda/png/08_within-set_5-nn_distances.png",
+    "/workspace/keep/v34-sift1m/eda/png/09_pca_spectrum.png",
+    "/workspace/keep/v34-sift1m/eda/png/10_correlation_structure.png",
+    "/workspace/keep/v34-sift1m/eda/png/11_per-dimension_mismatch.png"
+  ]
+}

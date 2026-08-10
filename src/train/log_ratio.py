@@ -78,6 +78,15 @@ class LogRatioTarget:
     which is why it is deliberately *not* checkpointed: unlike the generator
     weight EMA at decay 0.999, losing it on resume costs a brief transient
     rather than a thousand-step average.
+
+    That argument depends on the decay, so here is the condition that ends it:
+    **if this decay is ever raised toward 0.999, the target has to start being
+    checkpointed.** A resumed run would otherwise rebuild a thousand-step
+    average from scratch and regularize against a target that is still
+    settling. There is no knob for this today -- `train_wgan_gp` constructs
+    the target with the default and never passes a decay, while its siblings
+    `lid_reg_alpha`, `lid_reg_k` and `lid_reg_max_points` all come from the
+    config -- so the tripwire is on adding one, or on changing the default.
     """
 
     def __init__(self, decay: float = 0.99):

@@ -1,0 +1,76 @@
+# v3 re-measured on sift_1m. Identical to configs/sift_gan_v3.yaml in every
+# model and training hyperparameter -- that is the point. Exactly two things
+# differ, listed here so a reader can confirm nothing else moved:
+#
+#   1. real_path   data/sift_base.npy -> /workspace/data-cache/sift_1m.npy
+#   2. output_dir  runs/sift_gan_v3   -> runs/sift/v3_sift1m
+#
+# Why this file exists rather than an edit to sift_gan_v3.yaml: v3 is a ladder
+# rung, and a rung is a historical record of a run that happened -- the 30k run
+# whose metrics are in docs/results/v3-structured/. Repointing it would redefine
+# what SIFT v3 reproduces, which AGENTS.md reserves for a human. This config is
+# a measurement instrument, not a rung.
+#
+# Why it is needed at all: v4 cannot be trained against sift_base.npy, which is
+# gone from the box, so v4 must use sift_1m. Comparing a sift_1m v4 against the
+# recorded sift_base v3 would confound the regularizer's effect with a change of
+# corpus. This run puts both arms on the same data. It also yields a second draw
+# of v3, which is the only variance estimate this track has.
+#
+# Why an absolute real_path: the gpuq runner executes each job in a fresh
+# detached git worktree cut from the pinned commit, and data/ is gitignored, so
+# a relative data/... path does not exist at run time. The corpus lives outside
+# the ephemeral tree at a shared location on the box. That makes this config
+# box-specific by construction, which is acceptable for an instrument and would
+# not be for a rung.
+#
+# On the corpus: sift_base.npy, what the v3 checkpoints trained against, is no
+# longer present on the box. data/sift_1m.npy is cut from ann-benchmarks
+# sift-128-euclidean, the same SIFT1M base set data/README.md's example layout
+# names as sift_base.fvecs, so it is very probably the same vectors. That could
+# not be verified -- the original is gone -- and the substitution was an
+# explicit decision, not an assumption.
+seed: 42
+device: cuda:0
+output_dir: runs/sift/v3_sift1m
+
+data:
+  real_path: /workspace/data-cache/sift_1m.npy
+  format: npy
+  descriptor_dim: 128
+  holdout_fraction: 0.05
+  synthetic_if_missing: false
+  synthetic_num_vectors: 100000
+  preprocess:
+    center: false
+    whiten: false
+    l2_normalize: true
+
+model:
+  latent_dim: 128
+  generator_hidden_dims: [512, 1024, 1024]
+  critic_hidden_dims: [1024, 512, 256]
+  negative_slope: 0.2
+  generator_type: structured_gated
+  gate_temperature: 0.5
+  logit_clamp: 4.0
+  layout: [4, 4, 8]
+  gate_kernel: 3
+  noise_kernel_sigma: 0.65
+
+training:
+  batch_size: 512
+  num_gen_steps: 30000
+  n_critic: 3
+  lr_g: 1.0e-4
+  lr_d: 1.0e-4
+  betas: [0.0, 0.9]
+  lambda_gp: 5.0
+  ema_decay: 0.999
+  distance_reg_alpha: 0.1
+  distance_reg_max_points: 256
+  num_workers: 0
+  amp: false
+  log_every: 250
+  eval_every: 1000
+  save_every: 2000

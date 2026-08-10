@@ -391,6 +391,26 @@ def _layout(fig: go.Figure, title: str, x_title: str, y_title: str) -> go.Figure
 def fig_histogram(
     values: np.ndarray, bins: int, title: str, x_title: str, color: str
 ) -> go.Figure:
+    """Overlaid density histogram, tolerant of a constant series.
+
+    The norms panel is the reason for that tolerance: this corpus is
+    supposed to be exactly unit-norm, and if it is, every value is 1.0 and
+    numpy raises "Too many bins for data range" rather than drawing a spike.
+    A constant series is a *result* here -- it is the family page's claim
+    coming out true -- so it gets a one-bin figure that says so, not a
+    crash.
+    """
+    low, high = float(np.min(values)), float(np.max(values))
+    if not np.isfinite(low) or not np.isfinite(high):
+        raise ValueError(f"{title}: values contain nan or inf")
+
+    if high - low <= 0.0:
+        fig = go.Figure()
+        fig.add_bar(x=[low], y=[1.0], marker_color=color, name=x_title)
+        fig = _layout(fig, f"{title} (constant at {low:.6g})", x_title, "density")
+        fig.update_xaxes(range=[low - 1.0, high + 1.0])
+        return fig
+
     counts, edges = np.histogram(values, bins=bins, density=True)
     centers = 0.5 * (edges[:-1] + edges[1:])
     fig = go.Figure()

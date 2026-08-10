@@ -1,0 +1,46 @@
+{
+  "real_path": "/workspace/data-cache/glove_250k.npy",
+  "synthetic_paths": [],
+  "preprocess": "l2",
+  "seed": 42,
+  "ann_settings": {
+    "k": 100,
+    "k_hub": 10,
+    "max_rows": 20000,
+    "nlist": 256
+  },
+  "knn_settings": {
+    "k": 5,
+    "max_rows": 20000
+  },
+  "stats": [
+    {
+      "name": "real",
+      "num_vectors": 50000,
+      "dim": 100,
+      "value_mean": 0.004920051898807287,
+      "value_std": 0.09987889230251312,
+      "value_min": -0.8511760234832764,
+      "value_max": 0.5032374858856201,
+      "exact_zero_fraction": 0.0,
+      "negative_fraction": 0.4827476,
+      "norm_mean": 1.0,
+      "norm_std": 4.9763276166459036e-08,
+      "duplicate_row_fraction": 0.0,
+      "median_pairwise_distance": 1.3208379745483398,
+      "median_5nn_distance": 1.0051440596580505,
+      "effective_rank": 94.59998321533203,
+      "lid_median": 35.077082146972515,
+      "relative_contrast_median": 1.3894197834890463,
+      "hubness_skew": 5.639745524089706,
+      "ivf_gini": 0.5807324218750001,
+      "lid_discarded_queries": 0,
+      "ann_measured_rows": 20000,
+      "ann_measured_k": 100,
+      "ann_measured_nlist": 256
+    }
+  ],
+  "worst_dimensions": {},
+  "report_html": "/workspace/glove-eda-out/profile/eda_report.html",
+  "png_files": []
+}

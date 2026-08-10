@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+from sklearn.neighbors import NearestNeighbors
 
 from src.eval.ann_difficulty import (
     cell_occupancy,
@@ -314,8 +315,19 @@ def test_compute_discards_every_query_when_k_clamps_to_one():
 # sqrt(2 * cosine distance), which is strictly increasing, so the two order
 # neighbours identically and every statistic below comes out the same. That
 # equivalence is the entire reason the angular path adds no estimator, and the
-# reason `docs/datasets/deep.md`'s numbers stand unchanged -- so it is pinned
-# here rather than left as a comment.
+# reason `docs/datasets/deep.md`'s numbers stand unchanged.
+#
+# test_angular_and_l2_agree_exactly_on_unit_norm_rows below is a
+# future-divergence guard, not a pin of that claim: `metric` only gates the
+# unit-norm precondition in `compute`, so both calls it makes run the
+# identical L2 code path, and the equality it asserts is structural rather
+# than measured -- no cosine distance is computed anywhere in it.
+#
+# test_cosine_and_euclidean_agree_on_unit_norm_rows below is what actually
+# pins the mathematical claim: it computes real cosine and Euclidean
+# distances with `sklearn.neighbors.NearestNeighbors` directly and checks
+# that they produce the same neighbour sets and that LID under cosine is
+# exactly half LID under Euclidean.
 
 
 def _unit_rows(n: int, dim: int, seed: int) -> np.ndarray:
@@ -332,6 +344,51 @@ def test_angular_and_l2_agree_exactly_on_unit_norm_rows():
     angular = summary(compute(x, metric="angular", **kwargs))
 
     assert l2 == angular
+
+
+def test_cosine_and_euclidean_agree_on_unit_norm_rows():
+    """Pins the mathematical claim the angular-metric shortcut and four
+    documentation pages rest on: `sklearn.neighbors.NearestNeighbors` run
+    directly with `metric="cosine"` and `metric="euclidean"` on the same
+    unit-norm rows produce identical neighbour sets, and LID under cosine is
+    exactly half LID under Euclidean -- r_i/r_k under cosine is the square of
+    the ratio under Euclidean, so every log in lid_mle's mean doubles.
+    """
+    x = _unit_rows(600, 16, seed=11)
+    k = 20
+
+    dist_euclidean, idx_euclidean = (
+        NearestNeighbors(n_neighbors=k + 1, algorithm="brute", metric="euclidean")
+        .fit(x)
+        .kneighbors(x)
+    )
+    dist_cosine, idx_cosine = (
+        NearestNeighbors(n_neighbors=k + 1, algorithm="brute", metric="cosine")
+        .fit(x)
+        .kneighbors(x)
+    )
+
+    # Column 0 is each row's self-match, at distance 0 under both metrics and
+    # unique (no duplicate rows in a continuous random draw), so it is always
+    # first in the ascending order sklearn returns. Drop it before comparing
+    # neighbour sets or feeding lid_mle, which expects only the k *other*
+    # rows.
+    idx_euclidean, dist_euclidean = idx_euclidean[:, 1:], dist_euclidean[:, 1:]
+    idx_cosine, dist_cosine = idx_cosine[:, 1:], dist_cosine[:, 1:]
+
+    # Same neighbour sets: compare as sets per row, not array equality --
+    # float tie-breaks among equidistant points can reorder within a row.
+    for row in range(x.shape[0]):
+        assert set(idx_euclidean[row].tolist()) == set(idx_cosine[row].tolist())
+
+    survivors = survivor_mask(dist_euclidean)
+    assert np.array_equal(survivors, survivor_mask(dist_cosine))
+
+    lid_euclidean = lid_mle(dist_euclidean[survivors])
+    lid_cosine = lid_mle(dist_cosine[survivors])
+
+    ratio = float(np.median(lid_euclidean) / np.median(lid_cosine))
+    assert abs(ratio - 2.0) < 1e-4
 
 
 def test_angular_refuses_rows_that_are_not_on_the_unit_sphere():
@@ -370,8 +427,14 @@ def test_l2_measures_rows_of_any_norm():
     x = (rng.normal(size=(60, 8)) * 3.0).astype(np.float32)
 
     m = compute(x, k=5, k_hub=3, nlist=4, max_rows=0, metric="l2")
+    result = summary(m)
 
     assert m.num_rows == 60
+    assert result["lid_median"] is not None and np.isfinite(result["lid_median"])
+    assert result["relative_contrast_median"] is not None
+    assert np.isfinite(result["relative_contrast_median"])
+    assert np.isfinite(result["hubness_skew"])
+    assert np.isfinite(result["ivf_gini"])
 
 
 def test_compute_defaults_to_l2():
@@ -379,7 +442,15 @@ def test_compute_defaults_to_l2():
     rng = np.random.default_rng(5)
     x = (rng.normal(size=(60, 8)) * 3.0).astype(np.float32)
 
-    assert compute(x, k=5, k_hub=3, nlist=4, max_rows=0).num_rows == 60
+    m = compute(x, k=5, k_hub=3, nlist=4, max_rows=0)
+    result = summary(m)
+
+    assert m.num_rows == 60
+    assert result["lid_median"] is not None and np.isfinite(result["lid_median"])
+    assert result["relative_contrast_median"] is not None
+    assert np.isfinite(result["relative_contrast_median"])
+    assert np.isfinite(result["hubness_skew"])
+    assert np.isfinite(result["ivf_gini"])
 
 
 def test_compute_rejects_an_unknown_metric():

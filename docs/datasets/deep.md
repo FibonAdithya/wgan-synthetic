@@ -76,7 +76,7 @@ checkable without access to the training box. Reproduce the real column with:
     python -m src.eval.eda_report \
         --real-path data/deep_1m.npy \
         --output-dir runs/deep/profile \
-        --ann-max-rows 20000 --ann-k 100 --ann-hub-k 10
+        --ann-max-rows 20000 --ann-k 100 --ann-hub-k 10 --metric angular
 
 Read the four values out of runs/deep/profile/summary.json (written by the command above).
 

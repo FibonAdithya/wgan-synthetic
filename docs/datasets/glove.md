@@ -53,7 +53,7 @@ with:
     python -m src.eval.eda_report \
         --real-path data/glove_250k.npy \
         --output-dir runs/glove/profile \
-        --ann-max-rows 20000 --ann-k 100 --ann-hub-k 10
+        --ann-max-rows 20000 --ann-k 100 --ann-hub-k 10 --metric angular
 
 Read the four values out of runs/glove/profile/summary.json (written by the command above).
 
@@ -113,16 +113,22 @@ cannot fix:
 
 Unlike the two tables above, these eight figures are not backed by anything
 committed here: the script that produced them is not in this tree, so they
-cannot be reproduced from a pinned commit. They are also not reproducible
-with `--metric angular` as shipped: on unit-norm rows that flag returns the
-L2 column exactly, for the reason given above, so a reader running this tool
-should expect 35.2928, not 31.4624. The two changed figures are consistent
-with the script's angular definition having been geodesic (`arccos`) rather
-than cosine -- cosine exactly halves LID on unit-norm rows, a larger and
-differently-shaped move than -10.85%, while a geodesic definition drops LID
-by a comparable amount on synthetic isotropic unit vectors. Consistent, not
-confirmed: the script cannot be inspected. The zeroes are the part that does
-not need re-measuring, for the reason given above.
+cannot be reproduced from a pinned commit, and its measurement conditions are
+otherwise unknown. Two of its four figures fall outside the committed noise
+floor above -- the LID median of 35.2928 sits above the eight-draw range of
+35.0318--35.2086, and the IVF cell-balance Gini of 0.56835 sits below the
+eight-draw range of 0.58157--0.60339 -- so this draw was not taken under the
+canonical measurement conditions, and should not be read as a draw comparable
+to the tables above. They are also not reproducible with `--metric angular`
+as shipped: on unit-norm rows that flag returns the L2 column exactly, for
+the reason given above, not the separate angular column this one-off
+recorded. The two changed figures are consistent with the script's angular
+definition having been geodesic (`arccos`) rather than cosine -- cosine
+exactly halves LID on unit-norm rows, a larger and differently-shaped move
+than -10.85%, while a geodesic definition drops LID by a comparable amount on
+synthetic isotropic unit vectors. Consistent, not confirmed: the script
+cannot be inspected. The zeroes are the part that does not need re-measuring,
+for the reason given above.
 
 ## Model family
 

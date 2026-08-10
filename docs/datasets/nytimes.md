@@ -52,7 +52,7 @@ Fill the real column with:
     python -m src.eval.eda_report \
         --real-path data/nytimes_250k.npy \
         --output-dir runs/nytimes/profile \
-        --ann-max-rows 20000 --ann-k 100 --ann-hub-k 10
+        --ann-max-rows 20000 --ann-k 100 --ann-hub-k 10 --metric angular
 
 Read the four values out of runs/nytimes/profile/summary.json (written by the command above).
 

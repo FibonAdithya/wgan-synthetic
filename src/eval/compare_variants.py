@@ -209,9 +209,9 @@ def family_metric(variants: Sequence[Variant], root: Path) -> str:
         path = root / variant.config_path
         if not path.is_file():
             raise SystemExit(
-                f"no config at {path} for variant {variant.name!r}. The "
-                "manifest names it, and its data.metric decides the distance "
-                "the report measures under."
+                f"no config at {path} for variant {variant.name!r}, resolved "
+                f"against --root ({root}). The manifest names it, and its "
+                "data.metric decides the distance the report measures under."
             )
         doc = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         metric = str((doc.get("data") or {}).get("metric", eda_config.METRIC_DEFAULT))

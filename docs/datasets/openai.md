@@ -48,7 +48,7 @@ Fill the real column with:
     python -m src.eval.eda_report \
         --real-path data/openai_250k.npy \
         --output-dir runs/openai/profile \
-        --ann-max-rows 20000 --ann-k 100 --ann-hub-k 10
+        --ann-max-rows 20000 --ann-k 100 --ann-hub-k 10 --metric angular
 
 Read the four values out of runs/openai/profile/summary.json (written by the command above).
 

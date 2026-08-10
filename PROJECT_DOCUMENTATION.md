@@ -346,8 +346,9 @@ distance their corpora are searched under; `l2` families are measured as
 given. Reports must therefore run angular families at `--preprocess l2`,
 which `compare_variants` does for every family.
 
-The knobs (`--ann-k`, `--ann-hub-k`, `--ann-max-rows`, `--ivf-nlist`) are
-documented under "Visualization tools" with the EDA report that exposes them.
+The knobs (`--ann-k`, `--ann-hub-k`, `--ann-max-rows`, `--ivf-nlist`,
+`--metric`) are documented under "Visualization tools" with the EDA report
+that exposes them.
 
 ## Checkpoint-based eval
 
@@ -471,14 +472,16 @@ Memory-safe note:
     for LID and relative contrast, `--ann-hub-k` (default 10) the depth for
     the hubness k-occurrence count, `--ann-max-rows` (default 20000) the
     equal-N truncation every set is cut to so the metrics stay comparable
-    across series, and `--ivf-nlist` (default 256) the cluster count for the
-    IVF cell-balance panel. The pre-existing within-set k-NN distance panel
-    is not an ANN-difficulty panel and has its own `--knn-max-rows`
-    (default 20000, the same number), so tuning ANN cost does not silently
-    move it. These numbers are self-queried subsample
-    statistics, not published benchmark figures, and are only comparable
-    across the series in one report; each family's locked values are in its
-    page under `docs/datasets/`.
+    across series, `--ivf-nlist` (default 256) the cluster count for the
+    IVF cell-balance panel, and `--metric` (default `l2`) the distance the
+    corpus is searched under -- `l2` or `angular`, where `angular` requires
+    `--preprocess l2` since it is measured as L2 between unit-norm rows. The
+    pre-existing within-set k-NN distance panel is not an ANN-difficulty
+    panel and has its own `--knn-max-rows` (default 20000, the same
+    number), so tuning ANN cost does not silently move it. These numbers
+    are self-queried subsample statistics, not published benchmark figures,
+    and are only comparable across the series in one report; each family's
+    locked values are in its page under `docs/datasets/`.
   - `--synthetic-path` is optional; without it the report is pure dataset EDA.
     With it, every panel overlays the two so mismatch is visible by eye.
   - `--preprocess l2` (default) matches the training contract, since generator

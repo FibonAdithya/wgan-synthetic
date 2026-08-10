@@ -2,9 +2,22 @@ from pathlib import Path
 
 import h5py
 import numpy as np
+import pyarrow as pa
+import pyarrow.parquet as pq
 import pytest
 
-from src.data.fetch import SOURCES, Source, fetch, main, parse_args, subset, subset_name
+from src.data.fetch import (
+    SOURCES,
+    ParquetSource,
+    Source,
+    fetch,
+    main,
+    parse_args,
+    shard_urls,
+    subset,
+    subset_name,
+    subset_parquet,
+)
 
 
 def test_registry_covers_exactly_the_six_families():
@@ -13,11 +26,16 @@ def test_registry_covers_exactly_the_six_families():
 
 def test_every_source_declares_a_known_metric_and_a_positive_dim():
     for name, src in SOURCES.items():
-        assert isinstance(src, Source), name
+        assert isinstance(src, Source | ParquetSource), name
         assert src.metric in {"l2", "angular"}, name
         assert src.dim > 0, name
-        assert src.url.endswith(".hdf5"), name
         assert src.name == name
+
+
+def test_the_hdf5_families_all_point_at_an_hdf5():
+    for name, src in SOURCES.items():
+        if isinstance(src, Source):
+            assert src.url.endswith(".hdf5"), name
 
 
 def test_registry_dims_match_the_names_upstream_publishes():
@@ -30,16 +48,38 @@ def test_registry_dims_match_the_names_upstream_publishes():
 
 
 def test_registry_urls_match_the_upstream_slugs():
+    """openai is deliberately absent: ann-benchmarks hosts no HDF5 for it.
+
+    This test used to assert openai pointed at
+    dbpedia-openai-1000k-angular.hdf5, which 404s and always has -- upstream
+    generates that family from a HuggingFace dataset instead of publishing a
+    mirror. The assertion held only because nothing exercises the fetcher
+    against the network in CI.
+    """
     expected = {
         "sift": "sift-128-euclidean",
         "gist": "gist-960-euclidean",
         "deep": "deep-image-96-angular",
         "glove": "glove-100-angular",
         "nytimes": "nytimes-256-angular",
-        "openai": "dbpedia-openai-1000k-angular",
     }
     for name, slug in expected.items():
         assert SOURCES[name].url == f"http://ann-benchmarks.com/{slug}.hdf5", name
+
+
+def test_openai_is_parquet_backed_rather_than_an_hdf5_mirror():
+    src = SOURCES["openai"]
+    assert isinstance(src, ParquetSource)
+    assert src.repo == "KShivendu/dbpedia-entities-openai-1M"
+    assert src.column == "openai"
+
+
+def test_openai_defaults_to_the_250k_subset_only():
+    """v0 names openai_250k.npy and the gate's canonical N is 20,000, so a 1M
+
+    subset would cost 6GB on disk to go unread.
+    """
+    assert SOURCES["openai"].default_rows == (250_000,)
 
 
 def test_sift_and_gist_are_l2_and_the_rest_are_angular():
@@ -92,6 +132,114 @@ def test_subset_takes_everything_when_num_rows_exceeds_the_file(
 ):
     arr = np.load(subset(fake_hdf5, tmp_path / "all.npy", num_rows=10_000))
     assert arr.shape == (500, 96)
+
+
+@pytest.fixture
+def fake_shards(tmp_path: Path) -> list[Path]:
+    """Three miniature stand-ins for the dbpedia-openai parquet shards.
+
+    Deliberately uneven (30/20/50 rows) so a sampler that assumed equal
+    shard sizes would land on the wrong rows. Each row's every coordinate
+    equals its global index, which makes provenance checkable: row i of the
+    corpus is a vector of i.
+    """
+    paths = []
+    start = 0
+    for i, count in enumerate((30, 20, 50)):
+        ids = np.arange(start, start + count, dtype=np.float32)
+        vectors = np.repeat(ids[:, None], 4, axis=1)
+        table = pa.table({"openai": list(vectors), "text": ["x"] * count})
+        path = tmp_path / f"{i}.parquet"
+        pq.write_table(table, path)
+        paths.append(path)
+        start += count
+    return paths
+
+
+def test_subset_parquet_writes_requested_shape_and_dtype(
+    fake_shards: list[Path], tmp_path: Path
+):
+    out = subset_parquet(fake_shards, tmp_path / "sub.npy", num_rows=40)
+    arr = np.load(out)
+    assert arr.shape == (40, 4)
+    assert arr.dtype == np.float32
+
+
+def test_subset_parquet_samples_across_every_shard_not_a_prefix(
+    fake_shards: list[Path], tmp_path: Path
+):
+    """The shards are in dataset order and DBpedia entities are not shuffled,
+
+    so reading a prefix would be a topically skewed corpus rather than a
+    smaller version of the real one. A 60-row draw from 100 must reach past
+    the first two shards (rows 0-49) into the third.
+    """
+    arr = np.load(subset_parquet(fake_shards, tmp_path / "s.npy", num_rows=60))
+    drawn = arr[:, 0]
+    assert drawn.max() >= 50, "sample never reached the final shard"
+    assert drawn.min() < 30, "sample never reached the first shard"
+
+
+def test_subset_parquet_draws_without_replacement(
+    fake_shards: list[Path], tmp_path: Path
+):
+    arr = np.load(subset_parquet(fake_shards, tmp_path / "s.npy", num_rows=60))
+    assert len(np.unique(arr[:, 0])) == 60
+
+
+def test_subset_parquet_is_deterministic_under_the_same_seed(
+    fake_shards: list[Path], tmp_path: Path
+):
+    a = np.load(subset_parquet(fake_shards, tmp_path / "a.npy", num_rows=25, seed=7))
+    b = np.load(subset_parquet(fake_shards, tmp_path / "b.npy", num_rows=25, seed=7))
+    np.testing.assert_array_equal(a, b)
+
+
+def test_subset_parquet_differs_under_a_different_seed(
+    fake_shards: list[Path], tmp_path: Path
+):
+    a = np.load(subset_parquet(fake_shards, tmp_path / "a.npy", num_rows=25, seed=7))
+    b = np.load(subset_parquet(fake_shards, tmp_path / "b.npy", num_rows=25, seed=8))
+    assert not np.array_equal(a, b)
+
+
+def test_subset_parquet_takes_everything_when_num_rows_exceeds_the_corpus(
+    fake_shards: list[Path], tmp_path: Path
+):
+    arr = np.load(subset_parquet(fake_shards, tmp_path / "all.npy", num_rows=10_000))
+    assert arr.shape == (100, 4)
+
+
+def test_subset_parquet_ignores_the_other_columns(
+    fake_shards: list[Path], tmp_path: Path
+):
+    """The dataset carries the source text and its identifiers alongside the
+
+    embedding; only the embedding column may reach the .npy.
+    """
+    arr = np.load(subset_parquet(fake_shards, tmp_path / "s.npy", num_rows=10))
+    assert arr.shape[1] == 4
+
+
+def test_shard_urls_rejects_an_empty_listing(monkeypatch):
+    """A renamed or newly-private dataset returns no shards. That must fail
+
+    loudly at fetch time rather than writing an empty corpus.
+    """
+
+    class FakeResponse:
+        def read(self):
+            return b"[]"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    monkeypatch.setattr("src.data.fetch.urlopen", lambda *a, **k: FakeResponse())
+    with pytest.raises(ValueError, match="listed no shards"):
+        shard_urls("someone/gone")
 
 
 def test_fetch_leaves_no_partial_file_when_the_download_fails(

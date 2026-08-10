@@ -9,15 +9,23 @@ dimension is very high while intrinsic dimension is low.
 
     python -m src.data.fetch openai
 
-Fetches `dbpedia-openai-1000k-angular` into the shared cache and writes
-`data/openai_250k.npy` and `data/openai_1m.npy`. The HDF5 is large and
-immutable; the fetcher downloads it once and is safe to run concurrently.
+Writes `data/openai_250k.npy`. This is the one family ann-benchmarks does
+not publish as an HDF5: it names `dbpedia-openai-*-angular` as datasets but
+generates them on demand from a HuggingFace dataset, so the fetcher reads
+that dataset's parquet shards instead. They are large and immutable; the
+fetcher downloads them once and is safe to run concurrently.
+
+Only the 250k subset is written, unlike the five HDF5-backed families, which
+default to 250k and 1M. `configs/openai/v0.yaml` names `openai_250k.npy` and
+this family's canonical N is 20,000, so a 1M subset would cost 6GB to go
+unread.
 
 | | |
 |---|---|
 | Dimension | `1536` |
 | Search metric | `angular` |
-| Upstream | `dbpedia-openai-1000k-angular` |
+| Upstream | `KShivendu/dbpedia-entities-openai-1M` (HuggingFace) |
+| Benchmark name | `dbpedia-openai-1000k-angular` (generated, not hosted) |
 
 ## Structure
 

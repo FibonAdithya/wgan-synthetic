@@ -249,25 +249,31 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ---
 
-### Task 2: Thread the metric through the report
+### Task 2: Thread the metric from the configs to the panels
 
-`EdaConfig` is the value object every panel sees; `eda.cli` is the standalone entry point. Both must carry the field or `compare_variants` breaks at runtime after sampling.
+`EdaConfig` is the value object every panel sees; `eda.cli` is the standalone entry point; `compare_variants` is where the family's config is already resolved. All three change together in **one commit**.
+
+They cannot be split. `test_report_args_match_eda_report_fields` asserts that `eda.cli.parse_args` and `build_report_args` produce identical field sets, so a commit adding `--metric` to only one leaves the suite red — and `AGENTS.md` is explicit that a red suite is a failure, not a warning. Splitting the other way (CLI flag last) leaves `EdaConfig.from_args` reading an `args.metric` the CLI no longer supplies, crashing the standalone entry point with no test to catch it.
 
 **Files:**
 - Modify: `src/eval/eda/config.py`
 - Modify: `src/eval/eda/cli.py:29-36` (import block), and its argument list
 - Modify: `src/eval/eda/pipeline.py:22-32` (the `compute` call), `pipeline.py:107-112` (`ann_settings`)
-- Modify: `tests/conftest.py:33-52` (`make_args`)
+- Modify: `src/eval/compare_variants.py` — add `family_metric`, change `build_report_args:485`, wire `main:518-566`
+- Modify: `tests/conftest.py:33-52` (`make_args`) and `tests/conftest.py:71-96` (`_write_run`)
 - Modify: `tests/test_eda_config.py:8-29` (`_full_namespace`)
-- Test: `tests/test_eda_config.py`, `tests/test_eda_run.py`
+- Modify: `tests/test_compare_variants.py:179` (the `build_report_args` call)
+- Test: `tests/test_eda_config.py`, `tests/test_eda_run.py`, `tests/test_compare_variants.py`
 
 **Interfaces:**
-- Consumes: `ann_difficulty.compute(..., metric=...)` from Task 1.
+- Consumes: `ann_difficulty.compute(..., metric=...)` and `METRICS` from Task 1.
 - Produces:
   - `src.eval.eda.config.METRIC_DEFAULT = "l2"`
   - `EdaConfig.metric: str`
   - `--metric` on `eda.cli.parse_args`
   - `summary.json` key `ann_settings.metric`
+  - `family_metric(variants: Sequence[Variant], root: Path) -> str`
+  - `build_report_args(args: argparse.Namespace, specs: list[str], metric: str) -> argparse.Namespace` — note the **third positional parameter**, required, no default.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -337,119 +343,7 @@ def test_cli_defaults_the_metric_to_l2(monkeypatch, tmp_path):
 
 `tests/test_eda_run.py` already imports `json`, `sys`, `Path`, `numpy`, `make_args`, `cli` and `pipeline`. Add `import pytest` if it is not already there.
 
-- [ ] **Step 2: Run the tests to verify they fail**
-
-```bash
-/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/python -m pytest \
-  tests/test_eda_config.py tests/test_eda_run.py -v
-```
-
-Expected: `AttributeError: 'EdaConfig' object has no attribute 'metric'` and `AttributeError: 'Namespace' object has no attribute 'metric'`.
-
-- [ ] **Step 3: Add the constant and the field**
-
-In `src/eval/eda/config.py`, after `IVF_NLIST_DEFAULT = 256`:
-
-```python
-# The distance the corpus is searched under, from its config's `data.metric`.
-# Shared with compare_variants for the same reason as the ANN defaults above.
-# `l2` is the default because it is what every pre-existing report measured.
-METRIC_DEFAULT = "l2"
-```
-
-In the `EdaConfig` dataclass, add `metric: str` immediately after `preprocess: str`, and in `from_args` add `metric=args.metric,` immediately after `preprocess=args.preprocess,`.
-
-- [ ] **Step 4: Add the CLI flag**
-
-In `src/eval/eda/cli.py`, add `METRIC_DEFAULT,` to the `from src.eval.eda.config import (...)` block (keep it alphabetical: it goes after `KNN_MAX_ROWS_DEFAULT`). Then add the argument immediately after `--ivf-nlist`:
-
-```python
-    parser.add_argument(
-        "--metric",
-        type=str,
-        default=METRIC_DEFAULT,
-        choices=list(METRICS),
-        help=(
-            "Distance the corpus is searched under, from the family's "
-            "`data.metric`. 'angular' is measured as L2 on the unit sphere, "
-            "so it requires --preprocess l2."
-        ),
-    )
-```
-
-Import `METRICS` from `src.eval.ann_difficulty` at the top of `cli.py`, so the accepted vocabulary is stated once:
-
-```python
-from src.eval.ann_difficulty import METRICS
-```
-
-- [ ] **Step 5: Pass it through the pipeline**
-
-In `src/eval/eda/pipeline.py`, add `metric=cfg.metric,` to the `ann_difficulty.compute(...)` call in `build_context`, after `seed=cfg.seed,`.
-
-In `run`, add `"metric": cfg.metric,` to the `ann_settings` dict, after `"nlist": cfg.ivf_nlist,`.
-
-- [ ] **Step 6: Update the shared test fixtures**
-
-In `tests/conftest.py`, add `metric=eda_config.METRIC_DEFAULT,` to `make_args`'s Namespace, after `preprocess="l2",`.
-
-In `tests/test_eda_config.py`, add `metric="l2",` to `_full_namespace()`, after `preprocess="l2",`. `test_from_args_covers_every_field_the_parser_produces` compares field sets, so it will fail until both sides carry it.
-
-- [ ] **Step 7: Run the tests to verify they pass**
-
-```bash
-/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/python -m pytest \
-  tests/test_eda_config.py tests/test_eda_run.py -v
-```
-
-Expected: PASS.
-
-- [ ] **Step 8: Run the full suite**
-
-```bash
-/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/python -m pytest -q
-```
-
-Expected: one failure — `tests/test_compare_variants.py::test_report_args_match_eda_report_fields`. `eda.cli` now produces `metric` and `build_report_args` does not. That is the parity guard doing its job; Task 3 fixes it. Do not patch it here.
-
-- [ ] **Step 9: Commit**
-
-```bash
-/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/ruff format \
-  src/eval/eda/config.py src/eval/eda/cli.py src/eval/eda/pipeline.py \
-  tests/conftest.py tests/test_eda_config.py tests/test_eda_run.py
-git add src/eval/eda/config.py src/eval/eda/cli.py src/eval/eda/pipeline.py \
-  tests/conftest.py tests/test_eda_config.py tests/test_eda_run.py
-git commit -m "feat(eda): carry the search metric into the difficulty panels
-
-EdaConfig gains \`metric\`, eda.cli gains --metric, and summary.json records
-it under ann_settings so a gate result carries the geometry it was measured
-under.
-
-compare_variants's Namespace parity test fails until the next commit, which
-is the guard working as designed.
-
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
-```
-
----
-
-### Task 3: Resolve the family's metric in `compare_variants`
-
-**Files:**
-- Modify: `src/eval/compare_variants.py` — add `family_metric`, change `build_report_args:485`, wire `main:518-566`
-- Modify: `tests/conftest.py:71-96` (`_write_run`)
-- Test: `tests/test_compare_variants.py`
-
-**Interfaces:**
-- Consumes: `EdaConfig.metric` and `METRIC_DEFAULT` from Task 2.
-- Produces:
-  - `family_metric(variants: Sequence[Variant], root: Path) -> str`
-  - `build_report_args(args: argparse.Namespace, specs: list[str], metric: str) -> argparse.Namespace` — note the **third positional parameter**, required, no default.
-
-- [ ] **Step 1: Write the failing tests**
-
-Append to `tests/test_compare_variants.py`:
+Then append to `tests/test_compare_variants.py`:
 
 ```python
 # --- Family metric --------------------------------------------------------
@@ -578,15 +472,60 @@ Then fix the two existing call sites this task changes:
 1. `tests/test_compare_variants.py:179` — `cv.build_report_args(args, specs=["v0=a.npy"])` becomes `cv.build_report_args(args, specs=["v0=a.npy"], metric="l2")`.
 2. `test_main_reports_on_the_variants_a_custom_manifest_resolves` — its manifest has a second entry naming `configs/sift/v0.yaml`, which does not exist under `tmp_path`. Add `_write_family_config(tmp_path, "configs/sift/v0.yaml")` before the `cv.main()` call.
 
+
 - [ ] **Step 2: Run the tests to verify they fail**
 
 ```bash
-/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/python -m pytest tests/test_compare_variants.py -v
+/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/python -m pytest \
+  tests/test_eda_config.py tests/test_eda_run.py tests/test_compare_variants.py -v
 ```
 
-Expected: `AttributeError: module 'src.eval.compare_variants' has no attribute 'family_metric'`, plus the parity failure carried over from Task 2.
+Expected: `AttributeError: 'EdaConfig' object has no attribute 'metric'`, `AttributeError: 'Namespace' object has no attribute 'metric'`, and `AttributeError: module 'src.eval.compare_variants' has no attribute 'family_metric'`.
 
-- [ ] **Step 3: Add `family_metric`**
+- [ ] **Step 3: Add the constant and the field**
+
+In `src/eval/eda/config.py`, after `IVF_NLIST_DEFAULT = 256`:
+
+```python
+# The distance the corpus is searched under, from its config's `data.metric`.
+# Shared with compare_variants for the same reason as the ANN defaults above.
+# `l2` is the default because it is what every pre-existing report measured.
+METRIC_DEFAULT = "l2"
+```
+
+In the `EdaConfig` dataclass, add `metric: str` immediately after `preprocess: str`, and in `from_args` add `metric=args.metric,` immediately after `preprocess=args.preprocess,`.
+
+- [ ] **Step 4: Add the CLI flag**
+
+In `src/eval/eda/cli.py`, add `METRIC_DEFAULT,` to the `from src.eval.eda.config import (...)` block (keep it alphabetical: it goes after `KNN_MAX_ROWS_DEFAULT`). Then add the argument immediately after `--ivf-nlist`:
+
+```python
+    parser.add_argument(
+        "--metric",
+        type=str,
+        default=METRIC_DEFAULT,
+        choices=list(METRICS),
+        help=(
+            "Distance the corpus is searched under, from the family's "
+            "`data.metric`. 'angular' is measured as L2 on the unit sphere, "
+            "so it requires --preprocess l2."
+        ),
+    )
+```
+
+Import `METRICS` from `src.eval.ann_difficulty` at the top of `cli.py`, so the accepted vocabulary is stated once:
+
+```python
+from src.eval.ann_difficulty import METRICS
+```
+
+- [ ] **Step 5: Pass it through the pipeline**
+
+In `src/eval/eda/pipeline.py`, add `metric=cfg.metric,` to the `ann_difficulty.compute(...)` call in `build_context`, after `seed=cfg.seed,`.
+
+In `run`, add `"metric": cfg.metric,` to the `ann_settings` dict, after `"nlist": cfg.ivf_nlist,`.
+
+- [ ] **Step 6: Add `family_metric`**
 
 In `src/eval/compare_variants.py`, after `resolve_variants` and before `_needs_inversion`:
 
@@ -632,7 +571,7 @@ def family_metric(variants: Sequence[Variant], root: Path) -> str:
 
 `Sequence` and `eda_config` are already imported (`compare_variants.py:37`, `:47`).
 
-- [ ] **Step 4: Give `build_report_args` the parameter**
+- [ ] **Step 7: Give `build_report_args` the parameter**
 
 ```python
 def build_report_args(
@@ -650,7 +589,7 @@ Add to the docstring, after the existing paragraph:
     second place to state it, and so a place for it to go stale.
 ```
 
-- [ ] **Step 5: Wire it into `main`**
+- [ ] **Step 8: Wire it into `main`**
 
 In `main`, insert between the `if not found:` block and `samples_dir = out_dir / "samples"`:
 
@@ -667,7 +606,12 @@ Then change the report call:
     report_args = build_report_args(args, specs, metric)
 ```
 
-- [ ] **Step 6: Make the fixtures write their configs**
+- [ ] **Step 9: Update the shared test fixtures**
+
+In `tests/conftest.py`, add `metric=eda_config.METRIC_DEFAULT,` to `make_args`'s Namespace, after `preprocess="l2",`.
+
+In `tests/test_eda_config.py`, add `metric="l2",` to `_full_namespace()`, after `preprocess="l2",`. `test_from_args_covers_every_field_the_parser_produces` compares field sets, so it will fail until both sides carry it.
+
 
 `--root` is documented as "Repo root that variant config and run paths resolve against" (`compare_variants.py:400`), and `family_metric` is the first code to actually use that half of the contract. The fixtures build Variants naming real repo configs while rooting at `tmp_path`, so they must now write them.
 
@@ -686,15 +630,17 @@ In `tests/conftest.py`, in `_write_run`, before the `return`:
 
 `yaml` is already imported in `conftest.py:13`.
 
-- [ ] **Step 7: Run the tests to verify they pass**
+
+- [ ] **Step 10: Run the tests to verify they pass**
 
 ```bash
-/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/python -m pytest tests/test_compare_variants.py -v
+/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/python -m pytest \
+  tests/test_eda_config.py tests/test_eda_run.py tests/test_compare_variants.py -v
 ```
 
-Expected: PASS, including `test_report_args_match_eda_report_fields`.
+Expected: PASS, including `test_report_args_match_eda_report_fields` and `test_from_args_covers_every_field_the_parser_produces` — the two parity guards this task has to satisfy on both sides at once.
 
-- [ ] **Step 8: Run `make check`**
+- [ ] **Step 11: Run `make check`**
 
 ```bash
 make check \
@@ -702,23 +648,31 @@ make check \
   RUFF=/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/ruff
 ```
 
-Expected: PASS — ruff lint, ruff format check, and the full suite.
+Expected: PASS — ruff lint, ruff format check, and the full suite. The suite must be green before you commit; this task is deliberately one commit so it never lands red.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 12: Commit**
 
 ```bash
 /home/fibonadithya/TIG/wgan-synthetic/.venv/bin/ruff format \
-  src/eval/compare_variants.py tests/conftest.py tests/test_compare_variants.py
-git add src/eval/compare_variants.py tests/conftest.py tests/test_compare_variants.py
-git commit -m "feat(eval): resolve a family's search metric from its configs
+  src/eval/eda/config.py src/eval/eda/cli.py src/eval/eda/pipeline.py \
+  src/eval/compare_variants.py tests/conftest.py tests/test_eda_config.py \
+  tests/test_eda_run.py tests/test_compare_variants.py
+git add src/eval/eda/config.py src/eval/eda/cli.py src/eval/eda/pipeline.py \
+  src/eval/compare_variants.py tests/conftest.py tests/test_eda_config.py \
+  tests/test_eda_run.py tests/test_compare_variants.py
+git commit -m "feat(eval): measure each family under the metric its configs record
 
-compare_variants reads data.metric from each variant's repo config and hands
-it to the report. Repo config rather than run_config.yaml: run configs
-predate the field and would fall back to l2, silently wrong for the angular
-families this exists for.
+compare_variants reads data.metric from each variant's repo config and
+threads it through EdaConfig into the difficulty panels; summary.json records
+it so a gate result carries the geometry it was measured under.
 
-Resolved before sampling so a config problem is cheap, and after the run
+Repo config rather than run_config.yaml: run configs predate the field and
+would fall back to l2, silently wrong for the angular families this exists
+for. Resolved before sampling so a config problem is cheap, and after the run
 checks so a fresh clone still hears about missing runs first.
+
+One commit because two parity guards span the CLI and compare_variants, and
+splitting the change leaves the suite red in between.
 
 Closes #22
 
@@ -727,7 +681,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ---
 
-### Task 4: Correct the documentation this makes false
+### Task 3: Correct the documentation this makes false
 
 Seven statements across five files. All are authoritative docs policed by `tests/test_docs_references.py`.
 
@@ -737,7 +691,7 @@ Seven statements across five files. All are authoritative docs policed by `tests
 - Test: `tests/test_docs_references.py` (existing, no changes)
 
 **Interfaces:**
-- Consumes: the behaviour built in Tasks 1-3.
+- Consumes: the behaviour built in Tasks 1-2.
 - Produces: no code.
 
 - [ ] **Step 1: Find the exact statements**

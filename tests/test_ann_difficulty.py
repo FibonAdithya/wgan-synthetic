@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from src.eval.ann_difficulty import (
     cell_occupancy,
@@ -9,6 +10,7 @@ from src.eval.ann_difficulty import (
     knn,
     lid_mle,
     relative_contrast,
+    require_unit_norm,  # noqa: F401 -- exercised only indirectly, via compute()
     summary,
     survivor_mask,
 )
@@ -304,3 +306,84 @@ def test_compute_discards_every_query_when_k_clamps_to_one():
     assert metrics.k == 1
     assert metrics.discarded_queries == metrics.num_rows
     assert summary(metrics)["lid_median"] is None
+
+
+# --- Metric awareness -----------------------------------------------------
+#
+# `angular` is L2 on the unit sphere. On unit-norm rows Euclidean distance is
+# sqrt(2 * cosine distance), which is strictly increasing, so the two order
+# neighbours identically and every statistic below comes out the same. That
+# equivalence is the entire reason the angular path adds no estimator, and the
+# reason `docs/datasets/deep.md`'s numbers stand unchanged -- so it is pinned
+# here rather than left as a comment.
+
+
+def _unit_rows(n: int, dim: int, seed: int) -> np.ndarray:
+    rng = np.random.default_rng(seed)
+    x = rng.normal(size=(n, dim)).astype(np.float32)
+    return x / np.linalg.norm(x, axis=1, keepdims=True)
+
+
+def test_angular_and_l2_agree_exactly_on_unit_norm_rows():
+    x = _unit_rows(600, 16, seed=0)
+    kwargs = dict(k=20, k_hub=5, nlist=8, max_rows=0, seed=7)
+
+    l2 = summary(compute(x, metric="l2", **kwargs))
+    angular = summary(compute(x, metric="angular", **kwargs))
+
+    assert l2 == angular
+
+
+def test_angular_refuses_rows_that_are_not_on_the_unit_sphere():
+    rng = np.random.default_rng(1)
+    x = (rng.normal(size=(50, 8)) * 3.0).astype(np.float32)
+
+    with pytest.raises(ValueError, match="--preprocess l2"):
+        compute(x, k=5, k_hub=3, nlist=4, max_rows=0, metric="angular")
+
+
+def test_angular_rejects_a_single_row_off_the_sphere():
+    """One bad row is enough: it is a query and a neighbour for everyone else."""
+    x = _unit_rows(60, 8, seed=2)
+    x[17] *= 0.5
+
+    with pytest.raises(ValueError, match="1 of 60"):
+        compute(x, k=5, k_hub=3, nlist=4, max_rows=0, metric="angular")
+
+
+def test_angular_accepts_the_zero_rows_maybe_l2_normalize_leaves_behind():
+    """`maybe_l2_normalize` clamps the divisor, so a zero row stays exactly 0.
+
+    That is a deliberate output of our own preprocessing, not a caller
+    mistake, so it must not make an otherwise-normalized set unmeasurable.
+    """
+    x = _unit_rows(60, 8, seed=3)
+    x[0] = 0.0
+
+    m = compute(x, k=5, k_hub=3, nlist=4, max_rows=0, metric="angular")
+
+    assert m.num_rows == 60
+
+
+def test_l2_measures_rows_of_any_norm():
+    rng = np.random.default_rng(4)
+    x = (rng.normal(size=(60, 8)) * 3.0).astype(np.float32)
+
+    m = compute(x, k=5, k_hub=3, nlist=4, max_rows=0, metric="l2")
+
+    assert m.num_rows == 60
+
+
+def test_compute_defaults_to_l2():
+    """Back-compat: every existing call site passes no metric."""
+    rng = np.random.default_rng(5)
+    x = (rng.normal(size=(60, 8)) * 3.0).astype(np.float32)
+
+    assert compute(x, k=5, k_hub=3, nlist=4, max_rows=0).num_rows == 60
+
+
+def test_compute_rejects_an_unknown_metric():
+    x = _unit_rows(20, 4, seed=6)
+
+    with pytest.raises(ValueError, match="cosine"):
+        compute(x, k=3, k_hub=2, nlist=2, max_rows=0, metric="cosine")

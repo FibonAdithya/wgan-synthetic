@@ -9,6 +9,7 @@ from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 
 from src.data.dataset import load_descriptors
+from src.eval.eda import series as eda_series
 
 
 def parse_args() -> argparse.Namespace:
@@ -29,11 +30,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--perplexity", type=float, default=30.0)
     parser.add_argument("--output-dir", type=str, required=True)
     return parser.parse_args()
-
-
-def l2_normalize(x: np.ndarray, eps: float = 1.0e-8) -> np.ndarray:
-    norm = np.linalg.norm(x, axis=1, keepdims=True)
-    return x / np.clip(norm, eps, None)
 
 
 def sample_rows(
@@ -140,8 +136,8 @@ def main() -> None:
         Path(args.synthetic_path), file_format=args.synthetic_format
     ).astype(np.float32, copy=False)
 
-    real = l2_normalize(real)
-    synthetic = l2_normalize(synthetic)
+    real = eda_series.maybe_l2_normalize(real, "l2")
+    synthetic = eda_series.maybe_l2_normalize(synthetic, "l2")
 
     real_sample = sample_rows(real, args.sample_size, rng)
     synth_sample = sample_rows(synthetic, args.sample_size, rng)

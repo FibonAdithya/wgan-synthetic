@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from src.data.dataset import load_descriptors
+from src.eval.eda import series as eda_series
 
 
 def parse_args() -> argparse.Namespace:
@@ -26,11 +27,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output-path", type=str, required=True)
     return parser.parse_args()
-
-
-def l2_normalize(x: np.ndarray, eps: float = 1.0e-8) -> np.ndarray:
-    norm = np.linalg.norm(x, axis=1, keepdims=True)
-    return x / np.clip(norm, eps, None)
 
 
 def sampled_indices(n: int, k: int, rng: np.random.Generator) -> np.ndarray:
@@ -79,8 +75,8 @@ def main() -> None:
     real = load_descriptors(Path(args.real_path), file_format=args.real_format)
     synthetic = np.load(args.synthetic_path).astype(np.float32, copy=False)
 
-    real = l2_normalize(real.astype(np.float32, copy=False))
-    synthetic = l2_normalize(synthetic)
+    real = eda_series.maybe_l2_normalize(real.astype(np.float32, copy=False), "l2")
+    synthetic = eda_series.maybe_l2_normalize(synthetic, "l2")
 
     y_r, r10, r50, r90 = query_cdf_quantiles(
         real, num_queries=args.num_queries, num_targets=args.num_targets, rng=rng

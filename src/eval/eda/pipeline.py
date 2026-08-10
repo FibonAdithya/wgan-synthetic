@@ -44,6 +44,12 @@ def build_context(cfg: EdaConfig) -> panels.Context:
 
 def run(args: argparse.Namespace) -> Path:
     """Write the report. Takes a Namespace because compare_variants builds one."""
+    # Config first, directory second. The pre-split code did it the other way
+    # round, so a malformed Namespace used to leave an empty output directory
+    # behind before it raised; now it raises having created nothing. Nothing
+    # depends on either order -- from_args is side-effect-free and no caller
+    # reaches this path -- but the orders are not equivalent, so this one is
+    # deliberate rather than incidental (#23).
     cfg = EdaConfig.from_args(args)
 
     out_dir = Path(cfg.output_dir)

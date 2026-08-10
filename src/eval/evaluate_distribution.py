@@ -16,6 +16,7 @@ from src.data.dataset import (
     load_descriptors,
     train_holdout_split,
 )
+from src.device import resolve_device
 from src.models.generator import build_generator
 
 
@@ -33,16 +34,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--num-samples", type=int, default=50000)
     parser.add_argument("--gamma", type=float, default=1.0, help="RBF gamma for MMD.")
     return parser.parse_args()
-
-
-def get_device(device_cfg: str) -> torch.device:
-    if device_cfg == "auto":
-        if torch.cuda.is_available():
-            return torch.device("cuda")
-        if torch.backends.mps.is_available():
-            return torch.device("mps")
-        return torch.device("cpu")
-    return torch.device(device_cfg)
 
 
 def load_generator(
@@ -201,7 +192,7 @@ def main() -> None:
     with Path(args.config).open("r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
-    device = get_device(config["device"])
+    device = resolve_device(config["device"])
     checkpoint_path = Path(args.checkpoint)
     generator = load_generator(
         config=config, checkpoint_path=checkpoint_path, device=device

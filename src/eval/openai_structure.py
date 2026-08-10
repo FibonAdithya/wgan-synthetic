@@ -16,9 +16,13 @@ Answers four questions the v0 config currently guesses at:
 4. Which of the four gate statistics can carry a band at all? -- the noise
    floor across disjoint draws of the same real data.
 
-Plus one question that decides whether any of the above survives: this
-family is searched under `angular` but ann_difficulty.py measures under L2
-(issue #16). Section 5 measures how much that actually changes.
+Plus a check on the reasoning behind how this family is measured at all.
+ann_difficulty.py now measures `angular` as L2 between unit-norm rows,
+because on the unit sphere Euclidean distance is a strictly increasing
+function of cosine distance and therefore ranks neighbours identically.
+That argument is checked here rather than assumed: whether the two metrics
+really do induce the same neighbour sets, and by what factor the
+distance-ratio statistics differ when they do.
 
     python -m src.eval.openai_structure \
         --real-path data/openai_250k.npy \
@@ -352,9 +356,10 @@ def angular_vs_l2(
     For unit-norm vectors ||a-b||^2 = 2 - 2cos(a,b), a strictly monotone map,
     so the two metrics should induce identical neighbour *sets* -- which
     would make hubness exactly invariant and leave only the distance-ratio
-    statistics to rescale. Measured rather than asserted, because if it does
-    not hold, every number this family records under L2 has to be remeasured
-    when phase (c) lands rather than merely reinterpreted.
+    statistics to rescale. That is the premise ann_difficulty.py's `angular`
+    metric rests on, so it is measured here rather than assumed: a corpus
+    that violated it would be one whose recorded profile does not mean what
+    the metric's documentation says it means.
 
     Each statistic is measured at the k the gate measures it at -- LID at
     CANONICAL_K, hubness at CANONICAL_K_HUB -- so the numbers here are

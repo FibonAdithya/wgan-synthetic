@@ -21,9 +21,40 @@ from src.data.dataset import (
     PreprocessConfig,
     build_training_data,
 )
+from src.device import resolve_device
 from src.models.critic import Critic
 from src.models.generator import build_generator
+from src.train.gpu_lock import claim_gpu, gpu_lock_key
+from src.train.log_ratio import LogRatioTarget, log_ratio_penalty
 from src.train.spectrum import spectrum_distance
+
+
+def gpu_preflight(device: torch.device) -> dict[str, object]:
+    """Snapshot of the card at launch, for `run_metadata.json`.
+
+    Costs nothing and turns "the run died at step 60k" into an answerable
+    question -- specifically, whether it was already sharing the card.
+
+    The spec also asked for a list of other compute processes on the card.
+    Torch exposes no such API (it needs NVML), and adding a dependency for
+    forensics is not worth it: `memory_free_bytes` well below
+    `memory_total_bytes` at launch already says someone else is resident,
+    which is the only part that changes a decision.
+    """
+    meta: dict[str, object] = {"device": str(device)}
+    if device.type != "cuda":
+        return meta
+    props = torch.cuda.get_device_properties(device)
+    free, total = torch.cuda.mem_get_info(device)
+    meta.update(
+        {
+            "name": props.name,
+            "uuid": gpu_lock_key(device),
+            "memory_free_bytes": int(free),
+            "memory_total_bytes": int(total),
+        }
+    )
+    return meta
 
 
 def set_seed(seed: int) -> None:
@@ -85,16 +116,6 @@ def build_dataloader(
         generator=loader_generator,
         worker_init_fn=partial(seed_dataloader_worker, base_seed=seed),
     )
-
-
-def get_device(device_cfg: str) -> torch.device:
-    if device_cfg == "auto":
-        if torch.cuda.is_available():
-            return torch.device("cuda")
-        if torch.backends.mps.is_available():
-            return torch.device("mps")
-        return torch.device("cpu")
-    return torch.device(device_cfg)
 
 
 def gradient_penalty(
@@ -305,14 +326,22 @@ def save_checkpoint(
     step: int,
     best: bool = False,
     generator_weights: str = "live",
+    ema_params: dict[str, Tensor] | None = None,
+    ema_step: int = 0,
+    best_cov: float = float("inf"),
 ) -> None:
     """Write a checkpoint.
 
     `generator_weights` records which parameters `generator_state_dict` holds:
     "live" (the currently optimised parameters) or "ema" (the bias-corrected
     EMA swapped in for evaluation). Everything else in the file -- critic and
-    both optimiser states -- is always live; the EMA is a read-only shadow of
-    the generator and has no optimiser moments of its own.
+    both optimiser states -- is always live.
+
+    `ema_params`, `ema_step` and `best_cov` are the live training state a
+    resume needs and the model files do not carry. The EMA shadow matters
+    most: at decay 0.999 a resume that loses it silently restarts a
+    thousand-step average, and since best_generator.pt is chosen from EMA
+    weights the damage only shows up in the final artifact.
     """
     if generator_weights not in ("live", "ema"):
         raise ValueError(
@@ -325,6 +354,9 @@ def save_checkpoint(
         "critic_state_dict": critic.state_dict(),
         "optim_g_state_dict": optim_g.state_dict(),
         "optim_d_state_dict": optim_d.state_dict(),
+        "ema_params": {k: v.detach().cpu() for k, v in (ema_params or {}).items()},
+        "ema_step": int(ema_step),
+        "best_cov": float(best_cov),
     }
     out_dir.mkdir(parents=True, exist_ok=True)
     torch.save(ckpt, out_dir / f"checkpoint_step_{step}.pt")
@@ -360,10 +392,21 @@ def sample_generator(
     return np.concatenate(out, axis=0)[:num_samples]
 
 
-def train(config: dict) -> tuple[Path, dict]:
+def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
     seed = int(config["seed"])
     set_seed(seed)
-    device = get_device(config["device"])
+    device = resolve_device(config["device"], strict=True)
+    # Snapshot the card now, before training touches it: memory_free_bytes
+    # after hours of training (with a populated caching allocator) cannot
+    # answer whether anyone else was resident at launch, which is the one
+    # thing this snapshot exists for. A run that dies mid-training must not
+    # lose this snapshot either.
+    gpu_meta = gpu_preflight(device)
+    memory_fraction = float(config["training"].get("gpu_memory_fraction", 0.9))
+    if device.type == "cuda" and 0.0 < memory_fraction < 1.0:
+        # Belt and braces: if the lock is bypassed, a run degrades instead of
+        # taking the whole card down with it.
+        torch.cuda.set_per_process_memory_fraction(memory_fraction, device)
     out_dir = Path(config["output_dir"])
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -434,6 +477,10 @@ def train(config: dict) -> tuple[Path, dict]:
     save_every = int(train_cfg["save_every"])
     distance_reg_alpha = float(train_cfg.get("distance_reg_alpha", 0.0))
     distance_reg_max_points = int(train_cfg.get("distance_reg_max_points", 128))
+    lid_reg_alpha = float(train_cfg.get("lid_reg_alpha", 0.0))
+    lid_reg_k = int(train_cfg.get("lid_reg_k", 20))
+    lid_reg_max_points = int(train_cfg.get("lid_reg_max_points", 256))
+    lid_reg_target = LogRatioTarget()
     spectrum_reg_alpha = float(train_cfg.get("spectrum_reg_alpha", 0.0))
 
     run_meta = {
@@ -445,12 +492,59 @@ def train(config: dict) -> tuple[Path, dict]:
             "descriptor_dim": descriptor_dim,
         },
         "preprocess_state": preprocess_state.to_serializable(),
+        "gpu": gpu_meta,
         "metrics": [],
     }
 
     best_cov = float("inf")
 
-    for step in range(1, num_gen_steps + 1):
+    start_step = 0
+    if resume is not None:
+        ckpt = torch.load(resume, map_location=device, weights_only=False)
+        start_step = int(ckpt["step"])
+        # Cheap refusals first, before any load_state_dict call does wasted
+        # work on a resume we are about to reject anyway.
+        if start_step >= num_gen_steps:
+            raise ValueError(
+                f"checkpoint is at step {start_step}, already at or past "
+                f"num_gen_steps={num_gen_steps}; raise the budget to continue"
+            )
+        if use_ema:
+            saved = ckpt.get("ema_params") or {}
+            # An EMA-enabled resume from a checkpoint written without a shadow
+            # would restart the average silently, which is the exact failure
+            # persisting it was meant to prevent. Refuse instead.
+            if not saved:
+                raise ValueError(
+                    f"{resume} carries no EMA shadow but ema_decay is "
+                    f"{ema_decay}; resuming would silently restart the average"
+                )
+        # best_generator.pt is written with EMA weights whenever EMA is
+        # enabled (see save_checkpoint's docstring). Installing those as the
+        # live parameters here would pair EMA-derived weights with
+        # optim_g_state_dict's Adam moments -- which belong to the discarded
+        # live weights -- and the restored shadow would re-average toward the
+        # wrong weights from then on. Only a live-weights checkpoint is safe
+        # to resume from.
+        generator_weights = ckpt.get("generator_weights", "live")
+        if generator_weights != "live":
+            raise ValueError(
+                f"{resume} holds '{generator_weights}' generator weights, not "
+                f"'live'; only a live-weights checkpoint can be resumed from "
+                f"(a best_generator.pt written with EMA enabled cannot be)"
+            )
+        generator.load_state_dict(ckpt["generator_state_dict"])
+        critic.load_state_dict(ckpt["critic_state_dict"])
+        optim_g.load_state_dict(ckpt["optim_g_state_dict"])
+        optim_d.load_state_dict(ckpt["optim_d_state_dict"])
+        ema_step = int(ckpt.get("ema_step", 0))
+        best_cov = float(ckpt.get("best_cov", float("inf")))
+        if use_ema:
+            ema_params = {k: v.to(device) for k, v in ckpt["ema_params"].items()}
+
+    run_meta["resumed_from_step"] = start_step
+
+    for step in range(start_step + 1, num_gen_steps + 1):
         d_loss_val = 0.0
         gp_val = 0.0
         wasserstein_val = 0.0
@@ -499,12 +593,17 @@ def train(config: dict) -> tuple[Path, dict]:
             fake = normalize_l2(generator(z))
             adv_loss = -critic(fake).mean()
             g_loss = adv_loss
-            # Transferred once and shared: both regularizers want the same
-            # batch, and doing it per-branch pays for two host-to-device copies
-            # of a 512x96 tensor on every generator step when both are enabled.
+            # Transferred once and shared: the regularizers all want the same
+            # batch, and doing it per-branch pays for a host-to-device copy per
+            # enabled term on every generator step. Gated on all three, so the
+            # all-alphas-zero path still does not touch real_batch at all.
             real_for_reg = (
                 real_batch.to(device)
-                if distance_reg_alpha > 0.0 or spectrum_reg_alpha > 0.0
+                if (
+                    distance_reg_alpha > 0.0
+                    or lid_reg_alpha > 0.0
+                    or spectrum_reg_alpha > 0.0
+                )
                 else None
             )
             if distance_reg_alpha > 0.0:
@@ -518,6 +617,27 @@ def train(config: dict) -> tuple[Path, dict]:
                 g_loss = g_loss + distance_reg_alpha * distance_reg
             else:
                 distance_reg = torch.zeros((), device=device, dtype=fake.dtype)
+            if lid_reg_alpha > 0.0:
+                # Reduction-heavy pairwise-distance numerics: run this outside
+                # autocast rather than inheriting the enclosing fp16 region.
+                # x @ x.T is autocast-listed to fp16, and the expanded-square
+                # form (sq + sq - 2*xx^T) is the classic catastrophic-
+                # cancellation case; eps=1e-12 is below fp16's smallest
+                # subnormal (~6e-8) so the clamp would silently no-op; and the
+                # EMA would accumulate in fp16 where the ULP at profile
+                # magnitudes ~0.07 is on the same order as the 0.01x update
+                # step, risking quantisation stalls.
+                with autocast("cuda", enabled=False):
+                    lid_reg = log_ratio_penalty(
+                        fake.float(),
+                        real_for_reg,
+                        k=lid_reg_k,
+                        max_points=lid_reg_max_points,
+                        target=lid_reg_target,
+                    )
+                g_loss = g_loss + lid_reg_alpha * lid_reg
+            else:
+                lid_reg = torch.zeros((), device=device, dtype=fake.dtype)
             if spectrum_reg_alpha > 0.0:
                 spectrum_reg = spectrum_distance(real_for_reg, fake)
                 g_loss = g_loss + spectrum_reg_alpha * spectrum_reg
@@ -543,6 +663,7 @@ def train(config: dict) -> tuple[Path, dict]:
                 "wasserstein": wasserstein_val,
                 "adv_loss": float(adv_loss.item()),
                 "distance_reg": float(distance_reg.item()),
+                "lid_reg": float(lid_reg.item()),
                 "spectrum_reg": float(spectrum_reg.item()),
             }
             run_meta["metrics"].append(msg)
@@ -583,6 +704,9 @@ def train(config: dict) -> tuple[Path, dict]:
                         step,
                         best=True,
                         generator_weights="ema" if use_ema else "live",
+                        ema_params=ema_params,
+                        ema_step=ema_step,
+                        best_cov=best_cov,
                     )
 
         if step % save_every == 0:
@@ -596,6 +720,9 @@ def train(config: dict) -> tuple[Path, dict]:
                 step,
                 best=False,
                 generator_weights="live",
+                ema_params=ema_params,
+                ema_step=ema_step,
+                best_cov=best_cov,
             )
 
     with (out_dir / "run_metadata.json").open("w", encoding="utf-8") as f:
@@ -614,6 +741,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--config", type=str, required=True, help="Path to YAML config."
     )
+    parser.add_argument(
+        "--resume",
+        type=str,
+        default=None,
+        help="Checkpoint to continue from. The config's num_gen_steps is the "
+        "target total, not an additional budget.",
+    )
     return parser.parse_args()
 
 
@@ -621,7 +755,14 @@ def main() -> None:
     args = parse_args()
     with Path(args.config).open("r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
-    best_ckpt, _ = train(config)
+    device = resolve_device(config["device"], strict=True)
+    train_cfg = config["training"]
+    with claim_gpu(
+        device,
+        run_dir=Path(config["output_dir"]),
+        timeout_s=float(train_cfg.get("gpu_lock_timeout_s", 1800.0)),
+    ):
+        best_ckpt, _ = train(config, resume=args.resume)
     print(f"Training complete. Best checkpoint: {best_ckpt}")
 
 

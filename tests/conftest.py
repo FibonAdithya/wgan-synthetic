@@ -35,6 +35,7 @@ def make_args(tmp_path, real, synthetic):
         synthetic_format="npy",
         output_dir=str(tmp_path / "out"),
         preprocess="l2",
+        metric=eda_config.METRIC_DEFAULT,
         max_vectors=200,
         num_pairs=500,
         knn=3,
@@ -92,6 +93,15 @@ def _write_run(tmp_path, name, descriptor_dim, model_cfg, config_path):
         "data": {"descriptor_dim": descriptor_dim},
     }
     (run_dir / "run_config.yaml").write_text(yaml.safe_dump(run_config))
+
+    # `family_metric` resolves config paths against --root, which these tests
+    # point at tmp_path. Write the config the Variant names so the fixture is
+    # a complete tree rather than one that only happens to work.
+    config_full = tmp_path / config_path
+    config_full.parent.mkdir(parents=True, exist_ok=True)
+    config_full.write_text(
+        yaml.safe_dump({"data": {"metric": "l2", "descriptor_dim": descriptor_dim}})
+    )
 
     return cv.Variant(name, config_path, f"runs/{name}"), descriptor_dim
 

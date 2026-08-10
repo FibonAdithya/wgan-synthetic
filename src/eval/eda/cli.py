@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 
+from src.eval.ann_difficulty import METRICS
 from src.eval.eda.config import (
     ANN_HUB_K_DEFAULT,
     ANN_K_DEFAULT,
@@ -35,6 +36,7 @@ from src.eval.eda.config import (
     IVF_NLIST_DEFAULT,
     KNN_MAX_ROWS_DEFAULT,
     MAX_PANEL_DIM_DEFAULT,
+    METRIC_DEFAULT,
 )
 
 
@@ -119,6 +121,17 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=IVF_NLIST_DEFAULT,
         help="Cluster count for the IVF cell-balance panel.",
+    )
+    parser.add_argument(
+        "--metric",
+        type=str,
+        default=METRIC_DEFAULT,
+        choices=list(METRICS),
+        help=(
+            "Distance the corpus is searched under, from the family's "
+            "`data.metric`. 'angular' is measured as L2 on the unit sphere, "
+            "so it requires --preprocess l2."
+        ),
     )
     parser.add_argument("--bins", type=int, default=80)
     parser.add_argument(

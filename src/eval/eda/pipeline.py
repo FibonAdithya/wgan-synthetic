@@ -27,6 +27,7 @@ def build_context(cfg: EdaConfig) -> panels.Context:
             nlist=cfg.ivf_nlist,
             max_rows=cfg.ann_max_rows,
             seed=cfg.seed,
+            metric=cfg.metric,
         )
         for s in sets
     }
@@ -112,6 +113,7 @@ def run(args: argparse.Namespace) -> Path:
             "k_hub": cfg.ann_hub_k,
             "max_rows": cfg.ann_max_rows,
             "nlist": cfg.ivf_nlist,
+            "metric": cfg.metric,
         },
         "knn_settings": {"k": cfg.knn, "max_rows": cfg.knn_max_rows},
         "stats": stats,

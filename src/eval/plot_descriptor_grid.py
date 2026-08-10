@@ -30,12 +30,13 @@ import torch
 import yaml
 
 from src.data.dataset import load_descriptors
+from src.device import resolve_device
 from src.eval import compare_variants as cv
 from src.eval.descriptor_glyph import DESCRIPTOR_DIM
 from src.eval.eda import glyphs as eda_glyphs
 from src.eval.eda import html as eda_html
 from src.eval.eda import series as eda_series
-from src.eval.evaluate_distribution import get_device, load_generator
+from src.eval.evaluate_distribution import load_generator
 from src.train.train_wgan_gp import sample_generator
 
 # Geometry, the negative-ray treatment and the figure itself come from
@@ -197,7 +198,7 @@ def variant_rows(
             (run_dir / cv.RUN_CONFIG_NAME).read_text(encoding="utf-8")
         )
         check_preprocess(config, variant.name)
-        device = get_device(config["device"])
+        device = resolve_device(config["device"])
         generator = load_generator(config, run_dir / cv.CHECKPOINT_NAME, device)
         # GatedGenerator samples its gate in eval() mode too, so the seed is
         # what makes a row reproducible. Keying off the variant name keeps a

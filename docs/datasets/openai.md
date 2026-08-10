@@ -56,13 +56,22 @@ Fill the real column with:
     python -m src.eval.eda_report \
         --real-path data/openai_250k.npy \
         --output-dir runs/openai/profile \
-        --ann-max-rows 20000 --ann-k 100 --ann-hub-k 10
+        --ann-max-rows 20000 --ann-k 100 --ann-hub-k 10 --metric angular
 
 Read the four values out of runs/openai/profile/summary.json (written by the command above).
 
 At this width the report drops its per-dimension marginals and correlation
 panels, which are quadratic in the dimension and say little here; pass
 `--max-panel-dim 1536` to force them back on.
+
+`ann_difficulty.py` measures this family under its `data.metric`, which is
+`angular`: L2 between unit-norm rows. On the unit sphere Euclidean distance
+is a strictly increasing function of cosine distance, so it ranks neighbours
+identically -- the corpus is measured under the distance it is searched with.
+Measuring requires `--preprocess l2`, and `ann_difficulty.compute` refuses
+rows that are neither unit-norm nor exactly zero rather than normalizing
+them itself -- an exact zero is what `maybe_l2_normalize` leaves behind, so
+it is accepted rather than treated as a caller mistake.
 
 ## Structural profile
 
@@ -80,9 +89,9 @@ noise floor: the spread of each gate statistic across disjoint draws of the
 same real corpus. A band narrower than that spread would reject real data,
 so it bounds how tight any band can be. It sets no bands.
 
-`ann_difficulty.py` currently measures everything under L2, including this
-family's `angular` corpus, so these numbers will need re-measuring once
-angular distance support lands (phase (c)).
+It also measures the L2-versus-cosine question directly, which is the
+empirical form of the argument above: whether the two induce the same
+neighbour sets, and by what factor the distance-ratio statistics differ.
 
 ## Model family
 

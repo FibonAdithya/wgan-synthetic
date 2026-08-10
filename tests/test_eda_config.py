@@ -12,6 +12,7 @@ def _full_namespace() -> argparse.Namespace:
         synthetic_format="auto",
         output_dir="out",
         preprocess="l2",
+        metric="l2",
         max_vectors=50000,
         num_pairs=200000,
         knn=5,
@@ -77,3 +78,7 @@ def test_synthetic_path_none_becomes_an_empty_list():
     ns.synthetic_path = None
 
     assert config.EdaConfig.from_args(ns).synthetic_path == []
+
+
+def test_from_args_carries_the_metric():
+    assert config.EdaConfig.from_args(_full_namespace()).metric == "l2"

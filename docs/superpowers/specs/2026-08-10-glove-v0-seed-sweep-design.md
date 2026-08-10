@@ -173,7 +173,24 @@ is to widen bands until something passes.
 ## Cost
 
 Five 30k-step runs. The comparable runs are ~34 minutes (SIFT) and ~35 minutes
-(deep) on one RTX 4060; GloVe is 100-dimensional over 250,000 rows, so the same
-order. Roughly three GPU-hours in total, submitted through `gpuq` and
-independent of one another, so they parallelise across the queue to whatever
-width it allows.
+(deep) on one RTX 4060; GloVe is 100-dimensional over 250,000 rows, and step
+count rather than corpus size dominates, so the same order. Roughly three
+GPU-hours in total.
+
+Those three hours are **serial, not parallel**. The box has one RTX 4060 and
+`gpuq`'s GPU lane is serialized box-wide, so the five runs queue behind one
+another and behind anyone else's training. The sweep is independent work that
+*could* fan out, and does not, which is the reason it costs an afternoon of
+wall-clock rather than 35 minutes.
+
+Two `gpuq` constraints shape how the jobs are submitted, and both silently
+waste a run when missed. Artifacts may not be declared under `runs/`, because
+that path is gitignored and the runner collects with `git add`, which errors on
+an ignored path and marks the job failed with `exit_code: 0` — training
+succeeds and the output is discarded. And each job executes in a fresh detached
+worktree containing no gitignored files, so the corpus must be linked into
+place by the job's own command. Both are handled by copying outputs to
+`/workspace/` from inside the job command and declaring no artifacts.
+
+The runner fetches from `origin`, so the branch must be pushed before any job
+pinned to its commit can run.

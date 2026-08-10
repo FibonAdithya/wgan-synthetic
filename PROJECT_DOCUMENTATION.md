@@ -166,9 +166,17 @@ searched under — a property of the family, which is why it sits beside
 It is not a preprocessing instruction. `l2_normalize` is set independently,
 and an `angular` corpus is not thereby normalized nor an `l2` one left alone;
 the two settings answer different questions. The value is validated at load
-time against the two accepted strings and is otherwise inert today: nothing
-consumes it yet. Reading it in `src/eval/ann_difficulty.py`, so difficulty is
-measured under the metric the corpus is actually searched with, is phase (c).
+time against the two accepted strings.
+`src/eval/compare_variants.py` reads it from a family's variant configs and
+threads it into `src/eval/ann_difficulty.py`, so difficulty is measured under
+the metric the corpus is actually searched with. `angular` is measured as L2
+between unit-norm rows, which orders neighbours exactly as cosine does;
+`compute` refuses rows that are neither unit-norm nor exactly zero rather
+than normalizing them, so a report's `preprocess` setting cannot disagree
+with the geometry it measured under. Exact zeros are accepted because
+`eda.series.maybe_l2_normalize` clamps its divisor rather than dividing by
+~0, so a zero row is an output of our own preprocessing rather than a caller
+mistake.
 
 ---
 
@@ -448,14 +456,15 @@ published figures, which are measured on the full corpus against the real
 query set. Without a locked pair, a gate result from last month cannot be
 read against today's.
 
-`ann_difficulty.py` currently computes everything under L2, including for the
-four `angular` families. Reading `data.metric` and measuring under the
-corpus's own distance is phase (c) of the multi-dataset design; until it
-lands, angular-family numbers are internally consistent within a report but
-are not the distance the corpus is searched with.
+`ann_difficulty.py` measures each family under its `data.metric`. The four
+`angular` families are measured as L2 between unit-norm rows, which is the
+distance their corpora are searched under; `l2` families are measured as
+given. Reports must therefore run angular families at `--preprocess l2`,
+which `compare_variants` does for every family.
 
-The knobs (`--ann-k`, `--ann-hub-k`, `--ann-max-rows`, `--ivf-nlist`) are
-documented under "Visualization tools" with the EDA report that exposes them.
+The knobs (`--ann-k`, `--ann-hub-k`, `--ann-max-rows`, `--ivf-nlist`,
+`--metric`) are documented under "Visualization tools" with the EDA report
+that exposes them.
 
 ## Checkpoint-based eval
 
@@ -579,14 +588,16 @@ Memory-safe note:
     for LID and relative contrast, `--ann-hub-k` (default 10) the depth for
     the hubness k-occurrence count, `--ann-max-rows` (default 20000) the
     equal-N truncation every set is cut to so the metrics stay comparable
-    across series, and `--ivf-nlist` (default 256) the cluster count for the
-    IVF cell-balance panel. The pre-existing within-set k-NN distance panel
-    is not an ANN-difficulty panel and has its own `--knn-max-rows`
-    (default 20000, the same number), so tuning ANN cost does not silently
-    move it. These numbers are self-queried subsample
-    statistics, not published benchmark figures, and are only comparable
-    across the series in one report; each family's locked values are in its
-    page under `docs/datasets/`.
+    across series, `--ivf-nlist` (default 256) the cluster count for the
+    IVF cell-balance panel, and `--metric` (default `l2`) the distance the
+    corpus is searched under -- `l2` or `angular`, where `angular` requires
+    `--preprocess l2` since it is measured as L2 between unit-norm rows. The
+    pre-existing within-set k-NN distance panel is not an ANN-difficulty
+    panel and has its own `--knn-max-rows` (default 20000, the same
+    number), so tuning ANN cost does not silently move it. These numbers
+    are self-queried subsample statistics, not published benchmark figures,
+    and are only comparable across the series in one report; each family's
+    locked values are in its page under `docs/datasets/`.
   - `--synthetic-path` is optional; without it the report is pure dataset EDA.
     With it, every panel overlays the two so mismatch is visible by eye.
   - `--preprocess l2` (default) matches the training contract, since generator

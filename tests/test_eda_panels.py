@@ -44,6 +44,7 @@ def _namespace(preprocess: str = "l2") -> argparse.Namespace:
         synthetic_format="auto",
         output_dir="out",
         preprocess=preprocess,
+        metric=config.METRIC_DEFAULT,
         max_vectors=50000,
         num_pairs=500,
         knn=5,

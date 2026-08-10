@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pytest
 from tests.conftest import make_args
 
 from src.eval import ann_difficulty, eda_report
@@ -163,3 +164,57 @@ def test_help_description_is_the_module_docstring():
     description=__doc__. Pins that the docstring still opens with a stable
     phrase, since nothing else here would notice it being edited away."""
     assert "Exploratory data analysis for SIFT1M descriptors" in cli.__doc__
+
+
+def test_summary_records_the_metric_measured_under(tmp_path):
+    """A gate result is unreadable without the geometry it was measured in."""
+    rng = np.random.default_rng(0)
+    real = rng.normal(size=(200, 8)).astype(np.float32)
+
+    args = make_args(tmp_path, real, {})
+    args.metric = "angular"
+    pipeline.run(args)
+
+    summary = json.loads((Path(args.output_dir) / "summary.json").read_text())
+
+    assert summary["ann_settings"]["metric"] == "angular"
+
+
+def test_angular_runs_end_to_end_because_preprocess_puts_rows_on_the_sphere(tmp_path):
+    """`make_args` uses preprocess='l2', which is exactly angular's precondition."""
+    rng = np.random.default_rng(1)
+    real = (rng.normal(size=(200, 8)) * 5.0).astype(np.float32)
+
+    args = make_args(tmp_path, real, {})
+    args.metric = "angular"
+
+    assert pipeline.run(args).exists()
+
+
+def test_angular_with_preprocess_none_fails_loudly(tmp_path):
+    """The defect this change exists to close: geometry untied from the corpus."""
+    rng = np.random.default_rng(2)
+    real = (rng.normal(size=(200, 8)) * 5.0).astype(np.float32)
+
+    args = make_args(tmp_path, real, {})
+    args.metric = "angular"
+    args.preprocess = "none"
+
+    with pytest.raises(ValueError, match="--preprocess l2"):
+        pipeline.run(args)
+
+
+def test_cli_defaults_the_metric_to_l2(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "eda_report.py",
+            "--real-path",
+            "real.npy",
+            "--output-dir",
+            str(tmp_path / "out"),
+        ],
+    )
+
+    assert cli.parse_args().metric == "l2"

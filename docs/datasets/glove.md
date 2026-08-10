@@ -53,7 +53,7 @@ with:
     python -m src.eval.eda_report \
         --real-path data/glove_250k.npy \
         --output-dir runs/glove/profile \
-        --ann-max-rows 20000 --ann-k 100 --ann-hub-k 10
+        --ann-max-rows 20000 --ann-k 100 --ann-hub-k 10 --metric angular
 
 Read the four values out of runs/glove/profile/summary.json (written by the command above).
 
@@ -83,11 +83,16 @@ for the hubness pass, or adding a hub statistic that is not a third moment --
 changes locked measurement conditions or the gate's contents, so it needs a
 human. See the `## Gate` section.
 
-### These are L2 measurements of an angular corpus
+### Measured under this corpus's own metric
 
-`ann_difficulty.py` measures everything under L2, including this family's
-`angular` corpus, so these numbers will need re-measuring once angular
-distance support lands (phase (c)).
+`ann_difficulty.py` measures this family under its `data.metric`, which is
+`angular`: L2 between unit-norm rows. On the unit sphere Euclidean distance
+is a strictly increasing function of cosine distance, so it ranks neighbours
+identically -- the corpus is measured under the distance it is searched with.
+Measuring requires `--preprocess l2`, and `ann_difficulty.compute` refuses
+rows that are neither unit-norm nor exactly zero rather than normalizing
+them itself -- an exact zero is what `maybe_l2_normalize` leaves behind, so
+it is accepted rather than treated as a caller mistake.
 
 Two of the four will not move at all. On L2-normalized vectors the two
 distances are related by a strictly monotone map, and hubness skew and Gini
@@ -95,8 +100,11 @@ read only neighbour identity and cluster assignment, which such a map cannot
 reorder. That is an argument, not a measurement, and it holds for any corpus
 preprocessed this way.
 
-One draw measured against both distances agrees, and puts a size on the two
-that do move:
+One draw, measured before this branch shipped its own `angular`, compares L2
+against a different angular definition -- not the chord distance
+`ann_difficulty.compute` implements now. It is a historical record, not a
+reproduction target, and it puts a size on the two statistics a monotone map
+cannot fix:
 
 | Statistic | under L2 | under angular | change |
 |---|---|---|---|
@@ -106,10 +114,23 @@ that do move:
 | LID median | 35.2928 | 31.4624 | -10.85% |
 
 Unlike the two tables above, these eight figures are not backed by anything
-committed here: they came from a one-off script that is not in this tree, so
-they cannot be reproduced from a pinned commit. Treat the two percentages as
-indicative and re-measure them when phase (c) lands. The zeroes are the part
-that does not need re-measuring, for the reason given above.
+committed here: the script that produced them is not in this tree, so they
+cannot be reproduced from a pinned commit, and its measurement conditions are
+otherwise unknown. Two of its four figures fall outside the committed noise
+floor above -- the LID median of 35.2928 sits above the eight-draw range of
+35.0318--35.2086, and the IVF cell-balance Gini of 0.56835 sits below the
+eight-draw range of 0.58157--0.60339 -- so this draw was not taken under the
+canonical measurement conditions, and should not be read as a draw comparable
+to the tables above. They are also not reproducible with `--metric angular`
+as shipped: on unit-norm rows that flag returns the L2 column exactly, for
+the reason given above, not the separate angular column this one-off
+recorded. The two changed figures are consistent with the script's angular
+definition having been geodesic (`arccos`) rather than cosine -- cosine
+exactly halves LID on unit-norm rows, a larger and differently-shaped move
+than -10.85%, while a geodesic definition drops LID by a comparable amount on
+synthetic isotropic unit vectors. Consistent, not confirmed: the script
+cannot be inspected. The zeroes are the part that does not need re-measuring,
+for the reason given above.
 
 ## Model family
 

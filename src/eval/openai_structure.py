@@ -52,6 +52,12 @@ CANONICAL_K = 100
 CANONICAL_K_HUB = 10
 CANONICAL_NLIST = 256
 
+# A series whose span is below this fraction of its magnitude is drawn as a
+# constant rather than histogrammed. Set well above float32's spacing at 1.0
+# (1.19e-7) so unit-norm data stored as float32 lands on the constant branch
+# instead of eighty bars of rounding noise, and well below any real spread.
+RELATIVE_CONSTANT_SPAN = 1e-6
+
 GATE_STATS = (
     "lid_median",
     "relative_contrast_median",
@@ -421,23 +427,38 @@ def _layout(fig: go.Figure, title: str, x_title: str, y_title: str) -> go.Figure
 def fig_histogram(
     values: np.ndarray, bins: int, title: str, x_title: str, color: str
 ) -> go.Figure:
-    """Overlaid density histogram, tolerant of a constant series.
+    """Overlaid density histogram, tolerant of an effectively constant series.
 
-    The norms panel is the reason for that tolerance: this corpus is
-    supposed to be exactly unit-norm, and if it is, every value is 1.0 and
-    numpy raises "Too many bins for data range" rather than drawing a spike.
-    A constant series is a *result* here -- it is the family page's claim
-    coming out true -- so it gets a one-bin figure that says so, not a
-    crash.
+    The norms panel is the reason for that tolerance, and the reason the
+    test for it is a relative one rather than `high == low`. This corpus is
+    unit-norm, but stored as float32, so its norms are 1.0 give or take a
+    few 1e-8 -- a range that is nonzero yet far narrower than float32's
+    spacing at 1.0, which is 1.19e-7. np.histogram builds its edges in the
+    input dtype and raises "Too many bins for data range" as soon as two of
+    them collide, so a corpus that is unit-norm *to the precision it is
+    stored in* crashed here while an exactly-constant one did not.
+
+    Values are promoted to float64 so the edges are computed with room to
+    spare, and a span below RELATIVE_CONSTANT_SPAN of the magnitude is
+    reported as constant with its observed spread. At that width the
+    variation is float32 rounding rather than structure, and "1.0, spread
+    5.6e-08" says more than eighty bars of quantisation noise.
     """
+    values = np.asarray(values, dtype=np.float64)
     low, high = float(np.min(values)), float(np.max(values))
     if not np.isfinite(low) or not np.isfinite(high):
         raise ValueError(f"{title}: values contain nan or inf")
 
-    if high - low <= 0.0:
+    span = high - low
+    if span <= RELATIVE_CONSTANT_SPAN * max(abs(low), abs(high), 1.0):
         fig = go.Figure()
         fig.add_bar(x=[low], y=[1.0], marker_color=color, name=x_title)
-        fig = _layout(fig, f"{title} (constant at {low:.6g})", x_title, "density")
+        fig = _layout(
+            fig,
+            f"{title} (constant at {low:.6g}, spread {span:.3g})",
+            x_title,
+            "density",
+        )
         fig.update_xaxes(range=[low - 1.0, high + 1.0])
         return fig
 

@@ -248,6 +248,41 @@ def test_histogram_draws_a_constant_series_instead_of_raising():
     assert "constant at 1" in fig.layout.title.text
 
 
+def test_histogram_survives_float32_unit_norms():
+    """The failure that actually happened, on real data.
+
+    An exactly-constant series was already handled; this one is not exactly
+    constant. float32 norms of unit vectors sit at 1.0 give or take a few
+    1e-8, which is a nonzero span narrower than float32's spacing at 1.0
+    (1.19e-7), so np.histogram's edges collide and it raises. Guarding only
+    `high == low` let this through.
+    """
+    x = _unit(5000, 128, seed=13)
+    norms = np.linalg.norm(x, axis=1)
+
+    assert norms.dtype == np.float32
+    assert norms.max() > norms.min(), "not exactly constant, which is the point"
+
+    fig = st.fig_histogram(norms, 80, "L2 norm", "norm", "#2b6cb0")
+
+    assert isinstance(fig, go.Figure)
+    assert "constant at 1" in fig.layout.title.text
+
+
+def test_histogram_still_bins_a_genuinely_narrow_but_real_spread():
+    """The constant branch must not swallow real structure.
+
+    A spread of 1% is narrow but is not rounding noise, so it gets bins.
+    """
+    rng = np.random.default_rng(14)
+    values = 1.0 + rng.normal(scale=0.01, size=5000)
+
+    fig = st.fig_histogram(values, 80, "x", "x", "#2b6cb0")
+
+    assert "constant" not in fig.layout.title.text
+    assert len(fig.data[0].x) == 80
+
+
 def test_histogram_rejects_non_finite_values():
     values = np.array([1.0, np.nan, 3.0])
 

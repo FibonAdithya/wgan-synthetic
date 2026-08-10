@@ -166,9 +166,14 @@ searched under — a property of the family, which is why it sits beside
 It is not a preprocessing instruction. `l2_normalize` is set independently,
 and an `angular` corpus is not thereby normalized nor an `l2` one left alone;
 the two settings answer different questions. The value is validated at load
-time against the two accepted strings and is otherwise inert today: nothing
-consumes it yet. Reading it in `src/eval/ann_difficulty.py`, so difficulty is
-measured under the metric the corpus is actually searched with, is phase (c).
+time against the two accepted strings.
+`src/eval/compare_variants.py` reads it from a family's variant configs and
+threads it into `src/eval/ann_difficulty.py`, so difficulty is measured under
+the metric the corpus is actually searched with. `angular` is measured as L2
+between unit-norm rows, which orders neighbours exactly as cosine does;
+`compute` refuses rows that are not unit-norm rather than normalizing them,
+so a report's `preprocess` setting cannot disagree with the geometry it
+measured under.
 
 ---
 
@@ -328,11 +333,11 @@ published figures, which are measured on the full corpus against the real
 query set. Without a locked pair, a gate result from last month cannot be
 read against today's.
 
-`ann_difficulty.py` currently computes everything under L2, including for the
-four `angular` families. Reading `data.metric` and measuring under the
-corpus's own distance is phase (c) of the multi-dataset design; until it
-lands, angular-family numbers are internally consistent within a report but
-are not the distance the corpus is searched with.
+`ann_difficulty.py` measures each family under its `data.metric`. The four
+`angular` families are measured as L2 between unit-norm rows, which is the
+distance their corpora are searched under; `l2` families are measured as
+given. Reports must therefore run angular families at `--preprocess l2`,
+which `compare_variants` does for every family.
 
 The knobs (`--ann-k`, `--ann-hub-k`, `--ann-max-rows`, `--ivf-nlist`) are
 documented under "Visualization tools" with the EDA report that exposes them.

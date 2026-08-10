@@ -56,9 +56,12 @@ Fill the real column with:
 
 Read the four values out of runs/nytimes/profile/summary.json (written by the command above).
 
-`ann_difficulty.py` currently measures everything under L2, including this
-family's `angular` corpus, so these numbers will need re-measuring once
-angular distance support lands (phase (c)).
+`ann_difficulty.py` measures this family under its `data.metric`, which is
+`angular`: L2 between unit-norm rows. On the unit sphere Euclidean distance
+is a strictly increasing function of cosine distance, so it ranks neighbours
+identically -- the corpus is measured under the distance it is searched with.
+Measuring requires `--preprocess l2`, and `ann_difficulty.compute` refuses
+rows that are not on the sphere rather than normalizing them itself.
 
 ## Model family
 

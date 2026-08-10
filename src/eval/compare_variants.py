@@ -42,6 +42,7 @@ import torch
 import yaml
 
 from src.data.dataset import PreprocessState, invert_preprocess
+from src.eval.ann_difficulty import METRICS
 from src.eval.eda import config as eda_config
 from src.eval.eda import pipeline
 from src.eval.evaluate_distribution import get_device, load_generator
@@ -191,7 +192,18 @@ def family_metric(variants: Sequence[Variant], root: Path) -> str:
     Every manifest entry is read, not only the ones whose checkpoints resolved
     on this box, so the geometry a report is measured under cannot depend on
     which runs happen to be present.
+
+    A value outside `METRICS` is rejected here, before any sampling, rather
+    than left to surface inside `ann_difficulty.compute` afterwards --
+    `eda.cli`'s `--metric` flag is already guarded by `choices=list(METRICS)`,
+    and a config-sourced value deserves the same guard.
+
+    `variants` must be non-empty; `load_variants` already refuses an empty
+    manifest, so this only guards against a caller that bypasses it.
     """
+    if not variants:
+        raise ValueError("family_metric requires at least one variant.")
+
     by_metric: dict[str, list[str]] = {}
     for variant in variants:
         path = root / variant.config_path
@@ -203,6 +215,12 @@ def family_metric(variants: Sequence[Variant], root: Path) -> str:
             )
         doc = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         metric = str((doc.get("data") or {}).get("metric", eda_config.METRIC_DEFAULT))
+        if metric not in METRICS:
+            raise SystemExit(
+                f"{path} (variant {variant.name!r}) sets data.metric="
+                f"{metric!r}, which is not one of {METRICS}. Fix the config "
+                "before this family's corpus can be measured."
+            )
         by_metric.setdefault(metric, []).append(variant.name)
 
     if len(by_metric) > 1:

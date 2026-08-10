@@ -659,11 +659,18 @@ def test_family_metric_reads_angular_from_the_variant_configs(tmp_path):
     assert cv.family_metric(variants, tmp_path) == "angular"
 
 
-def test_family_metric_defaults_to_l2_when_a_config_omits_it():
-    """Older configs predate the field; l2 is what they were measured under."""
-    variants = (cv.Variant("v0", "configs/sift/v0.yaml", "runs/v0"),)
+def test_family_metric_defaults_to_l2_when_a_config_omits_it(tmp_path):
+    """Older configs predate the field; l2 is what they were measured under.
 
-    assert cv.family_metric(variants, cv.REPO_ROOT) == "l2"
+    Written under tmp_path rather than pointed at a real repo config: every
+    shipped config already states data.metric explicitly (configs/sift/v0.yaml
+    included), so reading one would not exercise the fallback and editing
+    that file's metric would silently break this test about defaults.
+    """
+    _write_family_config(tmp_path, "configs/z/v0.yaml")
+    variants = (cv.Variant("v0", "configs/z/v0.yaml", "runs/v0"),)
+
+    assert cv.family_metric(variants, tmp_path) == "l2"
 
 
 def test_family_metric_refuses_configs_that_disagree(tmp_path):
@@ -691,17 +698,86 @@ def test_family_metric_names_a_config_it_cannot_find(tmp_path):
     assert "configs/gone/v0.yaml" in str(excinfo.value)
 
 
-def test_family_metric_reads_every_manifest_entry_not_only_resolved_ones(tmp_path):
-    """Geometry must not depend on which checkpoints happen to be on this box."""
-    _write_family_config(tmp_path, "configs/y/v0.yaml", "angular")
-    _write_family_config(tmp_path, "configs/y/v1.yaml", "l2")
-    variants = (
-        cv.Variant("v0", "configs/y/v0.yaml", "runs/y/v0"),
-        cv.Variant("v1", "configs/y/v1.yaml", "runs/y/v1"),
+def test_family_metric_rejects_a_value_outside_metrics(tmp_path):
+    """A typo or an unsupported distance must die before sampling, not inside
+    ann_difficulty.compute afterwards -- eda.cli's --metric flag is already
+    guarded by choices=list(METRICS); this path needs the same guard."""
+    _write_family_config(tmp_path, "configs/w/v0.yaml", "cosine")
+    variants = (cv.Variant("v0", "configs/w/v0.yaml", "runs/w/v0"),)
+
+    with pytest.raises(SystemExit) as excinfo:
+        cv.family_metric(variants, tmp_path)
+
+    message = str(excinfo.value)
+    assert "configs/w/v0.yaml" in message
+    assert "v0" in message
+    assert "cosine" in message
+    assert "l2" in message and "angular" in message
+
+
+def test_family_metric_requires_at_least_one_variant():
+    with pytest.raises(ValueError):
+        cv.family_metric((), Path("."))
+
+
+def test_main_reads_the_config_of_a_variant_skipped_by_allow_missing(
+    monkeypatch, tmp_path, write_tiny_gated_run
+):
+    """family_metric must see every manifest entry, not only the resolved ones.
+
+    The second variant's run directory is absent, so --allow-missing skips
+    it, and its config is *also* absent. If `main` handed `family_metric`
+    only the resolved variants, that missing config would never be read and
+    this would run to completion instead of raising -- the discriminating
+    property `family_metric(found, root)` vs `family_metric(variants, root)`
+    actually differ on.
+    """
+    variant, _ = write_tiny_gated_run(tmp_path)
+    _write_family_config(tmp_path, variant.config_path, "l2")
+    manifest = write_manifest(
+        tmp_path / "variants.yaml",
+        [
+            {
+                "name": variant.name,
+                "config": variant.config_path,
+                "run_dir": variant.run_dir,
+            },
+            {
+                "name": "absent",
+                "config": "configs/gone/v0.yaml",
+                "run_dir": "runs/nope",
+            },
+        ],
     )
 
-    with pytest.raises(SystemExit):
-        cv.family_metric(variants, tmp_path)
+    monkeypatch.setattr(
+        cv.pipeline, "run", lambda args: Path(args.output_dir) / "report.html"
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "compare_variants.py",
+            "--real-path",
+            str(tmp_path / "real.npy"),
+            "--output-dir",
+            str(tmp_path / "out"),
+            "--root",
+            str(tmp_path),
+            "--variants-manifest",
+            str(manifest),
+            "--allow-missing",
+            "--num-samples",
+            "20",
+            "--batch-size",
+            "8",
+        ],
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        cv.main()
+
+    assert "configs/gone/v0.yaml" in str(excinfo.value)
 
 
 def test_main_hands_the_family_metric_to_the_report(

@@ -52,6 +52,10 @@ carries no sampling noise of its own.
 **v4 moves every statistic toward real.** That is the result, and it is the first
 positive one this track has produced.
 
+**It is not, however, the best rung on this gate.** See "Against the baseline"
+below before quoting any of the above: measured against `v0`, the whole
+structured-gate line is behind the plain WGAN-GP it was built to improve on.
+
 ### Is it noise?
 
 Two independent estimates, and they disagree in a way that matters.
@@ -89,6 +93,54 @@ This is what v3's own write-up predicted. It read v3's uniform failure as one
 cause rather than four: "the generator is not reproducing the local density
 variation that makes real descriptor neighbourhoods hard." v4 targets exactly that
 and all four statistics moved together. The hypothesis survived its test.
+
+## Against the baseline
+
+The comparison above is v3 against v4, which is what the pair was run to measure.
+It says nothing about whether either beats the rung they descend from. Measured
+2026-08-10, |gap to real|, `v0` sampled from `runs/long_baseline` at the same 30k
+length as v3 and v4 (`eda_v0_v3_v4_30k_summary.json`):
+
+| Statistic | v0 | v3 | v4 |
+|---|---|---|---|
+| LID median | **0.4386** | 7.0148 | 2.1918 |
+| Relative contrast | **0.0061** | 0.8535 | 0.1467 |
+| Hubness skew | **0.2041** | 0.9906 | 0.2855 |
+| IVF cell-balance Gini | **0.0322** | 0.0563 | 0.0359 |
+
+**`v0` is closer to real than either, on all four.** On LID -- the one statistic
+the noise floor calls comfortably usable -- it is ahead of `v4` by 10.7x that
+floor, so this is not a marginal call. No length confound: all three are 30k runs.
+
+Widening to every rung (`eda_ladder_all_summary.json`) locates where it starts:
+
+| Statistic | v0 | v1 | v1_5 | v2 | v3 | v4 |
+|---|---|---|---|---|---|---|
+| LID median | 0.44 | 0.29 | **0.27** | 2.95 | 7.01 | 2.19 |
+| Relative contrast | **0.006** | 0.015 | 0.014 | 0.245 | 0.854 | 0.147 |
+| Hubness skew | 0.20 | 0.21 | 0.27 | **0.06** | 0.99 | 0.29 |
+| IVF Gini | 0.032 | 0.020 | 0.025 | **0.012** | 0.056 | 0.036 |
+| exact-zero fraction | 0.000 | 0.000 | 0.000 | 0.152 | 0.179 | **0.244** |
+
+Real exact-zero fraction is 0.230. `v1`, `v1_5` and `v2` are 100k runs against
+`v0`, `v3` and `v4` at 30k, so read across that boundary with care -- but the
+`v1_5` -> `v2` step is clean, both being 100k, and it is where the gate breaks:
+LID gap 0.27 -> 2.95.
+
+**The gate and support fidelity are anticorrelated across this ladder.** The
+dense MLP rungs win every gate column while producing *no exact zeros at all*
+against real SIFT's 23% -- they are not SIFT-shaped, merely as hard to search.
+The regression begins precisely at `v2`, where the gate mechanism is introduced.
+`v4` has the best support match of any rung and recovers most of `v3`'s damage,
+and is still behind `v0` everywhere on the gate.
+
+This is worth stating as an open question rather than a conclusion. `AGENTS.md`
+invariant 1 makes ANN difficulty the gate and everything else a diagnostic; read
+literally, it says prefer `v1_5` and abandon this line. But it is ranking a
+generator that cannot emit a single exact zero above one that reproduces the
+support, which is either a real finding about what drives search difficulty or
+evidence that the four statistics are not sufficient alone. `configs/sift/v4_sift1m_x100k.yaml`
+exists to remove the remaining length confound from the `v2`/`v4` comparison.
 
 ## What this does not say
 

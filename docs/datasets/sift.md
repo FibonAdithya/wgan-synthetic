@@ -88,6 +88,15 @@ run-to-run noise. Its LID is not evidence: `lid_reg` fits LID's sufficient
 statistic directly. Neither rung's checkpoints are in this repo — they are on
 the training box, listed in each result page.
 
+**Do not read that as `v4` being the best rung here.** Measured against the
+baseline at the same 30k length, `v0` is closer to real on *all four* gate
+statistics — on LID by 10.7x the noise floor below. The whole gated line
+(`v2` onward) trades gate performance for support fidelity: the dense rungs
+emit no exact zeros at all against real SIFT's 0.230, while `v4` matches the
+support best of any rung and is still behind `v0` on every gate column. The
+tables and the open question are in `docs/results/v4-logratio/`, under
+"Against the baseline".
+
 Train `v0` (or any rung, by swapping the config):
 
     python -m src.train.train_wgan_gp --config configs/sift/v0.yaml

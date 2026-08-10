@@ -40,9 +40,32 @@ def test_unknown_type_raises():
         build_generator(dict(BASE_CFG, generator_type="nope"), output_dim=128)
 
 
-def test_sparse_is_no_longer_accepted():
-    with pytest.raises(ValueError, match="Unknown generator_type"):
-        build_generator(dict(BASE_CFG, generator_type="sparse"), output_dim=128)
+# `sparse` was renamed to `gated` in b29e317, but run configs already written
+# still say `sparse`. A run config is the historical record of a run that
+# happened, and invariant 4 in AGENTS.md rebuilds the architecture from it at
+# load time -- so the rename must not make those checkpoints unloadable.
+def test_sparse_is_a_deprecated_alias_for_gated():
+    cfg = dict(BASE_CFG, generator_type="sparse")
+    generator = build_generator(cfg, output_dim=128)
+    assert isinstance(generator, GatedGenerator)
+    assert generator.gate_temperature == 0.5
+    assert generator.logit_clamp == 10.0
+
+
+def test_sparse_alias_honours_the_same_overrides_as_gated():
+    cfg = dict(
+        BASE_CFG, generator_type="sparse", gate_temperature=0.25, logit_clamp=4.0
+    )
+    generator = build_generator(cfg, output_dim=128)
+    assert generator.gate_temperature == 0.25
+    assert generator.logit_clamp == 4.0
+
+
+def test_sparse_and_gated_build_the_same_architecture():
+    """The alias must be load-compatible, not merely the same class."""
+    sparse = build_generator(dict(BASE_CFG, generator_type="sparse"), output_dim=128)
+    gated = build_generator(dict(BASE_CFG, generator_type="gated"), output_dim=128)
+    sparse.load_state_dict(gated.state_dict())
 
 
 def test_output_dim_is_respected():

@@ -129,9 +129,17 @@ class GatedGenerator(nn.Module):
         return x / torch.clamp(norm, min=self.eps)
 
 
+# `gated` was called `sparse` before b29e317. The rename changed the code but
+# not the run configs already on disk, and a run config is the historical
+# record of a run that happened -- so the old name still has to build the
+# architecture it named, or those checkpoints become unloadable.
+GENERATOR_TYPE_ALIASES = {"sparse": "gated"}
+
+
 def build_generator(model_cfg: Mapping[str, Any], output_dim: int) -> nn.Module:
     """Build the configured generator, defaulting to the legacy MLP."""
     kind = model_cfg.get("generator_type", "mlp")
+    kind = GENERATOR_TYPE_ALIASES.get(kind, kind)
     common = {
         "latent_dim": int(model_cfg["latent_dim"]),
         "output_dim": output_dim,

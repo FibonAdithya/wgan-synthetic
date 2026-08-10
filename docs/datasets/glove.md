@@ -83,7 +83,7 @@ for the hubness pass, or adding a hub statistic that is not a third moment --
 changes locked measurement conditions or the gate's contents, so it needs a
 human. See the `## Gate` section.
 
-### These are L2 measurements of an angular corpus
+### Measured under this corpus's own metric
 
 `ann_difficulty.py` measures this family under its `data.metric`, which is
 `angular`: L2 between unit-norm rows. On the unit sphere Euclidean distance
@@ -98,8 +98,11 @@ read only neighbour identity and cluster assignment, which such a map cannot
 reorder. That is an argument, not a measurement, and it holds for any corpus
 preprocessed this way.
 
-One draw measured against both distances agrees, and puts a size on the two
-that do move:
+One draw, measured before this branch shipped its own `angular`, compares L2
+against a different angular definition -- not the chord distance
+`ann_difficulty.compute` implements now. It is a historical record, not a
+reproduction target, and it puts a size on the two statistics a monotone map
+cannot fix:
 
 | Statistic | under L2 | under angular | change |
 |---|---|---|---|
@@ -109,10 +112,17 @@ that do move:
 | LID median | 35.2928 | 31.4624 | -10.85% |
 
 Unlike the two tables above, these eight figures are not backed by anything
-committed here: they came from a one-off script that is not in this tree, so
-they cannot be reproduced from a pinned commit. Treat the two percentages as
-indicative. The zeroes are the part that does not need re-measuring, for the
-reason given above.
+committed here: the script that produced them is not in this tree, so they
+cannot be reproduced from a pinned commit. They are also not reproducible
+with `--metric angular` as shipped: on unit-norm rows that flag returns the
+L2 column exactly, for the reason given above, so a reader running this tool
+should expect 35.2928, not 31.4624. The two changed figures are consistent
+with the script's angular definition having been geodesic (`arccos`) rather
+than cosine -- cosine exactly halves LID on unit-norm rows, a larger and
+differently-shaped move than -10.85%, while a geodesic definition drops LID
+by a comparable amount on synthetic isotropic unit vectors. Consistent, not
+confirmed: the script cannot be inspected. The zeroes are the part that does
+not need re-measuring, for the reason given above.
 
 ## Model family
 

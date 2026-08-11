@@ -52,7 +52,9 @@ def _summary(real, series):
         "ann_measured_nlist": 256,
     }
     stats = [{"name": noise_floor.REAL_NAME, **real, **conditions}]
-    stats.extend({"name": name, **values, **conditions} for name, values in series.items())
+    stats.extend(
+        {"name": name, **values, **conditions} for name, values in series.items()
+    )
     return {"stats": stats}
 
 
@@ -118,7 +120,9 @@ def test_missing_series_is_an_error_not_a_silent_skip():
 
 def test_missing_real_series_is_an_error():
     summary = _summary(BASE, {"s42": BASE, "s43": BASE})
-    summary["stats"] = [e for e in summary["stats"] if e["name"] != noise_floor.REAL_NAME]
+    summary["stats"] = [
+        e for e in summary["stats"] if e["name"] != noise_floor.REAL_NAME
+    ]
     with pytest.raises(noise_floor.NoiseFloorError, match="real"):
         noise_floor.compute_floor(summary, ["s42", "s43"])
 
@@ -217,13 +221,21 @@ def test_cli_writes_the_floor_to_a_file(tmp_path):
 
     result = subprocess.run(
         [
-            sys.executable, "-m", "src.eval.noise_floor",
-            "--summary", str(summary_path),
-            "--series", "s42",
-            "--series", "s43",
-            "--output", str(out_path),
+            sys.executable,
+            "-m",
+            "src.eval.noise_floor",
+            "--summary",
+            str(summary_path),
+            "--series",
+            "s42",
+            "--series",
+            "s43",
+            "--output",
+            str(out_path),
         ],
-        cwd=REPO_ROOT, capture_output=True, text=True,
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
     )
 
     assert result.returncode == 0, result.stderr
@@ -236,16 +248,25 @@ def test_cli_writes_the_floor_to_a_file(tmp_path):
 
 def test_cli_exits_nonzero_on_a_missing_series(tmp_path):
     summary_path = tmp_path / "summary.json"
-    summary_path.write_text(json.dumps(_summary(BASE, {"s42": BASE, "s43": BASE})), encoding="utf-8")
+    summary_path.write_text(
+        json.dumps(_summary(BASE, {"s42": BASE, "s43": BASE})), encoding="utf-8"
+    )
 
     result = subprocess.run(
         [
-            sys.executable, "-m", "src.eval.noise_floor",
-            "--summary", str(summary_path),
-            "--series", "s42",
-            "--series", "s99",
+            sys.executable,
+            "-m",
+            "src.eval.noise_floor",
+            "--summary",
+            str(summary_path),
+            "--series",
+            "s42",
+            "--series",
+            "s99",
         ],
-        cwd=REPO_ROOT, capture_output=True, text=True,
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
     )
 
     assert result.returncode == 1
@@ -263,12 +284,19 @@ def test_cli_exits_nonzero_not_a_traceback_on_a_non_numeric_statistic(tmp_path):
 
     result = subprocess.run(
         [
-            sys.executable, "-m", "src.eval.noise_floor",
-            "--summary", str(summary_path),
-            "--series", "s42",
-            "--series", "s43",
+            sys.executable,
+            "-m",
+            "src.eval.noise_floor",
+            "--summary",
+            str(summary_path),
+            "--series",
+            "s42",
+            "--series",
+            "s43",
         ],
-        cwd=REPO_ROOT, capture_output=True, text=True,
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
     )
 
     assert result.returncode == 1

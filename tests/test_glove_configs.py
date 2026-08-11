@@ -38,7 +38,9 @@ def _flatten(d: dict[str, Any], prefix: str = "") -> dict[str, Any]:
 @pytest.mark.parametrize("name", INSTRUMENTS)
 def test_instrument_differs_from_the_rung_only_where_allowed(name: str):
     rung, instrument = _flatten(_load("v0")), _flatten(_load(name))
-    differing = {k for k in rung.keys() | instrument.keys() if rung.get(k) != instrument.get(k)}
+    differing = {
+        k for k in rung.keys() | instrument.keys() if rung.get(k) != instrument.get(k)
+    }
     assert differing <= ALLOWED_DELTAS
 
 

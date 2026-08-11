@@ -21,8 +21,8 @@ import argparse
 import json
 import statistics
 import sys
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 # Named exactly as `src/eval/ann_difficulty.py::summary()` returns them, which
 # is how they reach `stats` in summary.json.
@@ -52,9 +52,7 @@ def summarize_spread(values: Sequence[float]) -> dict[str, float]:
     range expressed as a percentage of the mean.
     """
     if len(values) < 2:
-        raise NoiseFloorError(
-            f"spread needs at least two values, got {len(values)}"
-        )
+        raise NoiseFloorError(f"spread needs at least two values, got {len(values)}")
     mean = statistics.fmean(values)
     low, high = min(values), max(values)
     std = statistics.stdev(values)
@@ -109,9 +107,7 @@ def _check_conditions(real_name: str, real_entry: dict, name: str, entry: dict) 
 
 def _value(entry: dict, statistic: str) -> float:
     if statistic not in entry:
-        raise NoiseFloorError(
-            f"series {entry.get('name')!r} has no {statistic!r}"
-        )
+        raise NoiseFloorError(f"series {entry.get('name')!r} has no {statistic!r}")
     value = entry[statistic]
     if value is None:
         # ann_difficulty writes null when every query was discarded. That is a
@@ -239,7 +235,13 @@ def main() -> None:
     try:
         summary = json.loads(Path(args.summary).read_text(encoding="utf-8"))
         floor = compute_floor(summary, args.series, real_name=args.real_name)
-    except (NoiseFloorError, OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
+    except (
+        NoiseFloorError,
+        OSError,
+        json.JSONDecodeError,
+        TypeError,
+        ValueError,
+    ) as exc:
         # stderr, so stdout stays parseable as JSON or empty, never half a
         # report.
         print(f"noise_floor: {exc}", file=sys.stderr)

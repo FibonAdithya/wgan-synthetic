@@ -61,6 +61,10 @@ def test_benchmark_cell_returns_normalized_partial_batch() -> None:
     np.testing.assert_allclose(np.linalg.norm(cell["samples"], axis=1), 1.0, atol=1e-6)
     assert cell["save_seconds"] is None
     assert cell["peak_vram_bytes"] is None
+    assert cell["peak_vram_reserved_bytes"] is None
+    assert cell["incremental_peak_vram_bytes"] is None
+    assert cell["incremental_peak_vram_reserved_bytes"] is None
+    assert cell["host_output_bytes"] == 7 * 4 * np.dtype(np.float32).itemsize
     for phase in ("generate_seconds", "to_host_seconds"):
         assert set(cell[phase]) == {"min", "median", "p95"}
         assert all(

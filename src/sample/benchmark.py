@@ -59,7 +59,12 @@ def benchmark_cell(
     to_host_times: list[float] = []
     save_times: list[float] = []
     samples = np.empty((num_samples, descriptor_dim), dtype=np.float32)
+    baseline_vram_allocated = None
+    baseline_vram_reserved = None
     if device.type == "cuda":
+        _synchronize(device)
+        baseline_vram_allocated = int(torch.cuda.memory_allocated(device))
+        baseline_vram_reserved = int(torch.cuda.memory_reserved(device))
         torch.cuda.reset_peak_memory_stats(device)
 
     generator.eval()
@@ -92,9 +97,16 @@ def benchmark_cell(
                 np.save(save_dir / f"samples_repeat_{repeat}.npy", samples)
                 save_times.append(time.perf_counter() - started)
 
-    peak_vram = (
-        int(torch.cuda.max_memory_allocated(device)) if device.type == "cuda" else None
-    )
+    peak_vram = None
+    peak_vram_reserved = None
+    incremental_peak_vram = None
+    incremental_peak_vram_reserved = None
+    if device.type == "cuda":
+        _synchronize(device)
+        peak_vram = int(torch.cuda.max_memory_allocated(device))
+        peak_vram_reserved = int(torch.cuda.max_memory_reserved(device))
+        incremental_peak_vram = peak_vram - baseline_vram_allocated
+        incremental_peak_vram_reserved = peak_vram_reserved - baseline_vram_reserved
     generate_summary = _summary(generate_times)
     return {
         "num_samples": num_samples,
@@ -102,6 +114,12 @@ def benchmark_cell(
         "to_host_seconds": _summary(to_host_times),
         "save_seconds": _summary(save_times) if save_times else None,
         "peak_vram_bytes": peak_vram,
+        "peak_vram_reserved_bytes": peak_vram_reserved,
+        "baseline_vram_allocated_bytes": baseline_vram_allocated,
+        "baseline_vram_reserved_bytes": baseline_vram_reserved,
+        "incremental_peak_vram_bytes": incremental_peak_vram,
+        "incremental_peak_vram_reserved_bytes": incremental_peak_vram_reserved,
+        "host_output_bytes": int(samples.nbytes),
         "throughput_vectors_per_second": num_samples
         / max(generate_summary["median"], 1.0e-12),
         "samples": samples,
@@ -178,18 +196,22 @@ def run_grid(
 def format_markdown_table(cells: list[dict[str, Any]]) -> str:
     """Render the budgeting view of benchmark cells."""
     lines = [
-        "| Config | Architecture | N | Generate median (s) | To host median (s) | Budget p95 (s) | Vectors/s | Peak VRAM |",
-        "|---|---|---:|---:|---:|---:|---:|---:|",
+        "| Config | Architecture | N | Generate median (s) | To host median (s) | Budget p95 (s) | Vectors/s | Incremental peak VRAM | Peak reserved VRAM | Host output |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for cell in cells:
-        peak = cell["peak_vram_bytes"]
+        peak = cell["incremental_peak_vram_bytes"]
+        reserved = cell["peak_vram_reserved_bytes"]
         peak_text = "n/a" if peak is None else f"{peak / (1024**2):.1f} MiB"
+        reserved_text = "n/a" if reserved is None else f"{reserved / (1024**2):.1f} MiB"
+        host_text = f"{cell['host_output_bytes'] / (1024**2):.1f} MiB"
         budget = cell["generate_seconds"]["p95"] + cell["to_host_seconds"]["p95"]
         lines.append(
             f"| {cell['config']} | {cell['generator_type']} | "
             f"{cell['num_samples']:,} | {cell['generate_seconds']['median']:.6f} | "
             f"{cell['to_host_seconds']['median']:.6f} | {budget:.6f} | "
-            f"{cell['throughput_vectors_per_second']:.1f} | {peak_text} |"
+            f"{cell['throughput_vectors_per_second']:.1f} | {peak_text} | "
+            f"{reserved_text} | {host_text} |"
         )
     return "\n".join(lines) + "\n"
 

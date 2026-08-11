@@ -46,10 +46,19 @@ locked here so a gate result stays readable against an older one.
 
 | Statistic | Real | Synthetic (best variant) |
 |---|---|---|
-| LID median | not yet measured | — |
-| Relative contrast | not yet measured | — |
-| Hubness skew | not yet measured | — |
-| IVF cell-balance Gini | not yet measured | — |
+| LID median | `31.88` | — |
+| Relative contrast | `1.375` | — |
+| Hubness skew | `1.555` | — |
+| IVF cell-balance Gini | `0.552` | — |
+
+Measured 2026-08-10 on `openai_250k.npy`, the corpus `configs/openai/v0.yaml`
+names. The synthetic column stays empty until this family has a trained
+rung; there is nothing to put in it yet.
+
+Two properties of the corpus were confirmed rather than assumed while
+measuring: every row is unit-norm to float32 precision (norm spread under
+`3e-8`), and no two rows are duplicates. The first is what makes `angular`
+measurable as L2 here at all.
 
 Fill the real column with:
 
@@ -93,9 +102,95 @@ It also measures the L2-versus-cosine question directly, which is the
 empirical form of the argument above: whether the two induce the same
 neighbour sets, and by what factor the distance-ratio statistics differ.
 
+### Noise floor
+
+Ten disjoint 20,000-row draws of the same real corpus, measured 2026-08-10.
+The spread is what redrawing real data moves a statistic by, so a band
+narrower than it would reject the real corpus. It bounds how tight any band
+for that statistic can be; it does not say where the band goes.
+
+| Statistic | min | median | max | spread | % of median |
+|---|---|---|---|---|---|
+| LID median | `31.71` | `31.80` | `31.96` | `0.245` | `0.77%` |
+| Relative contrast | `1.3754` | `1.3769` | `1.3813` | `0.0059` | `0.43%` |
+| Hubness skew | `1.441` | `1.495` | `1.582` | `0.140` | `9.38%` |
+| IVF Gini | `0.5561` | `0.5697` | `0.5895` | `0.0334` | `5.87%` |
+
+All four are usable here, which is not true of every family: SIFT's contrast
+and Gini and GloVe's hubness skew each came out noise-dominated at their own
+canonical N. Relative contrast and LID are stable to under a percent and can
+carry tight bands. Hubness skew is the loosest at 9.4% and IVF Gini next at
+5.9%, so bands for those two have to be at least that wide before they admit
+real data at all.
+
+### Angular versus L2, measured
+
+The argument that `angular` can be measured as L2 between unit-norm rows
+holds on this corpus, and by a wide margin:
+
+| | |
+|---|---|
+| Neighbour-set agreement at k=100 | `0.9999935` |
+| Hubness skew, L2 vs cosine | `1.5702607` vs `1.5702458` |
+| LID median, L2 vs cosine | `31.810` vs `15.905` |
+
+The neighbour sets are the same to within a rounding tie, so hubness — which
+depends only on which points are neighbours — is invariant to five
+significant figures. LID under cosine is exactly half the L2 value, which is
+what `cos = L2^2/2` implies for a log-ratio estimator, so it rescales rather
+than reorders. Re-running the profile under `--metric angular` reproduced the
+L2 numbers bit for bit.
+
 ## Model family
 
 `mlp` today, `spherical` when phase (b) lands.
+
+### What the geometry says about `v0`
+
+Measured 2026-08-10. These are readings, not decisions: no config below has
+been changed, and each would be a ladder rung someone chooses deliberately.
+
+**This corpus is a narrow cone, not a sphere.** The mean vector has norm
+`0.83` — on an isotropic unit sphere it would be near zero — and random pairs
+sit at cosine `0.688`, where an isotropic 1536-dimensional sphere would give
+about `0.000 ± 0.026`. The typical vector is at cosine `0.83` to the mean
+direction.
+
+That is the case for `spherical` mattering more here than elsewhere. An
+`mlp` reaching the sphere by dividing at the end has to place essentially all
+of its output inside a cone of half-angle ~34 degrees, so almost all of the
+space it can express is off-manifold. The anisotropy is a property of the
+embedding model, not of this subset.
+
+**Intrinsic dimension is roughly 23 to 32**, against an ambient 1536: two-NN
+gives `22.7` and LID median `31.9`. `latent_dim: 512` is an order of
+magnitude above that. A larger latent than manifold is not wrong on its own —
+the generator can learn a degenerate map — but nothing in this measurement
+argues for 512, and a rung at 64 or 128 would be a cheap thing to compare
+against.
+
+**Centering is the largest single lever, and the one with a catch.** The
+spectrum about the origin, which is what `preprocess.center: false` hands the
+generator, is dominated by the shared mean direction:
+
+| | about the origin | about the mean |
+|---|---|---|
+| Top component's share of variance | `69.0%` | `3.6%` |
+| Participation ratio | `2.10` | `175.3` |
+| Components for 90% of variance | `155` | `459` |
+
+By participation ratio the uncentered corpus effectively uses two directions
+and the centered one 175 — a factor of 83. Most of what a `center: false`
+generator spends capacity reproducing is a constant offset shared by every
+row.
+
+The catch is that centering is not free at evaluation time. Centered rows are
+no longer unit-norm, and `ann_difficulty.compute` refuses rows that are
+neither unit-norm nor exactly zero, so a centered run has to be mapped back
+through its transform before it can be gated — which is what
+`run_metadata.json` exists for, and which `compare_variants` already requires
+for exactly this case. A centering rung is worth trying and is not a
+one-line config change.
 
 ## Ladder
 

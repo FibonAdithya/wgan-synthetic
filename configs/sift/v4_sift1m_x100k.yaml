@@ -1,0 +1,89 @@
+# v4 at 100k steps, on sift_1m. The length-matched arm against v2.
+#
+# Exactly five keys differ from configs/sift/v4_sift1m.yaml, all of them run
+# length or logging cadence -- no model or optimisation change:
+#
+#   1. output_dir   runs/sift/v4_sift1m -> runs/sift/v4_sift1m_x100k
+#   2. num_gen_steps        30000 -> 100000
+#   3. log_every              250 -> 500
+#   4. eval_every            1000 -> 2000
+#   5. save_every            2000 -> 5000
+#
+# The cadence values match configs/x100k_structured.yaml, which is the same
+# 100k arm for v3, so the two are directly comparable.
+#
+# WHY THIS RUN EXISTS. Measured 2026-08-10 across the whole ladder, gap to real
+# at canonical conditions (docs/results/v4-logratio/, plus a ladder report):
+#
+#   stat            v0     v1   v1_5     v2     v3     v4
+#   LID median    0.44   0.29   0.27   2.95   7.01   2.19
+#   exact-zero    0.00   0.00   0.00   0.15   0.18   0.24   (real 0.23)
+#
+# Two things that table says. First, the dense MLP rungs win the gate outright
+# while producing *no* exact zeros at all -- they are not SIFT-shaped, they are
+# merely as hard to search. Second, the gate regression starts exactly at v2,
+# where the gate mechanism appears, and the v1_5 -> v2 step is clean of any
+# length confound because both are 100k runs.
+#
+# v3 and v4 are 30k runs, so their comparison against v2 is *not* clean: v4's
+# 2.19 LID gap beats v2's 2.95 on a third of the training, but the two differ
+# in length as well as in the regularizer. This run removes that confound. It
+# is the experiment that decides whether the gated line closes on the dense
+# rungs with more training or plateaus short of them.
+#
+# It is an instrument, not a rung: the absolute corpus path below is
+# box-specific by construction, for the reason set out in
+# configs/sift/v3_sift1m.yaml. The v4 rung is configs/sift/v4.yaml.
+#
+# Reading the result: v4 fits LID's sufficient statistic directly, so its
+# lid_median is not evidence the way relative_contrast and hubness_skew are.
+# Against v2 the honest question is whether the *support* advantage (v4 0.244
+# exact-zero against v2 0.152, real 0.230) survives at matched length without
+# giving back the gate.
+seed: 42
+device: cuda:0
+output_dir: runs/sift/v4_sift1m_x100k
+
+data:
+  real_path: /workspace/data-cache/sift_1m.npy
+  format: npy
+  descriptor_dim: 128
+  holdout_fraction: 0.05
+  synthetic_if_missing: false
+  synthetic_num_vectors: 100000
+  preprocess:
+    center: false
+    whiten: false
+    l2_normalize: true
+
+model:
+  latent_dim: 128
+  generator_hidden_dims: [512, 1024, 1024]
+  critic_hidden_dims: [1024, 512, 256]
+  negative_slope: 0.2
+  generator_type: structured_gated
+  gate_temperature: 0.5
+  logit_clamp: 4.0
+  layout: [4, 4, 8]
+  gate_kernel: 3
+  noise_kernel_sigma: 0.65
+
+training:
+  batch_size: 512
+  num_gen_steps: 100000
+  n_critic: 3
+  lr_g: 1.0e-4
+  lr_d: 1.0e-4
+  betas: [0.0, 0.9]
+  lambda_gp: 5.0
+  ema_decay: 0.999
+  distance_reg_alpha: 0.1
+  distance_reg_max_points: 256
+  lid_reg_alpha: 0.015
+  lid_reg_k: 20
+  lid_reg_max_points: 256
+  num_workers: 0
+  amp: false
+  log_every: 500
+  eval_every: 2000
+  save_every: 5000

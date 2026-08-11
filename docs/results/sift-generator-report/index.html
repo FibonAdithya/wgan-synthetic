@@ -77,8 +77,7 @@
     .rung .family { position:absolute; bottom:14px; left:17px }
     .detail { margin-top:14px }
     .visual-frame { padding:12px; overflow:hidden; text-align:center }
-    .visual-frame a { display:block }
-    .visual-frame img { display:block; width:100%; max-height:820px; object-fit:contain; border-radius:10px; background:white }
+    .visual-frame iframe { display:block; width:100%; border:0; border-radius:10px; background:white }
     .visual-caption { max-width:900px; margin:16px auto 5px; color:var(--muted); text-align:left }
     table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums }
     th,td { padding:11px 10px; border-bottom:1px solid var(--line); text-align:right }
@@ -110,7 +109,7 @@
       <p class="eyebrow">Team briefing · 11 August 2026</p>
       <h1>SIFT generators: what each architecture buys us</h1>
       <p class="lede">A presentation-ready comparison of the v1, v2, and v4 generators—covering architectural intent, ANN-search difficulty, and runtime cost.</p>
-      <div class="meta"><span class="pill">128-dimensional SIFT</span><span class="pill">Canonical ANN N=20,000</span><span class="pill">Runtime: RTX 4060</span><span class="pill">Self-contained report</span></div>
+      <div class="meta"><span class="pill">128-dimensional SIFT</span><span class="pill">Canonical ANN N=20,000</span><span class="pill">Runtime: RTX 4060</span><span class="pill">Offline interactive report</span></div>
     </div>
   </header>
   <nav><div class="shell"><a href="#architecture">Architecture</a><a href="#ladder">Variant deltas</a><a href="#visuals">Generated samples</a><a href="#quality">ANN difficulty</a><a href="#runtime">Runtime</a><a href="#sources">Evidence</a></div></nav>
@@ -132,14 +131,14 @@
     </section>
 
     <section id="visuals">
-      <div class="section-head"><h2>Generated output, visualized</h2><p>These are diagnostics computed from the same seed-7, 20,000-vector sample sets as the ANN comparison. Select a view, then click the image for the full-resolution version.</p></div>
+      <div class="section-head"><h2>Generated output, visualized</h2><p>These interactive diagnostics use the same seed-7, 20,000-vector sample sets as the ANN comparison. Hover for values; drag to zoom; double-click to reset; click legend entries to isolate a series.</p></div>
       <div class="controls" id="visualControls">
         <button class="control active" data-visual="glyphs">Descriptor glyphs</button>
         <button class="control" data-visual="profiles">Dimension profiles</button>
         <button class="control" data-visual="correlation">Correlation structure</button>
       </div>
       <div class="card visual-frame">
-        <a id="visualLink" href="images/descriptor-glyphs.png" target="_blank"><img id="visualImage" src="images/descriptor-glyphs.png" alt="Real and generated SIFT descriptors drawn as orientation glyphs"></a>
+        <iframe id="visualPlot" src="plots/descriptor-glyphs.html" title="Interactive real and generated SIFT descriptor comparison" height="920" loading="lazy"></iframe>
         <p class="visual-caption" id="visualCaption"></p>
       </div>
     </section>
@@ -233,11 +232,11 @@
     Object.entries(quality).forEach(([k,m])=>{let b=document.createElement('button');b.dataset.key=k;b.textContent=m.label;b.onclick=()=>drawQuality(k);metricButtons.append(b)});drawQuality('contrast');
 
     const visuals={
-      glyphs:{src:'images/descriptor-glyphs.png',alt:'Real and generated SIFT descriptors drawn as orientation glyphs',caption:'<strong>Individual descriptor shape.</strong> Each item is a 4×4 spatial grid with eight orientation rays per cell. The two real rows establish natural variation. Red rays mark negative bins—impossible for a SIFT gradient histogram—and expose the dense v1/v1_5 support failure. v2–v4 remove negatives, while their spatial and directional patterns can be compared with real SIFT.'},
-      profiles:{src:'images/per-dimension-profiles.png',alt:'Per-dimension mean, standard deviation, and exact-zero profiles for real and generated SIFT',caption:'<strong>Marginals and exact-zero support.</strong> Mean and standard-deviation curves overlap closely, showing why aggregate distribution scores can look convincing. The bottom panel separates the architectures: v1 and v1_5 have no exact zeros, v2 under-produces them, and the structured v3/v4 generators more closely follow the real per-bin pattern.'},
-      correlation:{src:'images/correlation-structure.png',alt:'Real SIFT correlation matrix and generated-minus-real correlation differences by version',caption:'<strong>Cross-bin structure.</strong> The first heatmap is the real 128×128 correlation matrix; each following panel is generated minus real on one shared scale. White means close agreement. v3 has the smallest visual residuals here, while this image remains a diagnostic rather than an ANN pass/fail metric.'}
-    },visualImage=document.querySelector('#visualImage'),visualLink=document.querySelector('#visualLink'),visualCaption=document.querySelector('#visualCaption');
-    function showVisual(key){const v=visuals[key];document.querySelectorAll('#visualControls button').forEach(b=>b.classList.toggle('active',b.dataset.visual===key));visualImage.src=v.src;visualImage.alt=v.alt;visualLink.href=v.src;visualCaption.innerHTML=v.caption}
+      glyphs:{src:'plots/descriptor-glyphs.html',height:920,caption:'<strong>Individual descriptor shape.</strong> Each item is a 4×4 spatial grid with eight orientation rays per cell. The two real rows establish natural variation. Red rays mark negative bins—impossible for a SIFT gradient histogram—and expose the dense v1/v1_5 support failure. v2–v4 remove negatives, while their spatial and directional patterns can be compared with real SIFT.'},
+      profiles:{src:'plots/per-dimension-profiles.html',height:760,caption:'<strong>Marginals and exact-zero support.</strong> Mean and standard-deviation curves overlap closely, showing why aggregate distribution scores can look convincing. The bottom panel separates the architectures: v1 and v1_5 have no exact zeros, v2 under-produces them, and the structured v3/v4 generators more closely follow the real per-bin pattern.'},
+      correlation:{src:'plots/correlation-structure.html',height:500,caption:'<strong>Cross-bin structure.</strong> The first heatmap is the real 128×128 correlation matrix; each following panel is generated minus real on one shared scale. White means close agreement. v3 has the smallest visual residuals here, while this plot remains a diagnostic rather than an ANN pass/fail metric.'}
+    },visualPlot=document.querySelector('#visualPlot'),visualCaption=document.querySelector('#visualCaption');
+    function showVisual(key){const v=visuals[key];document.querySelectorAll('#visualControls button').forEach(b=>b.classList.toggle('active',b.dataset.visual===key));if(!visualPlot.src.endsWith(v.src))visualPlot.src=v.src;visualPlot.height=v.height;visualCaption.innerHTML=v.caption}
     document.querySelectorAll('#visualControls button').forEach(b=>b.onclick=()=>showVisual(b.dataset.visual));showVisual('glyphs');
 
     const runtime={

@@ -1,0 +1,32 @@
+| Config | Architecture | N | Generate median (s) | To host median (s) | Budget p95 (s) | Vectors/s | Incremental peak VRAM | Peak reserved VRAM | Host output |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| configs/sift/v1.yaml | mlp | 100,000 | 0.048748 | 0.059604 | 0.167876 | 2051370.9 | 36.0 MiB | 76.0 MiB | 48.8 MiB |
+| configs/sift/v1.yaml | mlp | 200,000 | 0.096334 | 0.122709 | 0.222512 | 2076113.7 | 36.2 MiB | 76.0 MiB | 97.7 MiB |
+| configs/sift/v1.yaml | mlp | 300,000 | 0.144219 | 0.177546 | 0.340103 | 2080167.2 | 36.0 MiB | 76.0 MiB | 146.5 MiB |
+| configs/sift/v1.yaml | mlp | 400,000 | 0.192182 | 0.236025 | 0.453768 | 2081360.1 | 36.0 MiB | 76.0 MiB | 195.3 MiB |
+| configs/sift/v1.yaml | mlp | 500,000 | 0.240354 | 0.294888 | 0.558101 | 2080265.4 | 36.0 MiB | 76.0 MiB | 244.1 MiB |
+| configs/sift/v1.yaml | mlp | 600,000 | 0.288679 | 0.362343 | 0.671297 | 2078434.9 | 36.0 MiB | 76.0 MiB | 293.0 MiB |
+| configs/sift/v1.yaml | mlp | 700,000 | 0.336432 | 0.411948 | 0.801648 | 2080660.4 | 36.1 MiB | 76.0 MiB | 341.8 MiB |
+| configs/sift/v1.yaml | mlp | 800,000 | 0.384601 | 0.470495 | 0.909024 | 2080078.4 | 36.0 MiB | 76.0 MiB | 390.6 MiB |
+| configs/sift/v1.yaml | mlp | 900,000 | 0.450544 | 0.269006 | 0.872300 | 1997586.8 | 36.0 MiB | 76.0 MiB | 439.5 MiB |
+| configs/sift/v1.yaml | mlp | 1,000,000 | 0.499329 | 0.297371 | 0.858379 | 2002689.5 | 36.0 MiB | 76.0 MiB | 488.3 MiB |
+| configs/sift/v2.yaml | gated | 100,000 | 0.057548 | 0.032425 | 0.099728 | 1737667.1 | 40.0 MiB | 86.0 MiB | 48.8 MiB |
+| configs/sift/v2.yaml | gated | 200,000 | 0.115341 | 0.061098 | 0.188522 | 1733993.1 | 40.2 MiB | 86.0 MiB | 97.7 MiB |
+| configs/sift/v2.yaml | gated | 300,000 | 0.172159 | 0.092356 | 0.281696 | 1742576.8 | 40.0 MiB | 86.0 MiB | 146.5 MiB |
+| configs/sift/v2.yaml | gated | 400,000 | 0.230909 | 0.123791 | 0.378333 | 1732285.1 | 40.6 MiB | 86.0 MiB | 195.3 MiB |
+| configs/sift/v2.yaml | gated | 500,000 | 0.286955 | 0.159772 | 0.514248 | 1742431.0 | 40.0 MiB | 86.0 MiB | 244.1 MiB |
+| configs/sift/v2.yaml | gated | 600,000 | 0.334203 | 0.351366 | 0.705734 | 1795314.7 | 40.0 MiB | 86.0 MiB | 293.0 MiB |
+| configs/sift/v2.yaml | gated | 700,000 | 0.387491 | 0.410946 | 0.851730 | 1806491.8 | 40.1 MiB | 86.0 MiB | 341.8 MiB |
+| configs/sift/v2.yaml | gated | 800,000 | 0.462960 | 0.243874 | 0.757802 | 1728010.6 | 40.0 MiB | 86.0 MiB | 390.6 MiB |
+| configs/sift/v2.yaml | gated | 900,000 | 0.509549 | 0.423251 | 1.043666 | 1766266.9 | 40.0 MiB | 86.0 MiB | 439.5 MiB |
+| configs/sift/v2.yaml | gated | 1,000,000 | 0.557591 | 0.573902 | 1.207346 | 1793429.7 | 40.0 MiB | 86.0 MiB | 488.3 MiB |
+| configs/sift/v4.yaml | structured_gated | 100,000 | 0.078284 | 0.059078 | 0.148051 | 1277407.5 | 38.5 MiB | 86.0 MiB | 48.8 MiB |
+| configs/sift/v4.yaml | structured_gated | 200,000 | 0.155745 | 0.117384 | 0.286477 | 1284151.7 | 38.5 MiB | 86.0 MiB | 97.7 MiB |
+| configs/sift/v4.yaml | structured_gated | 300,000 | 0.234053 | 0.176994 | 0.426866 | 1281762.5 | 38.5 MiB | 86.0 MiB | 146.5 MiB |
+| configs/sift/v4.yaml | structured_gated | 400,000 | 0.311683 | 0.233970 | 0.570711 | 1283354.1 | 38.5 MiB | 86.0 MiB | 195.3 MiB |
+| configs/sift/v4.yaml | structured_gated | 500,000 | 0.390774 | 0.310471 | 0.718118 | 1279512.0 | 38.5 MiB | 86.0 MiB | 244.1 MiB |
+| configs/sift/v4.yaml | structured_gated | 600,000 | 0.467838 | 0.351714 | 0.854844 | 1282494.9 | 38.5 MiB | 86.0 MiB | 293.0 MiB |
+| configs/sift/v4.yaml | structured_gated | 700,000 | 0.572521 | 0.219727 | 0.952148 | 1222663.0 | 38.5 MiB | 86.0 MiB | 341.8 MiB |
+| configs/sift/v4.yaml | structured_gated | 800,000 | 0.624204 | 0.470960 | 1.146057 | 1281633.3 | 38.5 MiB | 86.0 MiB | 390.6 MiB |
+| configs/sift/v4.yaml | structured_gated | 900,000 | 0.701311 | 0.529165 | 1.281215 | 1283310.4 | 38.5 MiB | 86.0 MiB | 439.5 MiB |
+| configs/sift/v4.yaml | structured_gated | 1,000,000 | 0.780112 | 0.582818 | 1.441909 | 1281867.7 | 38.5 MiB | 86.0 MiB | 488.3 MiB |

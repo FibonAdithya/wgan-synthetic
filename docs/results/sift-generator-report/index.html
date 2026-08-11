@@ -109,7 +109,7 @@
       <div class="meta"><span class="pill">128-dimensional SIFT</span><span class="pill">Canonical ANN N=20,000</span><span class="pill">Runtime: RTX 4060</span><span class="pill">Self-contained report</span></div>
     </div>
   </header>
-  <nav><div class="shell"><a href="#architecture">Architecture</a><a href="#quality">ANN difficulty</a><a href="#runtime">Runtime</a><a href="#ladder">Variant ladder</a><a href="#sources">Evidence</a></div></nav>
+  <nav><div class="shell"><a href="#architecture">Architecture</a><a href="#ladder">Variant deltas</a><a href="#quality">ANN difficulty</a><a href="#runtime">Runtime</a><a href="#sources">Evidence</a></div></nav>
   <main class="shell">
     <section id="architecture">
       <div class="section-head"><h2>Architecture, rung by rung</h2><p>Select a version to see its complete inference graph and the training-only mechanism introduced at that rung. Dashed arrows never run during corpus generation.</p></div>
@@ -120,6 +120,11 @@
           <div class="diagram-wrap"><svg id="archDiagram" viewBox="0 0 760 430" role="img" aria-label="Version architecture diagram"></svg><div class="diagram-legend"><span><i style="background:#dcece5"></i>inference</span><span><i style="background:#f4dfc8"></i>stochastic/support</span><span><i style="background:#e7def3"></i>training only</span><span><i style="background:#ece9e0"></i>real data</span></div></div>
         </div>
       </div>
+    </section>
+
+    <section id="ladder">
+      <div class="section-head"><h2>SIFT variant deltas</h2><p>Variant numbers are SIFT-specific historical rungs. Click a rung for its sole change from the preceding version. Training length is a separate axis.</p></div>
+      <div class="ladder" id="ladderGrid"></div><div class="card detail" id="rungDetail"></div>
     </section>
 
     <section id="quality">
@@ -150,11 +155,6 @@
       <div class="card" style="margin-top:18px"><h3>How memory metrics relate to ANN deployment</h3><p><strong>Model baseline</strong> is device memory already allocated after building and warming the generator. <strong>Sampling peak above baseline</strong> isolates the temporary tensors needed to produce one batch; this is the useful figure for deciding whether generation can coexist with a GPU ANN index. <strong>Peak reserved</strong> includes memory retained by PyTorch’s caching allocator and is not the same as live tensor memory; see PyTorch’s <a href="https://docs.pytorch.org/docs/main/notes/cuda.html#cuda-memory-management" target="_blank" rel="noreferrer">CUDA memory-management notes</a>. <strong>Host output</strong> is the float32 corpus handed to a CPU ANN index: N × 128 × 4 bytes.</p></div>
       <div class="card" style="margin-top:18px"><h3>How runtime metrics relate to ANN deployment</h3><p><strong>GPU generation</strong> is the time to create and normalize the corpus before an ANN index can ingest it. CUDA work is asynchronous, so every region is fenced with <a href="https://docs.pytorch.org/docs/main/generated/torch.cuda.synchronize.html" target="_blank" rel="noreferrer">PyTorch synchronization</a>.</p><p><strong>To host + assembly</strong> is paid when a CPU ANN index needs a NumPy corpus; an on-GPU index can avoid it. PyTorch’s <a href="https://docs.pytorch.org/docs/main/notes/cuda.html#asynchronous-execution" target="_blank" rel="noreferrer">CUDA semantics</a> explain why device/host copies form a separate boundary.</p><p><strong>p95 budget</strong> is the conservative generation-plus-host deadline: 95% of observed repeats should fall at or below it. It is an operational tail-latency measure, not an ANN-quality statistic.</p></div>
       <p class="muted">CUDA initialization adds 0.270 s once per process. Build and warmup are separate from the plotted per-instance budget. Host timing drops sharply at v1/800k and v4/700k, then rises again in the separately measured 1M cells; do not fit one host-transfer slope through those discontinuities.</p>
-    </section>
-
-    <section id="ladder">
-      <div class="section-head"><h2>The SIFT variant ladder</h2><p>Variant numbers are SIFT-specific historical rungs. Click a rung for its sole delta. Training length is a separate axis.</p></div>
-      <div class="ladder" id="ladderGrid"></div><div class="card detail" id="rungDetail"></div>
     </section>
 
     <section id="sources">

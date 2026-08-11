@@ -1,0 +1,21 @@
+{
+  "id": "wgan-synthetic-20260810T203408Z-ed7611",
+  "lane": "cpu",
+  "project": "wgan-synthetic",
+  "commit": "3cc43309686689a7c38e696ddbac693de009e680",
+  "branch": "main",
+  "cmd": [
+    "bash",
+    "-c",
+    "set -euo pipefail\nO=/workspace/keep/sift-100k\nmkdir -p $O\nK=/workspace/keep\n# name|checkpoint|config  -- config may come from the repo checkout for runs\n# whose checkpoint was rescued without one beside it.\nENTRIES=\"\nv1|$K/wgan-synthetic/x100k_ema_only/best_generator.pt|$K/wgan-synthetic/x100k_ema_only/run_config.yaml\nv1_5|$K/wgan-synthetic/x100k_improved/best_generator.pt|$K/wgan-synthetic/x100k_improved/run_config.yaml\nv2|$K/wgan-sparse-v2/x100k_sparse_clamp4/best_generator.pt|$K/wgan-sparse-v2/x100k_sparse_clamp4/run_config.yaml\nv3|$K/v3-structured/x100k_structured-best_generator.pt|docs/results/v3-structured/x100k_structured/run_config.yaml\nv4|$K/v34-sift1m/v4_x100k/best_generator.pt|$K/v34-sift1m/v4_x100k/run_config.yaml\n\"\nARGS=\"\"\nfor e in $ENTRIES; do\n  n=$(echo \"$e\" | cut -d\"|\" -f1); ck=$(echo \"$e\" | cut -d\"|\" -f2); cf=$(echo \"$e\" | cut -d\"|\" -f3)\n  if [ -f \"$ck\" ] && [ -f \"$cf\" ]; then\n    sed 's/^device: .*/device: cpu/' \"$cf\" > \"$O/${n}_cpu.yaml\"\n    python -m src.sample.generate --checkpoint \"$ck\" --config \"$O/${n}_cpu.yaml\"       --num-samples 20000 --seed 7 --output-path \"$O/samples_$n.npy\"\n    ARGS=\"$ARGS --synthetic-path $n=$O/samples_$n.npy\"\n    echo \"INCLUDED $n\"\n  else\n    echo \"SKIPPED $n (ckpt=$([ -f $ck ] && echo Y || echo N) cfg=$([ -f $cf ] && echo Y || echo N))\"\n  fi\ndone\npython -m src.eval.eda_report --real-path /workspace/data-cache/sift_1m.npy $ARGS   --output-dir \"$O/eda\" --ann-k 100 --ann-hub-k 10 --ann-max-rows 20000 --ivf-nlist 256\necho \"=== 100K LADDER EDA DONE ===\""
+  ],
+  "artifacts": [],
+  "timeout_s": 10800,
+  "attempts": 0,
+  "dedupe_key": null,
+  "submitted_at": "2026-08-10T20:34:08Z",
+  "pid": null,
+  "runner_pid": 67178,
+  "exit_code": 0,
+  "error": null
+}

@@ -1,0 +1,279 @@
+{
+  "environment": {
+    "device": "cuda:0",
+    "gpu_name": "NVIDIA GeForce RTX 4060",
+    "torch_version": "2.13.0+cu130",
+    "cuda_version": "13.0",
+    "cuda_init_seconds": 0.2700793230906129,
+    "batch_size": 4096,
+    "repeats": 5,
+    "seed": 42,
+    "timestamp": "2026-08-11T09:19:47.468565Z"
+  },
+  "cells": [
+    {
+      "num_samples": 1000,
+      "generate_seconds": {
+        "min": 0.0006192640867084265,
+        "median": 0.0006331340409815311,
+        "p95": 0.051648290548473585
+      },
+      "to_host_seconds": {
+        "min": 0.0005864668637514114,
+        "median": 0.0009222161024808884,
+        "p95": 0.00127325477078557
+      },
+      "save_seconds": null,
+      "peak_vram_bytes": 24824320,
+      "throughput_vectors_per_second": 1579444.375553913,
+      "config": "configs/sift/v1.yaml",
+      "generator_type": "mlp",
+      "latent_dim": 128,
+      "descriptor_dim": 128,
+      "build_seconds": 0.019021617947146297,
+      "warmup_seconds": 0.08441643603146076
+    },
+    {
+      "num_samples": 10000,
+      "generate_seconds": {
+        "min": 0.004991773981601,
+        "median": 0.00500257802195847,
+        "p95": 0.00511008775793016
+      },
+      "to_host_seconds": {
+        "min": 0.005104329902678728,
+        "median": 0.005200321087613702,
+        "p95": 0.00833491557277739
+      },
+      "save_seconds": null,
+      "peak_vram_bytes": 53357056,
+      "throughput_vectors_per_second": 1998969.322638386,
+      "config": "configs/sift/v1.yaml",
+      "generator_type": "mlp",
+      "latent_dim": 128,
+      "descriptor_dim": 128,
+      "build_seconds": 0.019021617947146297,
+      "warmup_seconds": 0.08441643603146076
+    },
+    {
+      "num_samples": 100000,
+      "generate_seconds": {
+        "min": 0.04814688838087022,
+        "median": 0.048324804520234466,
+        "p95": 0.04900539736263454
+      },
+      "to_host_seconds": {
+        "min": 0.05832404061220586,
+        "median": 0.05876456666737795,
+        "p95": 0.06317058112472296
+      },
+      "save_seconds": null,
+      "peak_vram_bytes": 53357056,
+      "throughput_vectors_per_second": 2069330.6676104236,
+      "config": "configs/sift/v1.yaml",
+      "generator_type": "mlp",
+      "latent_dim": 128,
+      "descriptor_dim": 128,
+      "build_seconds": 0.019021617947146297,
+      "warmup_seconds": 0.08441643603146076
+    },
+    {
+      "num_samples": 1000000,
+      "generate_seconds": {
+        "min": 0.4817929358687252,
+        "median": 0.4822043676394969,
+        "p95": 0.48287056339904666
+      },
+      "to_host_seconds": {
+        "min": 0.5897045060992241,
+        "median": 0.6025528896134347,
+        "p95": 0.6449424927588552
+      },
+      "save_seconds": null,
+      "peak_vram_bytes": 53357056,
+      "throughput_vectors_per_second": 2073809.5030022927,
+      "config": "configs/sift/v1.yaml",
+      "generator_type": "mlp",
+      "latent_dim": 128,
+      "descriptor_dim": 128,
+      "build_seconds": 0.019021617947146297,
+      "warmup_seconds": 0.08441643603146076
+    },
+    {
+      "num_samples": 1000,
+      "generate_seconds": {
+        "min": 0.0010727590415626764,
+        "median": 0.0010774300899356604,
+        "p95": 0.0016381409019231795
+      },
+      "to_host_seconds": {
+        "min": 0.0005552200600504875,
+        "median": 0.0006101860199123621,
+        "p95": 0.0011183113325387239
+      },
+      "save_seconds": null,
+      "peak_vram_bytes": 26374144,
+      "throughput_vectors_per_second": 928134.4649096591,
+      "config": "configs/sift/v2.yaml",
+      "generator_type": "gated",
+      "latent_dim": 128,
+      "descriptor_dim": 128,
+      "build_seconds": 0.014430191135033965,
+      "warmup_seconds": 0.14640868408605456
+    },
+    {
+      "num_samples": 10000,
+      "generate_seconds": {
+        "min": 0.0057259981986135244,
+        "median": 0.005743584129959345,
+        "p95": 0.006074299709871412
+      },
+      "to_host_seconds": {
+        "min": 0.005076183006167412,
+        "median": 0.005143610294908285,
+        "p95": 0.008760491339489817
+      },
+      "save_seconds": null,
+      "peak_vram_bytes": 58080256,
+      "throughput_vectors_per_second": 1741073.1302495578,
+      "config": "configs/sift/v2.yaml",
+      "generator_type": "gated",
+      "latent_dim": 128,
+      "descriptor_dim": 128,
+      "build_seconds": 0.014430191135033965,
+      "warmup_seconds": 0.14640868408605456
+    },
+    {
+      "num_samples": 100000,
+      "generate_seconds": {
+        "min": 0.055457992013543844,
+        "median": 0.05555505468510091,
+        "p95": 0.05556285767816007
+      },
+      "to_host_seconds": {
+        "min": 0.05705202929675579,
+        "median": 0.058382553746923804,
+        "p95": 0.06603769510984421
+      },
+      "save_seconds": null,
+      "peak_vram_bytes": 58080256,
+      "throughput_vectors_per_second": 1800016.2283490398,
+      "config": "configs/sift/v2.yaml",
+      "generator_type": "gated",
+      "latent_dim": 128,
+      "descriptor_dim": 128,
+      "build_seconds": 0.014430191135033965,
+      "warmup_seconds": 0.14640868408605456
+    },
+    {
+      "num_samples": 1000000,
+      "generate_seconds": {
+        "min": 0.5534234317019582,
+        "median": 0.5535154342651367,
+        "p95": 0.5543536365032196
+      },
+      "to_host_seconds": {
+        "min": 0.590476555051282,
+        "median": 0.5969738077837974,
+        "p95": 0.6482262311968953
+      },
+      "save_seconds": null,
+      "peak_vram_bytes": 58080256,
+      "throughput_vectors_per_second": 1806634.355783826,
+      "config": "configs/sift/v2.yaml",
+      "generator_type": "gated",
+      "latent_dim": 128,
+      "descriptor_dim": 128,
+      "build_seconds": 0.014430191135033965,
+      "warmup_seconds": 0.14640868408605456
+    },
+    {
+      "num_samples": 1000,
+      "generate_seconds": {
+        "min": 0.0015285369008779526,
+        "median": 0.0015712811145931482,
+        "p95": 0.0028039812110364436
+      },
+      "to_host_seconds": {
+        "min": 0.000639971112832427,
+        "median": 0.0009395950473845005,
+        "p95": 0.0010436538606882096
+      },
+      "save_seconds": null,
+      "peak_vram_bytes": 25868288,
+      "throughput_vectors_per_second": 636423.3558925769,
+      "config": "configs/sift/v4.yaml",
+      "generator_type": "structured_gated",
+      "latent_dim": 128,
+      "descriptor_dim": 128,
+      "build_seconds": 0.020704640075564384,
+      "warmup_seconds": 0.09793474897742271
+    },
+    {
+      "num_samples": 10000,
+      "generate_seconds": {
+        "min": 0.007857532007619739,
+        "median": 0.007942484226077795,
+        "p95": 0.008866357523947955
+      },
+      "to_host_seconds": {
+        "min": 0.004976799013093114,
+        "median": 0.00508500006981194,
+        "p95": 0.008546728128567337
+      },
+      "save_seconds": null,
+      "peak_vram_bytes": 56513536,
+      "throughput_vectors_per_second": 1259051.9181853333,
+      "config": "configs/sift/v4.yaml",
+      "generator_type": "structured_gated",
+      "latent_dim": 128,
+      "descriptor_dim": 128,
+      "build_seconds": 0.020704640075564384,
+      "warmup_seconds": 0.09793474897742271
+    },
+    {
+      "num_samples": 100000,
+      "generate_seconds": {
+        "min": 0.07789367972873151,
+        "median": 0.07796019944362342,
+        "p95": 0.07897813790477812
+      },
+      "to_host_seconds": {
+        "min": 0.05794798326678574,
+        "median": 0.058767640264704823,
+        "p95": 0.06676300750114024
+      },
+      "save_seconds": null,
+      "peak_vram_bytes": 56513536,
+      "throughput_vectors_per_second": 1282705.8000578175,
+      "config": "configs/sift/v4.yaml",
+      "generator_type": "structured_gated",
+      "latent_dim": 128,
+      "descriptor_dim": 128,
+      "build_seconds": 0.020704640075564384,
+      "warmup_seconds": 0.09793474897742271
+    },
+    {
+      "num_samples": 1000000,
+      "generate_seconds": {
+        "min": 0.775909568881616,
+        "median": 0.7785137987229973,
+        "p95": 0.7787397478707134
+      },
+      "to_host_seconds": {
+        "min": 0.5875145830214024,
+        "median": 0.5898699178360403,
+        "p95": 0.6626189432106911
+      },
+      "save_seconds": null,
+      "peak_vram_bytes": 56513536,
+      "throughput_vectors_per_second": 1284498.7483077478,
+      "config": "configs/sift/v4.yaml",
+      "generator_type": "structured_gated",
+      "latent_dim": 128,
+      "descriptor_dim": 128,
+      "build_seconds": 0.020704640075564384,
+      "warmup_seconds": 0.09793474897742271
+    }
+  ]
+}

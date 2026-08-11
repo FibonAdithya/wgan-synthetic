@@ -48,3 +48,12 @@ the added run, while the separately measured 1M cells rise again. Those phase
 discontinuities propagate into the p95 budget. Do not describe the complete
 pipeline as linear without qualifying that the statement applies to GPU
 generation, not consistently to host materialization.
+
+## Memory check
+
+`memory-grid/` remeasures the complete 100k–1M grid from commit `eaa752d` and
+adds model-baseline allocation, incremental sampling peak, allocator-reserved
+peak, and exact host-output bytes. GPU sampling memory stays bounded by the
+fixed batch size: v1/v2/v4 use approximately 36.0/40.1/38.5 MiB above their
+model baselines across the grid. The 1M float32 host corpus is 488.3 MiB for
+every architecture.

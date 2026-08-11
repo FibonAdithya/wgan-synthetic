@@ -1,7 +1,7 @@
 """Generate the DEEP seed/alpha sweep configs from the committed ladder rungs.
 
-The sweep exists to answer the two questions FOLLOWUPS.md raises about the
-DEEP ladder:
+The sweep exists to answer the two questions issues #20 and #21 raise about
+the DEEP ladder:
 
   1. The three shipped rungs rest on one seed each, and the two draws that do
      exist disagree by more than the rungs differ. Three seeds per rung give

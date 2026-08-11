@@ -133,7 +133,6 @@
         <article class="card"><div class="kicker">Architecture caveat</div><div class="big">Dense can flatter</div><p>v1/v1_5 cannot emit exact zeros. Their close ANN aggregates do not mean they reproduce SIFT's support; support diagnostics explain the mismatch.</p></article>
         <article class="card"><div class="kicker">Objective caveat</div><div class="big">v4 LID is fitted</div><p>v4 trains on LID's sufficient statistic. Its LID movement confirms the penalty worked, but contrast, hubness, and Gini carry the independent evidence.</p></article>
       </div>
-      <article class="card callout" style="margin-top:18px"><strong>Why this is now comparable:</strong> every displayed checkpoint trained for 100k generator steps, every sample set has 20,000 rows drawn at seed 7, and all series were passed to one evaluation invocation. This controls run length, sampling, real subsample, and evaluation settings—not training-seed uncertainty (n=1 per variant).</article>
     </section>
 
     <section id="runtime">

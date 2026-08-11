@@ -213,11 +213,32 @@ def test_gate_statistics_reject_a_degenerate_draw():
 
     numpy would turn that into a silent nan and the noise floor would report
     a nan spread as though it had measured something.
+
+    The rows are unit-norm duplicates rather than any constant vector,
+    because gate_statistics measures under `angular` and would otherwise be
+    refused for not being on the sphere -- a different failure than the one
+    under test.
     """
-    duplicates = np.ones((300, 8), dtype=np.float32)
+    duplicates = np.zeros((300, 8), dtype=np.float32)
+    duplicates[:, 0] = 1.0
 
     with pytest.raises(ValueError, match="came back None"):
         st.gate_statistics(duplicates, seed=0)
+
+
+def test_gate_statistics_measure_under_the_family_metric():
+    """openai's data.metric is angular, and passing it is not cosmetic.
+
+    The k-NN pass is L2 either way, so this moves no number; what it does is
+    turn on compute()'s unit-norm check. Defaulting to l2 would skip the one
+    validation that catches a corpus these measurements are not valid for.
+    """
+    assert st.CANONICAL_METRIC == "angular"
+
+    not_on_the_sphere = np.full((300, 8), 2.0, dtype=np.float32)
+
+    with pytest.raises(ValueError, match="unit-norm"):
+        st.gate_statistics(not_on_the_sphere, seed=0)
 
 
 def test_noise_floor_reports_a_spread_per_statistic():

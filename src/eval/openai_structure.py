@@ -51,6 +51,8 @@ CANONICAL_N = 20_000
 CANONICAL_K = 100
 CANONICAL_K_HUB = 10
 CANONICAL_NLIST = 256
+# openai's `data.metric`, from configs/openai/v0.yaml and gates/openai.yaml.
+CANONICAL_METRIC = "angular"
 
 # A series whose span is below this fraction of its magnitude is drawn as a
 # constant rather than histogrammed. Set well above float32's spacing at 1.0
@@ -280,6 +282,13 @@ def gate_statistics(x: np.ndarray, seed: int) -> dict[str, float]:
         nlist=CANONICAL_NLIST,
         max_rows=CANONICAL_N,
         seed=seed,
+        # openai's data.metric, passed explicitly as every other caller does.
+        # The k-NN pass is L2 either way, so this does not move a number; what
+        # it does is turn on compute()'s unit-norm check, which is the
+        # precondition the whole angular-as-L2 argument rests on. Defaulting
+        # to l2 here would silently skip the one validation that would catch
+        # a corpus this measurement is not valid for.
+        metric=CANONICAL_METRIC,
     )
     full = ann_difficulty.summary(metrics)
     stats = {k: full[k] for k in GATE_STATS}

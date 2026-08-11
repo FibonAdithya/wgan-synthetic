@@ -76,6 +76,10 @@
     .rung small { color:var(--muted) }
     .rung .family { position:absolute; bottom:14px; left:17px }
     .detail { margin-top:14px }
+    .visual-frame { padding:12px; overflow:hidden; text-align:center }
+    .visual-frame a { display:block }
+    .visual-frame img { display:block; width:100%; max-height:820px; object-fit:contain; border-radius:10px; background:white }
+    .visual-caption { max-width:900px; margin:16px auto 5px; color:var(--muted); text-align:left }
     table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums }
     th,td { padding:11px 10px; border-bottom:1px solid var(--line); text-align:right }
     th:first-child,td:first-child { text-align:left }
@@ -109,7 +113,7 @@
       <div class="meta"><span class="pill">128-dimensional SIFT</span><span class="pill">Canonical ANN N=20,000</span><span class="pill">Runtime: RTX 4060</span><span class="pill">Self-contained report</span></div>
     </div>
   </header>
-  <nav><div class="shell"><a href="#architecture">Architecture</a><a href="#ladder">Variant deltas</a><a href="#quality">ANN difficulty</a><a href="#runtime">Runtime</a><a href="#sources">Evidence</a></div></nav>
+  <nav><div class="shell"><a href="#architecture">Architecture</a><a href="#ladder">Variant deltas</a><a href="#visuals">Generated samples</a><a href="#quality">ANN difficulty</a><a href="#runtime">Runtime</a><a href="#sources">Evidence</a></div></nav>
   <main class="shell">
     <section id="architecture">
       <div class="section-head"><h2>Architecture, rung by rung</h2><p>Select a version to see its complete inference graph and the training-only mechanism introduced at that rung. Dashed arrows never run during corpus generation.</p></div>
@@ -125,6 +129,19 @@
     <section id="ladder">
       <div class="section-head"><h2>SIFT variant deltas</h2><p>Variant numbers are SIFT-specific historical rungs. Click a rung for its sole change from the preceding version. Training length is a separate axis.</p></div>
       <div class="ladder" id="ladderGrid"></div><div class="card detail" id="rungDetail"></div>
+    </section>
+
+    <section id="visuals">
+      <div class="section-head"><h2>Generated output, visualized</h2><p>These are diagnostics computed from the same seed-7, 20,000-vector sample sets as the ANN comparison. Select a view, then click the image for the full-resolution version.</p></div>
+      <div class="controls" id="visualControls">
+        <button class="control active" data-visual="glyphs">Descriptor glyphs</button>
+        <button class="control" data-visual="profiles">Dimension profiles</button>
+        <button class="control" data-visual="correlation">Correlation structure</button>
+      </div>
+      <div class="card visual-frame">
+        <a id="visualLink" href="images/descriptor-glyphs.png" target="_blank"><img id="visualImage" src="images/descriptor-glyphs.png" alt="Real and generated SIFT descriptors drawn as orientation glyphs"></a>
+        <p class="visual-caption" id="visualCaption"></p>
+      </div>
     </section>
 
     <section id="quality">
@@ -214,6 +231,14 @@
     function bar(svg,x,y,w,h,color,label,value,tip){let r=document.createElementNS('http://www.w3.org/2000/svg','rect');Object.entries({x,y,width:w,height:h,rx:6,fill:color}).forEach(([k,v])=>r.setAttribute(k,v));r.onmousemove=e=>showTip(qtip,e,tip);r.onmouseleave=()=>qtip.style.opacity=0;svg.append(r);textSvg(svg,x+w/2,y-9,value.toFixed(3),'middle','axis-label');textSvg(svg,x+w/2,350,label,'middle','axis-label')}
     function drawQuality(key){document.querySelectorAll('.metric-notes button').forEach(b=>b.classList.toggle('active',b.dataset.key===key));const m=quality[key],entries=Object.entries(m.values),real=m.values.Real,max=Math.max(...entries.map(x=>x[1]))*1.15,colors={'Real':'#27352f',v1:'#467a6a',v1_5:'#6d9a8d',v2:'#d48345',v3:'#735c9e',v4:'#9a83bf'};qsvg.innerHTML='';textSvg(qsvg,34,28,m.label,'start','chart-title');line(qsvg,60,320,720,320,'axis');[0,.25,.5,.75,1].forEach(t=>{let y=320-t*260;line(qsvg,60,y,720,y,t?'gridline':'axis');textSvg(qsvg,50,y+4,(max*t).toFixed(max<1?2:1),'end','axis-label')});entries.forEach(([label,value],i)=>{let w=82,x=78+i*106;bar(qsvg,x,320-value/max*260,w,value/max*260,colors[label],label,value,label==='Real'?`Real: ${value.toFixed(4)}`:`${label}: ${value.toFixed(4)} · gap ${Math.abs(value-real).toFixed(4)}`)});metricCaption.innerHTML=m.caption}
     Object.entries(quality).forEach(([k,m])=>{let b=document.createElement('button');b.dataset.key=k;b.textContent=m.label;b.onclick=()=>drawQuality(k);metricButtons.append(b)});drawQuality('contrast');
+
+    const visuals={
+      glyphs:{src:'images/descriptor-glyphs.png',alt:'Real and generated SIFT descriptors drawn as orientation glyphs',caption:'<strong>Individual descriptor shape.</strong> Each item is a 4×4 spatial grid with eight orientation rays per cell. The two real rows establish natural variation. Red rays mark negative bins—impossible for a SIFT gradient histogram—and expose the dense v1/v1_5 support failure. v2–v4 remove negatives, while their spatial and directional patterns can be compared with real SIFT.'},
+      profiles:{src:'images/per-dimension-profiles.png',alt:'Per-dimension mean, standard deviation, and exact-zero profiles for real and generated SIFT',caption:'<strong>Marginals and exact-zero support.</strong> Mean and standard-deviation curves overlap closely, showing why aggregate distribution scores can look convincing. The bottom panel separates the architectures: v1 and v1_5 have no exact zeros, v2 under-produces them, and the structured v3/v4 generators more closely follow the real per-bin pattern.'},
+      correlation:{src:'images/correlation-structure.png',alt:'Real SIFT correlation matrix and generated-minus-real correlation differences by version',caption:'<strong>Cross-bin structure.</strong> The first heatmap is the real 128×128 correlation matrix; each following panel is generated minus real on one shared scale. White means close agreement. v3 has the smallest visual residuals here, while this image remains a diagnostic rather than an ANN pass/fail metric.'}
+    },visualImage=document.querySelector('#visualImage'),visualLink=document.querySelector('#visualLink'),visualCaption=document.querySelector('#visualCaption');
+    function showVisual(key){const v=visuals[key];document.querySelectorAll('#visualControls button').forEach(b=>b.classList.toggle('active',b.dataset.visual===key));visualImage.src=v.src;visualImage.alt=v.alt;visualLink.href=v.src;visualCaption.innerHTML=v.caption}
+    document.querySelectorAll('#visualControls button').forEach(b=>b.onclick=()=>showVisual(b.dataset.visual));showVisual('glyphs');
 
     const runtime={
       v1:{color:'#467a6a',generate:[.048325,.096396,.145166,.193386,.241619,.289410,.337867,.400099,.450372,.482204],host:[.058765,.115470,.183922,.246497,.321089,.384552,.432819,.239302,.263508,.602553],budget:[.112176,.278304,.348419,.457012,.572764,.732926,.979340,.696900,.771335,1.127813]},

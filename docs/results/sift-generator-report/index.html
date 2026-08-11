@@ -48,11 +48,12 @@
     .arch-button { width:100%; margin:0 0 7px; padding:14px; border:1px solid transparent; border-radius:11px; background:transparent; color:var(--ink); text-align:left; cursor:pointer }
     .arch-button small { display:block; color:var(--muted) }
     .arch-button.active { border-color:var(--line); background:var(--card); box-shadow:0 5px 18px #26312910 }
-    .arch-panel { display:grid; grid-template-columns:1fr 1fr; gap:26px; padding:30px }
+    .arch-panel { display:grid; grid-template-columns:minmax(250px,.72fr) minmax(480px,1.5fr); gap:26px; padding:30px }
     .arch-copy h3 { font:2rem/1.1 Georgia,serif }
-    .flow { display:flex; flex-direction:column; justify-content:center; gap:10px }
-    .node { padding:13px; border:1px solid #bfc9c2; border-radius:10px; background:#f8faf6; text-align:center; font-weight:700 }
-    .arrow { color:#8a9690; text-align:center }
+    .diagram-wrap { align-self:center; min-width:0; padding:10px; border:1px solid var(--line); border-radius:14px; background:#faf9f4 }
+    .diagram-wrap svg { min-height:350px }
+    .diagram-legend { display:flex; flex-wrap:wrap; gap:11px; margin:8px 4px 0; color:var(--muted); font-size:.74rem }
+    .diagram-legend i { display:inline-block; width:18px; height:9px; margin-right:5px; border-radius:3px; vertical-align:middle }
     .tag { display:inline-block; margin:3px 3px 3px 0; padding:4px 8px; border-radius:6px; background:#ebe7de; color:#53615b; font-size:.79rem }
     .chart-card { padding:20px 20px 12px }
     .chart-wrap { position:relative; min-height:360px }
@@ -104,7 +105,7 @@
     <div class="shell">
       <p class="eyebrow">Team briefing · 11 August 2026</p>
       <h1>SIFT generators: what each architecture buys us</h1>
-      <p class="lede">A presentation-ready comparison of the dense MLP, independent gated, and structured-gated generators—covering architectural intent, ANN-search difficulty, and runtime cost.</p>
+      <p class="lede">A presentation-ready comparison of the v1, v2, and v4 generators—covering architectural intent, ANN-search difficulty, and runtime cost.</p>
       <div class="meta"><span class="pill">128-dimensional SIFT</span><span class="pill">Canonical ANN N=20,000</span><span class="pill">Runtime: RTX 4060</span><span class="pill">Self-contained report</span></div>
     </div>
   </header>
@@ -113,7 +114,7 @@
     <section id="takeaway">
       <div class="section-head"><h2>The result in one minute</h2><p>The project succeeds only when synthetic vectors reproduce how hard real SIFT is to search. Distribution similarity is supporting evidence, not the decision rule.</p></div>
       <div class="grid cards-3">
-        <article class="card"><div class="kicker">Architecture</div><div class="big">Structure matters</div><p>The MLP cannot emit exact zeros. Independent gates add zeros but miss SIFT's correlated 4×4×8 support. Structured gates model that support directly.</p></article>
+        <article class="card"><div class="kicker">Architecture</div><div class="big">Structure matters</div><p>v1 cannot emit exact zeros. v2 adds zeros but misses SIFT's correlated 4×4×8 support. v4 models that support directly and trains on neighbourhood shape.</p></article>
         <article class="card"><div class="kicker">100k-step comparison</div><div class="big">No simple winner</div><p>v1_5 is closest on LID and contrast, v2 on hubness, and v4 on IVF balance. The dense models score well while still missing SIFT's exact-zero support.</p></article>
         <article class="card"><div class="kicker">Operational cost at 1M</div><div class="big">1.44 s p95</div><p>Structured-gated generation plus host transfer costs 1.441 s p95. That is 28% above the MLP's 1.128 s budget, with only ~54 MiB peak generation VRAM.</p></article>
       </div>
@@ -121,12 +122,12 @@
     </section>
 
     <section id="architecture">
-      <div class="section-head"><h2>Three inference architectures</h2><p>Select an architecture to see its data path, expressiveness, and known limitation. v3 and v4 share the same structured-gated inference graph; v4 changes the training objective.</p></div>
+      <div class="section-head"><h2>Architecture, rung by rung</h2><p>Select a version to see its complete inference graph and the training-only mechanism introduced at that rung. Dashed arrows never run during corpus generation.</p></div>
       <div class="card architecture">
         <div class="arch-list" id="archButtons"></div>
         <div class="arch-panel">
           <div class="arch-copy"><p class="kicker" id="archVariants"></p><h3 id="archTitle"></h3><p id="archWhy"></p><div id="archTags"></div><p class="muted" id="archLimit"></p></div>
-          <div class="flow" id="archFlow" aria-label="Architecture flow diagram"></div>
+          <div class="diagram-wrap"><svg id="archDiagram" viewBox="0 0 760 430" role="img" aria-label="Version architecture diagram"></svg><div class="diagram-legend"><span><i style="background:#dcece5"></i>inference</span><span><i style="background:#f4dfc8"></i>stochastic/support</span><span><i style="background:#e7def3"></i>training only</span><span><i style="background:#ece9e0"></i>real data</span></div></div>
         </div>
       </div>
     </section>
@@ -148,11 +149,11 @@
     <section id="runtime">
       <div class="section-head"><h2>Runtime scales linearly—and host transfer matters</h2><p>Randomly initialized matched shapes isolate inference architecture. Five repeats, batch size 4,096, exclusive RTX 4060. Select the displayed phase.</p></div>
       <div class="controls" id="runtimeControls"><button class="control active" data-phase="generate">GPU generation</button><button class="control" data-phase="host">To host + assembly</button><button class="control" data-phase="budget">p95 budget total</button></div>
-      <div class="card chart-card"><div class="chart-wrap"><svg id="runtimeChart" viewBox="0 0 920 430" role="img" aria-label="Generation runtime scaling chart"></svg><div class="tooltip" id="runtimeTip"></div></div><div class="legend"><span style="--color:var(--mlp)">MLP</span><span style="--color:var(--gated)">Gated</span><span style="--color:var(--structured)">Structured gated</span></div></div>
+      <div class="card chart-card"><div class="chart-wrap"><svg id="runtimeChart" viewBox="0 0 920 430" role="img" aria-label="Generation runtime scaling chart"></svg><div class="tooltip" id="runtimeTip"></div></div><div class="legend"><span style="--color:var(--mlp)">v1 <small>(dense)</small></span><span style="--color:var(--gated)">v2 <small>(gated)</small></span><span style="--color:var(--structured)">v4 <small>(structured)</small></span></div></div>
       <div class="grid cards-3" style="margin-top:18px">
-        <article class="card"><div class="kicker">MLP at 1M</div><div class="big">2.07M/s</div><p>0.482 s median GPU generation; 1.128 s p95 generation-plus-host budget.</p></article>
-        <article class="card"><div class="kicker">Gated at 1M</div><div class="big">1.81M/s</div><p>0.554 s median GPU generation; 1.203 s p95 budget. Exact-zero support costs 6.6% on the total p95 budget versus MLP.</p></article>
-        <article class="card"><div class="kicker">Structured at 1M</div><div class="big">1.28M/s</div><p>0.779 s median GPU generation; 1.441 s p95 budget. Still comfortably sub-two-second at this hardware and N.</p></article>
+        <article class="card"><div class="kicker">v1 at 1M · dense</div><div class="big">2.07M/s</div><p>0.482 s median GPU generation; 1.128 s p95 generation-plus-host budget.</p></article>
+        <article class="card"><div class="kicker">v2 at 1M · gated</div><div class="big">1.81M/s</div><p>0.554 s median GPU generation; 1.203 s p95 budget. Exact-zero support costs 6.6% on the total p95 budget versus v1.</p></article>
+        <article class="card"><div class="kicker">v4 at 1M · structured</div><div class="big">1.28M/s</div><p>0.779 s median GPU generation; 1.441 s p95 budget. Still comfortably sub-two-second at this hardware and N.</p></article>
       </div>
       <p class="muted">CUDA initialization adds 0.270 s once per process. Build and warmup are separate from the plotted per-instance budget. The MLP N=1,000 p95 has one startup-sized outlier; use larger cells for scaling decisions.</p>
     </section>
@@ -190,13 +191,32 @@
 
   <script>
     const arch = {
-      mlp:{label:'Dense MLP',variants:'v0 · v1 · v1_5',title:'Smooth, dense output',why:'A shared 128→512→1024→1024 trunk maps Gaussian latent vectors to 128 coordinates, followed by L2 normalization. EMA and distance regularization change training, not this inference graph.',tags:['fastest','simple baseline','dense support'],limit:'Known ceiling: a continuous dense output cannot reproduce SIFT’s heavy exact-zero mass or quantized lattice.',flow:['z ∼ N(0,I)','MLP trunk','128 raw values','L2 normalize']},
-      gated:{label:'Independent gated',variants:'v2',title:'Exact zeros, coordinate by coordinate',why:'The trunk feeds a softplus magnitude head and a binary-concrete gate head. Their product creates genuine zeros; the result is normalized to the unit sphere.',tags:['exact zeros','stochastic gates','two output heads'],limit:'Known ceiling: independent coordinate gates produce a narrow Binomial non-zero count and cannot express SIFT’s local support correlation.',flow:['z ∼ N(0,I)','shared MLP trunk','magnitude × sampled gate','L2 normalize']},
-      structured:{label:'Structured gated',variants:'v3 · v4',title:'Support follows SIFT’s 4×4×8 geometry',why:'Adds a per-vector sparsity scalar, a 3×3×3 convolution over the descriptor grid, and fixed Gaussian smoothing of gate noise. v4 keeps this graph and adds a local log-ratio training penalty.',tags:['correlated zeros','over-dispersion','SIFT-aware support'],limit:'Remaining gap: continuous magnitudes still cannot reproduce the quantized lattice or exact duplicate rows. More seeds are required.',flow:['z ∼ N(0,I)','shared trunk + sparsity','3D coupled gate + magnitude','L2 normalize']}
+      v0:{label:'v0 · baseline',variants:'Dense MLP',title:'Plain WGAN-GP',why:'Gaussian latent vectors pass through three fully connected hidden layers and a 128-value output layer. The shared normalization rule places every generated descriptor on the L2 unit sphere.',tags:['128→512→1024→1024→128','LeakyReLU','WGAN-GP'],limit:'A smooth dense output cannot create SIFT’s exact zeros or quantized support.',kind:'mlp',training:'critic'},
+      v1:{label:'v1 · EMA',variants:'Dense MLP + EMA',title:'Stable sampling weights',why:'The inference graph is unchanged. During training, an exponential moving average shadows the live generator parameters; saved sampling checkpoints use the EMA weights.',tags:['v0 graph','EMA 0.999','sampling stability'],limit:'EMA stabilizes weights but adds no new representational capacity.',kind:'mlp',training:'ema'},
+      v1_5:{label:'v1_5 · distance',variants:'Dense MLP + distance regularizer',title:'Match global distance scale',why:'The v1 generator remains intact. A training-only term compares mean pairwise distances from real and generated minibatch subsets, nudging global geometry toward SIFT.',tags:['v1 graph','distance α=0.1','256 points'],limit:'One global scalar cannot constrain exact-zero support or local neighbourhood shape.',kind:'mlp',training:'distance'},
+      v2:{label:'v2 · gated',variants:'Independent gated generator',title:'Exact zeros via stochastic gates',why:'A shared trunk splits into a positive magnitude head and a binary-concrete gate head. Their elementwise product creates genuine zeros before L2 normalization.',tags:['two heads','binary-concrete','exact zeros'],limit:'Independent coordinate gates force a narrow Binomial support-count distribution and miss local correlation.',kind:'gated',training:'distance'},
+      v3:{label:'v3 · structured',variants:'Structured gated generator',title:'SIFT-aware correlated support',why:'The gate path gains a per-vector sparsity offset, a 3D coupling convolution on the 4×4×8 SIFT grid, and fixed Gaussian smoothing of gate noise. Magnitudes retain their own head.',tags:['4×4×8 layout','3×3×3 coupling','correlated noise'],limit:'The critic and distance term still do not directly constrain local neighbour geometry.',kind:'structured',training:'distance'},
+      v4:{label:'v4 · log-ratio',variants:'Structured gated + local objective',title:'Train on neighbourhood shape',why:'Inference is exactly v3. During training, fake and real within-batch k-neighbour log-ratio profiles feed an L1 penalty, with an EMA target on the real side.',tags:['v3 inference','k=20 profile','α=0.015'],limit:'LID becomes fitted evidence; quantization and exact duplicate rows remain unresolved.',kind:'structured',training:'logratio'}
     };
-    const archButtons=document.querySelector('#archButtons'), archVariants=document.querySelector('#archVariants'), archTitle=document.querySelector('#archTitle'), archWhy=document.querySelector('#archWhy'), archLimit=document.querySelector('#archLimit'), archTags=document.querySelector('#archTags'), archFlow=document.querySelector('#archFlow');
-    function showArch(key){ document.querySelectorAll('.arch-button').forEach(b=>b.classList.toggle('active',b.dataset.key===key)); const a=arch[key]; archVariants.textContent=a.variants; archTitle.textContent=a.title; archWhy.textContent=a.why; archLimit.textContent=a.limit; archTags.innerHTML=a.tags.map(t=>`<span class="tag">${t}</span>`).join(''); archFlow.innerHTML=a.flow.map((n,i)=>`${i?'<div class="arrow">↓</div>':''}<div class="node">${n}</div>`).join(''); }
-    Object.entries(arch).forEach(([k,a])=>{const b=document.createElement('button');b.className='arch-button';b.dataset.key=k;b.innerHTML=`<strong>${a.label}</strong><small>${a.variants}</small>`;b.onclick=()=>showArch(k);archButtons.append(b)});showArch('structured');
+    const archButtons=document.querySelector('#archButtons'), archVariants=document.querySelector('#archVariants'), archTitle=document.querySelector('#archTitle'), archWhy=document.querySelector('#archWhy'), archLimit=document.querySelector('#archLimit'), archTags=document.querySelector('#archTags'), archDiagram=document.querySelector('#archDiagram');
+    function diagramBox(x,y,w,h,label,kind='model',sub=''){
+      const fills={model:'#dcece5',support:'#f4dfc8',train:'#e7def3',real:'#ece9e0',output:'#d8e5f0'}, stroke={model:'#4d796a',support:'#bd743c',train:'#72569a',real:'#817d73',output:'#4c718d'};
+      const g=document.createElementNS('http://www.w3.org/2000/svg','g'),r=document.createElementNS('http://www.w3.org/2000/svg','rect');Object.entries({x,y,width:w,height:h,rx:10,fill:fills[kind],stroke:stroke[kind],'stroke-width':1.5}).forEach(([k,v])=>r.setAttribute(k,v));g.append(r);textSvg(g,x+w/2,y+h/2-(sub?5:0),label,'middle','chart-title');if(sub)textSvg(g,x+w/2,y+h/2+15,sub,'middle','axis-label');archDiagram.append(g);return {x,y,w,h};
+    }
+    function diagramEdge(a,b,{dash=false,label='',from='right',to='left'}={}){const starts={right:[a.x+a.w,a.y+a.h/2],bottom:[a.x+a.w/2,a.y+a.h],top:[a.x+a.w/2,a.y],left:[a.x,a.y+a.h/2]},ends={left:[b.x,b.y+b.h/2],top:[b.x+b.w/2,b.y],bottom:[b.x+b.w/2,b.y+b.h],right:[b.x+b.w,b.y+b.h/2]},s=starts[from],e=ends[to],p=document.createElementNS('http://www.w3.org/2000/svg','path');let mid=(s[0]+e[0])/2,d=`M${s[0]},${s[1]} C${mid},${s[1]} ${mid},${e[1]} ${e[0]},${e[1]}`;Object.entries({d,fill:'none',stroke:dash?'#72569a':'#52645c','stroke-width':2,'stroke-dasharray':dash?'6 5':'','marker-end':'url(#diagramArrow)'}).forEach(([k,v])=>p.setAttribute(k,v));archDiagram.append(p);if(label)textSvg(archDiagram,mid,(s[1]+e[1])/2-7,label,'middle','axis-label')}
+    function diagramBase(){archDiagram.innerHTML='<defs><marker id="diagramArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#52645c"/></marker></defs>';textSvg(archDiagram,20,24,'SOLID · CORPUS GENERATION','start','axis-label');textSvg(archDiagram,20,278,'DASHED · TRAINING ONLY','start','axis-label');line(archDiagram,20,258,740,258,'gridline')}
+    function drawArchDiagram(a){diagramBase();const z=diagramBox(20,92,92,62,'Latent z','model','N(0,I)'),trunk=diagramBox(150,82,180,82,'Shared MLP trunk','model','512 → 1024 → 1024');diagramEdge(z,trunk);let out;
+      if(a.kind==='mlp'){const head=diagramBox(382,92,120,62,'Linear head','model','128 values');out=diagramBox(620,92,112,62,'Unit vector','output','128-D');diagramEdge(trunk,head);const norm=diagramBox(524,178,104,52,'L2 norm','model');diagramEdge(head,norm,{from:'bottom',to:'top'});diagramEdge(norm,out,{from:'right',to:'bottom'});}
+      if(a.kind==='gated'){const mag=diagramBox(382,48,130,62,'Magnitude','model','softplus'),gate=diagramBox(382,142,130,62,'Gate logits','support','binary-concrete'),mul=diagramBox(544,92,76,62,'×','support','elementwise');out=diagramBox(650,92,82,62,'L2 norm','output');diagramEdge(trunk,mag);diagramEdge(trunk,gate);diagramEdge(mag,mul);diagramEdge(gate,mul);diagramEdge(mul,out);}
+      if(a.kind==='structured'){const mag=diagramBox(370,35,118,58,'Magnitude','model','softplus'),logits=diagramBox(360,132,106,58,'Gate logits','support'),sparse=diagramBox(480,132,106,58,'Sparsity','support','1 / vector'),grid=diagramBox(500,35,126,58,'4×4×8 gate','support','conv + noise'),mul=diagramBox(650,73,74,58,'× + norm','output');out=mul;diagramEdge(trunk,mag);diagramEdge(trunk,logits);diagramEdge(trunk,sparse);diagramEdge(logits,grid,{from:'top',to:'bottom'});diagramEdge(sparse,grid,{from:'top',to:'bottom'});diagramEdge(mag,mul);diagramEdge(grid,mul);}
+      const real=diagramBox(20,326,112,58,'Real batch','real','SIFT'),fake=diagramBox(164,326,112,58,'Fake batch','train');diagramEdge(out,fake,{dash:true,from:'bottom',to:'top'});
+      if(a.training==='critic'){const critic=diagramBox(342,326,126,58,'Critic','train','Wasserstein + GP'),loss=diagramBox(548,326,154,58,'Generator loss','train','−E[D(fake)]');diagramEdge(real,critic,{dash:true});diagramEdge(fake,critic,{dash:true});diagramEdge(critic,loss,{dash:true});}
+      if(a.training==='ema'){const live=diagramBox(342,314,140,70,'Live weights','train','optimizer updates'),ema=diagramBox(554,314,148,70,'EMA weights','train','decay 0.999');diagramEdge(fake,live,{dash:true});diagramEdge(live,ema,{dash:true,label:'shadow update'});diagramEdge(ema,out,{dash:true,from:'top',to:'bottom'});}
+      if(a.training==='distance'){const rdist=diagramBox(314,300,128,52,'Mean pdist(real)','train'),fdist=diagramBox(314,370,128,52,'Mean pdist(fake)','train'),loss=diagramBox(540,326,162,58,'| distance gap |','train','α = 0.1');diagramEdge(real,rdist,{dash:true});diagramEdge(fake,fdist,{dash:true});diagramEdge(rdist,loss,{dash:true});diagramEdge(fdist,loss,{dash:true});}
+      if(a.training==='logratio'){const rp=diagramBox(300,294,150,58,'Real k-NN profile','real','EMA target'),fp=diagramBox(300,370,150,58,'Fake k-NN profile','train','log(rᵢ / rₖ)'),loss=diagramBox(540,326,162,58,'L1 profile loss','train','α = 0.015');diagramEdge(real,rp,{dash:true});diagramEdge(fake,fp,{dash:true});diagramEdge(rp,loss,{dash:true});diagramEdge(fp,loss,{dash:true});}
+    }
+    function showArch(key){ document.querySelectorAll('.arch-button').forEach(b=>b.classList.toggle('active',b.dataset.key===key)); const a=arch[key]; archVariants.textContent=a.variants; archTitle.textContent=a.title; archWhy.textContent=a.why; archLimit.textContent=a.limit; archTags.innerHTML=a.tags.map(t=>`<span class="tag">${t}</span>`).join('');drawArchDiagram(a); }
+    Object.entries(arch).forEach(([k,a])=>{const b=document.createElement('button');b.className='arch-button';b.dataset.key=k;b.innerHTML=`<strong>${a.label}</strong><small>${a.variants}</small>`;b.onclick=()=>showArch(k);archButtons.append(b)});showArch('v4');
 
     const quality={
       contrast:{label:'Relative contrast',values:{Real:2.2672818,v1:2.2526491,v1_5:2.2536035,v2:2.5122252,v3:2.6794803,v4:2.3265032},caption:'v1_5 is closest by 0.0137, narrowly ahead of v1. That difference is below the historical v0 seed spread, so do not distinguish those two on contrast.'},
@@ -210,9 +230,9 @@
     Object.entries(quality).forEach(([k,m])=>{let b=document.createElement('button');b.dataset.key=k;b.textContent=m.label;b.onclick=()=>drawQuality(k);metricButtons.append(b)});drawQuality('contrast');
 
     const runtime={
-      mlp:{color:'#467a6a',generate:[.000633,.005003,.048325,.482204],host:[.000922,.005200,.058765,.602553],budget:[.052922,.013445,.112176,1.127813]},
-      gated:{color:'#d48345',generate:[.001077,.005744,.055555,.553515],host:[.000610,.005144,.058383,.596974],budget:[.002756,.014835,.121601,1.202580]},
-      structured:{color:'#735c9e',generate:[.001571,.007942,.077960,.778514],host:[.000940,.005085,.058768,.589870],budget:[.003848,.017413,.145741,1.441359]}
+      v1:{color:'#467a6a',generate:[.000633,.005003,.048325,.482204],host:[.000922,.005200,.058765,.602553],budget:[.052922,.013445,.112176,1.127813]},
+      v2:{color:'#d48345',generate:[.001077,.005744,.055555,.553515],host:[.000610,.005144,.058383,.596974],budget:[.002756,.014835,.121601,1.202580]},
+      v4:{color:'#735c9e',generate:[.001571,.007942,.077960,.778514],host:[.000940,.005085,.058768,.589870],budget:[.003848,.017413,.145741,1.441359]}
     }, ns=[1000,10000,100000,1000000], rsvg=document.querySelector('#runtimeChart'), rtip=document.querySelector('#runtimeTip');
     function drawRuntime(phase){rsvg.innerHTML='';const max=Math.max(...Object.values(runtime).flatMap(x=>x[phase]))*1.08;line(rsvg,75,360,880,360,'axis');line(rsvg,75,45,75,360,'axis');[0,.25,.5,.75,1].forEach(t=>{let y=360-t*300;line(rsvg,75,y,880,y,t?'gridline':'axis');textSvg(rsvg,64,y+4,(max*t).toFixed(2)+'s','end','axis-label')});ns.forEach((n,i)=>textSvg(rsvg,120+i*235,388,n>=1e6?'1M':n>=1e3?(n/1e3)+'k':n,'middle','axis-label'));Object.entries(runtime).forEach(([name,d])=>{let pts=d[phase].map((v,i)=>[120+i*235,360-v/max*300]);let path=document.createElementNS('http://www.w3.org/2000/svg','path');path.setAttribute('d',pts.map((p,i)=>(i?'L':'M')+p.join(',')).join(' '));path.setAttribute('fill','none');path.setAttribute('stroke',d.color);path.setAttribute('stroke-width','4');rsvg.append(path);pts.forEach((p,i)=>{let c=document.createElementNS('http://www.w3.org/2000/svg','circle');Object.entries({cx:p[0],cy:p[1],r:7,fill:d.color,stroke:'#fff','stroke-width':3}).forEach(([k,v])=>c.setAttribute(k,v));c.onmousemove=e=>showTip(rtip,e,`${name.replace('_',' ')} · N=${ns[i].toLocaleString()} · ${d[phase][i].toFixed(6)} s`);c.onmouseleave=()=>rtip.style.opacity=0;rsvg.append(c)})});textSvg(rsvg,75,25,phase==='generate'?'Median device-side generation':phase==='host'?'Median device-to-host + array assembly':'p95 generation + p95 host budget','start','chart-title')}
     document.querySelectorAll('#runtimeControls button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#runtimeControls button').forEach(x=>x.classList.remove('active'));b.classList.add('active');drawRuntime(b.dataset.phase)});drawRuntime('generate');

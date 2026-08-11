@@ -236,7 +236,7 @@ Pass `--allow-unset` to get the report alone.
 The most discriminating statistic of all, **effective rank**, cannot go in the
 gate at present: `check_gate.GATE_STATISTICS` is a fixed four-name tuple and
 rejects anything else, and widening it would require every other family's gate
-file to grow the key too. Tracked as an issue rather than done here, since it
+file to grow the key too. Tracked as issue #44 rather than done here, since it
 is a schema change to shared code.
 
 These numbers do not move under the metric-aware `ann_difficulty`: they were

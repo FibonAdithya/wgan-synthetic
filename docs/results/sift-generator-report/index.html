@@ -77,7 +77,10 @@
     .rung .family { position:absolute; bottom:14px; left:17px }
     .detail { margin-top:14px }
     .visual-frame { padding:12px; overflow:hidden; text-align:center }
+    .visual-frame a { display:block }
+    .visual-frame img { display:block; width:100%; max-height:820px; object-fit:contain; border-radius:10px; background:white }
     .visual-frame iframe { display:block; width:100%; border:0; border-radius:10px; background:white }
+    .visual-frame [hidden] { display:none }
     .visual-caption { max-width:900px; margin:16px auto 5px; color:var(--muted); text-align:left }
     table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums }
     th,td { padding:11px 10px; border-bottom:1px solid var(--line); text-align:right }
@@ -131,14 +134,15 @@
     </section>
 
     <section id="visuals">
-      <div class="section-head"><h2>Generated output, visualized</h2><p>These interactive diagnostics use the same seed-7, 20,000-vector sample sets as the ANN comparison. Hover for values; drag to zoom; double-click to reset; click legend entries to isolate a series.</p></div>
+      <div class="section-head"><h2>Generated output, visualized</h2><p>These diagnostics use the same seed-7, 20,000-vector sample sets as the ANN comparison. Glyphs and correlations are stable full-resolution images; the dimension-profile view remains interactive.</p></div>
       <div class="controls" id="visualControls">
         <button class="control active" data-visual="glyphs">Descriptor glyphs</button>
         <button class="control" data-visual="profiles">Dimension profiles</button>
         <button class="control" data-visual="correlation">Correlation structure</button>
       </div>
       <div class="card visual-frame">
-        <iframe id="visualPlot" src="plots/descriptor-glyphs.html" title="Interactive real and generated SIFT descriptor comparison" height="920" loading="lazy"></iframe>
+        <a id="visualLink" href="images/descriptor-glyphs.png" target="_blank"><img id="visualImage" src="images/descriptor-glyphs.png" alt="Real and generated SIFT descriptors drawn as orientation glyphs"></a>
+        <iframe id="visualPlot" src="plots/per-dimension-profiles.html" title="Interactive real and generated SIFT descriptor comparison" height="760" loading="lazy" hidden></iframe>
         <p class="visual-caption" id="visualCaption"></p>
       </div>
     </section>
@@ -232,11 +236,11 @@
     Object.entries(quality).forEach(([k,m])=>{let b=document.createElement('button');b.dataset.key=k;b.textContent=m.label;b.onclick=()=>drawQuality(k);metricButtons.append(b)});drawQuality('contrast');
 
     const visuals={
-      glyphs:{src:'plots/descriptor-glyphs.html',height:660,caption:'<strong>One descriptor, enlarged.</strong> The viewer fixes the first seed-selected example position and switches only the source row: two real references or one generated version. Each glyph is a 4×4 spatial grid with eight orientation rays per cell. Red rays mark negative bins—impossible for a SIFT gradient histogram—and expose the dense v1/v1_5 support failure.'},
-      profiles:{src:'plots/per-dimension-profiles.html',height:760,caption:'<strong>Marginals and exact-zero support.</strong> Mean and standard-deviation curves overlap closely, showing why aggregate distribution scores can look convincing. The bottom panel separates the architectures: v1 and v1_5 have no exact zeros, v2 under-produces them, and the structured v3/v4 generators more closely follow the real per-bin pattern.'},
-      correlation:{src:'plots/correlation-structure.html',height:780,caption:'<strong>Cross-bin structure.</strong> The first heatmap is the real 128×128 correlation matrix; each following panel is generated minus real on one shared scale. White means close agreement. v3 has the smallest visual residuals here, while this plot remains a diagnostic rather than an ANN pass/fail metric.'}
-    },visualPlot=document.querySelector('#visualPlot'),visualCaption=document.querySelector('#visualCaption');
-    function showVisual(key){const v=visuals[key];document.querySelectorAll('#visualControls button').forEach(b=>b.classList.toggle('active',b.dataset.visual===key));if(!visualPlot.src.endsWith(v.src))visualPlot.src=v.src;visualPlot.height=v.height;visualCaption.innerHTML=v.caption}
+      glyphs:{type:'image',src:'images/descriptor-glyphs.png',alt:'Real and generated SIFT descriptors drawn as orientation glyphs',caption:'<strong>Individual descriptor shape.</strong> Each item is a 4×4 spatial grid with eight orientation rays per cell. The two real rows establish natural variation. Red rays mark negative bins—impossible for a SIFT gradient histogram—and expose the dense v1/v1_5 support failure. Click for the full-resolution image.'},
+      profiles:{type:'plot',src:'plots/per-dimension-profiles.html',height:760,caption:'<strong>Marginals and exact-zero support.</strong> Mean and standard-deviation curves overlap closely, showing why aggregate distribution scores can look convincing. The bottom panel separates the architectures: v1 and v1_5 have no exact zeros, v2 under-produces them, and the structured v3/v4 generators more closely follow the real per-bin pattern.'},
+      correlation:{type:'image',src:'images/correlation-structure.png',alt:'Real SIFT correlation matrix and generated-minus-real correlation differences by version',caption:'<strong>Cross-bin structure.</strong> The first heatmap is the real 128×128 correlation matrix; each following panel is generated minus real on one shared scale. White means close agreement. v3 has the smallest visual residuals here. Click for the full-resolution image.'}
+    },visualImage=document.querySelector('#visualImage'),visualLink=document.querySelector('#visualLink'),visualPlot=document.querySelector('#visualPlot'),visualCaption=document.querySelector('#visualCaption');
+    function showVisual(key){const v=visuals[key],isImage=v.type==='image';document.querySelectorAll('#visualControls button').forEach(b=>b.classList.toggle('active',b.dataset.visual===key));visualLink.hidden=!isImage;visualPlot.hidden=isImage;if(isImage){visualImage.src=v.src;visualImage.alt=v.alt;visualLink.href=v.src}else{if(!visualPlot.src.endsWith(v.src))visualPlot.src=v.src;visualPlot.height=v.height}visualCaption.innerHTML=v.caption}
     document.querySelectorAll('#visualControls button').forEach(b=>b.onclick=()=>showVisual(b.dataset.visual));showVisual('glyphs');
 
     const runtime={

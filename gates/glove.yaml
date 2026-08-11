@@ -57,11 +57,18 @@ statistics:
   #
   # Careful with this one. Eight 20000-row draws of the *real* corpus scored
   # 3.46 to 8.33 -- a spread of 108% of the mean, against 0.5% for lid_median
-  # -- because the skew is a third moment set by a handful of tail hubs. A
-  # band wide enough not to reject real data against itself would pass nearly
-  # any generator, so it would be measuring the draw rather than the model.
-  # See the "Hubness skew is below the noise floor at this N" section of
-  # docs/datasets/glove.md, and docs/datasets/glove_noise_floor.json.
+  # -- because the skew is a third moment set by a handful of tail hubs. That
+  # makes a band on it coarse, not useless: it was once claimed here that any
+  # band admitting that range would pass nearly any generator, but a v0
+  # five-seed sweep scored 1.535 to 1.798, entirely clear of 3.46--8.33, so
+  # such a band would reject v0 decisively. A band this wide can only catch a
+  # generator whose hubness deficit exceeds the real corpus's own noise floor
+  # -- as v0's does -- and would go blind again against a later rung that
+  # closed most of the gap and landed inside 3.46--8.33, indistinguishable
+  # there from a reseed of real itself.
+  # See the "Hubness skew is below the noise floor at this N" and
+  # "Noise floor" sections of docs/datasets/glove.md, and
+  # docs/datasets/glove_noise_floor.json / docs/datasets/glove_v0_noise_floor.json.
   hubness_skew:
     min: null
     max: null

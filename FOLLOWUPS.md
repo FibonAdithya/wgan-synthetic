@@ -85,29 +85,24 @@ v0/v1/v1_5 are in `/workspace/wgan-synthetic/runs/` while v2 is in
 the four-row comparison needs the run directories collected under one tree
 first. Either move v2's run into the main checkout, or let `Variant` carry an
 absolute run dir.
-## DEEP ladder results rest on one seed per rung (PR #6)
+## ~~DEEP ladder results rest on one seed per rung~~ — DONE 2026-08-10
 
-`docs/datasets/deep.md` reports three trained rungs at `seed: 42`. The ladder
-was run twice — once at `latent_dim: 128` (inherited from SIFT, since
-corrected) and once at 96 — which gives two draws rather than one, and the
-comparison is not reassuring: `v0`'s IVF gini gap moved tenfold and its
-hubness gap doubled under a change the target's effective rank of 65 says
-should barely bind. Several of those swings exceed the differences between
-rungs.
+Settled by a three-seed sweep (42/43/44 × v0/v1/v2, 30k steps each), committed
+as `docs/datasets/deep_seed_sweep_summary.json`. **Both claims this item said
+survived the two draws are withdrawn:** `v2`-closest-on-LID is a 0.0676
+difference against a 0.1625 seed range, and `v1`'s hubness gap of 0.000402 was
+one seed landing well, against a ±0.16 swing.
 
-Two claims survive both draws (`v2` closest on LID, `v1` closest on hubness
-skew by two orders of magnitude); the IVF gini ordering does not survive at
-all and should not be used to rank rungs. Two draws is still two.
+On four of the five statistics the rungs are indistinguishable. Only effective
+rank separates them (rung spread 0.7353 vs worst seed range 0.1614), ordering
+`v2` < `v1` < `v0`.
 
-Three or four seeds per rung (~35 min each on the RTX 4060) would settle it,
-and are a prerequisite for setting this family's gate bands — a band fitted to
-either existing draw would be fitted to noise.
+Gate bands are set for `lid_median` and `relative_contrast_median`.
+`hubness_skew` and `ivf_gini` are deliberately left null — not from noise, but
+because the ladder already matches real within 0.04 and 0.27 pooled sd, so
+there is nothing left to gate. See `docs/datasets/deep.md`.
 
-Resolved in passing: the `summary.json` those numbers were read out of is now
-committed as `docs/datasets/deep_ladder_summary.json`, so the table is
-checkable from this repo alone.
-
-## `spectrum_reg_alpha: 0.1` is too small to bind, and v1 may be measuring noise (PR #6)
+## `spectrum_reg_alpha: 0.1` is too small to bind — CONFIRMED, needs ~50x more
 
 The seed sweep above should be an **alpha sweep** as well, because there is
 reason to think `v1`'s rung is not currently testing what it claims to.
@@ -141,19 +136,47 @@ regularizer acting through the spectrum. Note that
 `test_enabling_the_regularizer_changes_the_generator` needed `alpha: 5.0` to
 show the term reaching the weights at all.
 
-Two things to decide together, since the second changes what `alpha` means:
+**Measured 2026-08-10 (item 1 done, item 2 still open).** Two runs at seed 42
+against the shipped rung, read on effective rank:
 
-1. Sweep `alpha` over something like `{0.1, 1, 10}` alongside the seeds, and
-   report effective rank per rung so the term is judged on the property it
-   targets rather than only on downstream ANN metrics.
-2. Consider making the penalty scale-free — a relative gap rather than the
-   absolute mean, e.g. dividing by the real spectrum's mean entry — so that
-   `spectrum_reg_alpha` is comparable to `distance_reg_alpha` and does not
-   quietly depend on `descriptor_dim`.
+| α | effective rank | vs shipped 0.1 |
+|---|---:|---:|
+| 0.1 (shipped) | 63.3809 | — |
+| 1.0 | 63.3694 | −0.0115 |
+| 5.0 | 63.7668 | **+0.3860** |
 
-Not urgent: `v1` is not *wrong*, and nothing in `docs/datasets/deep.md`
-overclaims for it. But the rung costs 35 minutes a draw and currently cannot
-support the conclusion it exists to test.
+Seed noise on that rung is 0.0912, so **α=5.0 does bind, roughly fourfold
+clear of noise, while α=1.0 does nothing.** The prediction in this item was
+half right: the shipped 0.1 is inert, but the term is not broken — it needs
+roughly fifty times more weight. The response is a threshold rather than a
+slope, matching `test_enabling_the_regularizer_changes_the_generator` needing
+`alpha: 5.0`.
+
+It remains the weaker lever: α=5.0 buys +0.39 of effective rank where
+whitening buys +0.74 for free, against a 1.99 gap to real.
+
+Still open — **item 2, making the penalty scale-free.** A relative gap rather
+than the absolute mean (e.g. dividing by the real spectrum's mean entry) would
+make `spectrum_reg_alpha` comparable to `distance_reg_alpha` and stop it
+depending on `descriptor_dim`. That matters more now: the binding value of ~5
+was found at `d = 96` and will not transfer to `gist` (960) or `openai`
+(1536), so every family would otherwise have to rediscover its own threshold.
+
+## `effective_rank` is the only statistic that separates the DEEP rungs, and the gate cannot hold it
+
+The seed sweep found effective rank to be the one statistic with signal above
+the seed noise floor — and it is the one the gate cannot express.
+`check_gate.GATE_STATISTICS` is a fixed four-name tuple (`lid_median`,
+`relative_contrast_median`, `hubness_skew`, `ivf_gini`); the loader raises on
+any other key, and it also requires every name in the tuple to be present in
+each `gates/<dataset>.yaml`. So adding one key to DEEP's gate means adding it
+to all six families' gate files plus the checker and its tests.
+
+Worth doing, because on this family the four gateable statistics are either
+already matched (hubness, Gini) or measure the same underlying shortfall (LID
+and contrast), while effective rank is what actually distinguishes the rungs.
+Not done here because it is a schema change to shared code riding on an
+experiment, which is the thing that makes changes hard to review.
 
 ## `src/eval/ann_difficulty.py` is the last consumer that could inherit `--dataset`
 

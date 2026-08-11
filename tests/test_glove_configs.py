@@ -55,6 +55,19 @@ def test_instrument_names_an_absolute_corpus_path(name: str):
     assert Path(_load(name)["data"]["real_path"]).is_absolute()
 
 
+def test_instruments_agree_on_the_real_path():
+    """Absoluteness alone doesn't catch one instrument pointing at a different corpus.
+
+    `data.real_path` is one of the three allowed deltas, so nothing above
+    checks the five agree on *which* absolute path they name. One instrument
+    pointed at a different corpus file would pass every test above and
+    silently invalidate the whole sweep -- the exact failure this file exists
+    to prevent.
+    """
+    paths = {_load(name)["data"]["real_path"] for name in INSTRUMENTS}
+    assert len(paths) == 1
+
+
 def test_the_seeds_are_distinct():
     """A repeated seed would be a duplicate run masquerading as a draw."""
     seeds = [_load(name)["seed"] for name in INSTRUMENTS]

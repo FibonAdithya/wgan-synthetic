@@ -123,6 +123,69 @@ def test_missing_real_series_is_an_error():
         noise_floor.compute_floor(summary, ["s42", "s43"])
 
 
+def test_compute_floor_rejects_fewer_than_two_series():
+    """The `"a floor needs at least two series"` guard is otherwise unexercised.
+
+    Deleting it would still raise -- summarize_spread's own "at least two
+    values" guard fires one level down -- so nothing would notice the
+    regression without a test pinning this exact message.
+    """
+    summary = _summary(BASE, {"s42": BASE})
+    with pytest.raises(noise_floor.NoiseFloorError, match="at least two series"):
+        noise_floor.compute_floor(summary, ["s42"])
+
+
+def test_compute_floor_rejects_a_series_measured_at_different_conditions():
+    """A floor spread across mismatched N/k/nlist is not one measurement.
+
+    src/eval/eda/metrics.py warns that post-clamp conditions can diverge
+    between series in the same eda_report run; src/eval/check_gate.py guards
+    a single run against the gate's canonical conditions for exactly that
+    reason. compute_floor needs the same guard across every series it pools.
+    """
+    summary = _summary(BASE, {"s42": BASE, "s43": BASE})
+    for entry in summary["stats"]:
+        if entry["name"] == "s43":
+            entry["ann_measured_rows"] = 10000
+    with pytest.raises(noise_floor.NoiseFloorError, match="s43"):
+        noise_floor.compute_floor(summary, ["s42", "s43"])
+
+
+def test_compute_floor_names_the_disagreeing_condition_key():
+    summary = _summary(BASE, {"s42": BASE, "s43": BASE})
+    for entry in summary["stats"]:
+        if entry["name"] == "s43":
+            entry["ann_measured_nlist"] = 128
+    with pytest.raises(noise_floor.NoiseFloorError, match="ann_measured_nlist"):
+        noise_floor.compute_floor(summary, ["s42", "s43"])
+
+
+def test_a_bool_statistic_is_an_error():
+    """bool is a subclass of int; float(True) silently becoming 1.0 is wrong."""
+    summary = _summary(BASE, {"s42": {**BASE, "hubness_skew": True}, "s43": BASE})
+    with pytest.raises(noise_floor.NoiseFloorError, match="hubness_skew"):
+        noise_floor.compute_floor(summary, ["s42", "s43"])
+
+
+def test_a_numeric_string_statistic_is_an_error():
+    """float("1.5") silently succeeding would let a JSON-encoding bug through."""
+    summary = _summary(BASE, {"s42": {**BASE, "ivf_gini": "0.3"}, "s43": BASE})
+    with pytest.raises(noise_floor.NoiseFloorError, match="ivf_gini"):
+        noise_floor.compute_floor(summary, ["s42", "s43"])
+
+
+def test_a_non_numeric_statistic_is_an_error_not_a_bare_traceback():
+    """float(["abc"]) raises TypeError; float("abc") raises ValueError.
+
+    Neither is a NoiseFloorError, so before this both escaped compute_floor
+    and main()'s except clause as a bare traceback instead of the clean
+    `noise_floor: ...` stderr line every other bad-input path here produces.
+    """
+    summary = _summary(BASE, {"s42": {**BASE, "lid_median": [1.0, 2.0]}, "s43": BASE})
+    with pytest.raises(noise_floor.NoiseFloorError, match="lid_median"):
+        noise_floor.compute_floor(summary, ["s42", "s43"])
+
+
 def test_a_none_statistic_is_an_error():
     """ann_difficulty writes null when every query was discarded.
 
@@ -187,4 +250,28 @@ def test_cli_exits_nonzero_on_a_missing_series(tmp_path):
 
     assert result.returncode == 1
     assert "s99" in result.stderr
+    assert result.stdout == ""
+
+
+def test_cli_exits_nonzero_not_a_traceback_on_a_non_numeric_statistic(tmp_path):
+    """A bad summary.json must produce the clean stderr line, never a traceback."""
+    summary_path = tmp_path / "summary.json"
+    summary_path.write_text(
+        json.dumps(_summary(BASE, {"s42": {**BASE, "lid_median": "abc"}, "s43": BASE})),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable, "-m", "src.eval.noise_floor",
+            "--summary", str(summary_path),
+            "--series", "s42",
+            "--series", "s43",
+        ],
+        cwd=REPO_ROOT, capture_output=True, text=True,
+    )
+
+    assert result.returncode == 1
+    assert "Traceback" not in result.stderr
+    assert "lid_median" in result.stderr
     assert result.stdout == ""

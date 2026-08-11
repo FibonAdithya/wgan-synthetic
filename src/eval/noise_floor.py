@@ -85,6 +85,28 @@ def _entry(summary: dict, name: str) -> dict:
     raise NoiseFloorError(f"no series named {name!r} in summary.json")
 
 
+def _check_conditions(real_name: str, real_entry: dict, name: str, entry: dict) -> None:
+    """Raise unless `entry` was measured under the same conditions as `real_entry`.
+
+    `src/eval/eda/metrics.py` records post-clamp actuals precisely because a
+    series with fewer rows than requested gets its k and nlist clamped, and
+    `src/eval/check_gate.py` already guards a single run against the gate's
+    canonical conditions for the same reason. A floor spread across series
+    measured at different `ann_measured_rows` / `ann_measured_k` /
+    `ann_measured_nlist` would be recorded as if it were one measurement, and
+    the underlying statistics are not comparable across those conditions.
+    """
+    for key in CONDITION_KEYS:
+        expected = real_entry.get(key)
+        actual = entry.get(key)
+        if actual != expected:
+            raise NoiseFloorError(
+                f"series {name!r} was measured at {key}={actual!r}, but "
+                f"{real_name!r} was measured at {key}={expected!r}; a floor "
+                "needs every series measured under the same conditions"
+            )
+
+
 def _value(entry: dict, statistic: str) -> float:
     if statistic not in entry:
         raise NoiseFloorError(
@@ -98,6 +120,18 @@ def _value(entry: dict, statistic: str) -> float:
         raise NoiseFloorError(
             f"series {entry.get('name')!r} has {statistic!r} = null; "
             "the statistic was not measurable on that run"
+        )
+    # bool is a subclass of int, so isinstance(value, (int, float)) alone
+    # would let True/False through as 1.0/0.0. And float() on its own accepts
+    # more than a summary.json should ever contain: it silently turns a
+    # numeric string like "1.5" into 1.5, and raises a bare ValueError or
+    # TypeError -- not a NoiseFloorError -- on "abc" or a list, which main()
+    # below would otherwise let escape as a traceback instead of the clean
+    # stderr line every other bad-input path here produces.
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise NoiseFloorError(
+            f"series {entry.get('name')!r} has {statistic!r} = {value!r}, "
+            f"a {type(value).__name__}, not a number"
         )
     return float(value)
 
@@ -120,6 +154,8 @@ def compute_floor(
 
     real_entry = _entry(summary, real_name)
     entries = [_entry(summary, name) for name in series_names]
+    for name, entry in zip(series_names, entries):
+        _check_conditions(real_name, real_entry, name, entry)
 
     real: dict[str, float] = {}
     per_seed: list[dict[str, float]] = [{} for _ in entries]
@@ -203,7 +239,7 @@ def main() -> None:
     try:
         summary = json.loads(Path(args.summary).read_text(encoding="utf-8"))
         floor = compute_floor(summary, args.series, real_name=args.real_name)
-    except (NoiseFloorError, OSError, json.JSONDecodeError) as exc:
+    except (NoiseFloorError, OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
         # stderr, so stdout stays parseable as JSON or empty, never half a
         # report.
         print(f"noise_floor: {exc}", file=sys.stderr)

@@ -127,20 +127,67 @@ Real exact-zero fraction is 0.230. `v1`, `v1_5` and `v2` are 100k runs against
 `v1_5` -> `v2` step is clean, both being 100k, and it is where the gate breaks:
 LID gap 0.27 -> 2.95.
 
-**The gate and support fidelity are anticorrelated across this ladder.** The
-dense MLP rungs win every gate column while producing *no exact zeros at all*
-against real SIFT's 23% -- they are not SIFT-shaped, merely as hard to search.
-The regression begins precisely at `v2`, where the gate mechanism is introduced.
-`v4` has the best support match of any rung and recovers most of `v3`'s damage,
-and is still behind `v0` everywhere on the gate.
+Read on its own that table says the dense rungs win every gate column while
+producing *no exact zeros at all* against real SIFT's 23%. **That reading does
+not survive matching the run lengths.** It was comparing an undertrained `v3`
+and `v4` against fully trained dense rungs.
 
-This is worth stating as an open question rather than a conclusion. `AGENTS.md`
-invariant 1 makes ANN difficulty the gate and everything else a diagnostic; read
-literally, it says prefer `v1_5` and abandon this line. But it is ranking a
-generator that cannot emit a single exact zero above one that reproduces the
-support, which is either a real finding about what drives search difficulty or
-evidence that the four statistics are not sufficient alone. `configs/sift/v4_sift1m_x100k.yaml`
-exists to remove the remaining length confound from the `v2`/`v4` comparison.
+### At matched length
+
+`configs/sift/v4_sift1m_x100k.yaml` was written to remove exactly that confound.
+With `v4` at 100k, every rung below is a 100k run and the comparison is clean
+(`eda_ladder_100k_summary.json`):
+
+| Statistic | v1 | v1_5 | v2 | v3 | v4 |
+|---|---|---|---|---|---|
+| LID median | 0.2886 | **0.2738** | 2.9478 | 4.4100 | 1.4026 |
+| Relative contrast | 0.0146 | **0.0137** | 0.2449 | 0.4122 | 0.0592 |
+| Hubness skew | 0.2119 | 0.2702 | 0.0608 | 0.5611 | **0.1069** |
+| IVF Gini | 0.0198 | 0.0246 | 0.0118 | 0.0124 | **0.0042** |
+| exact-zero gap | 0.2298 | 0.2298 | 0.0775 | 0.0388 | **0.0023** |
+
+Against `v1_5`, the best dense rung, in the architecture-matched noise units
+established above:
+
+| Statistic | v1_5 | v4 | difference | verdict |
+|---|---|---|---|---|
+| LID median | 0.2738 | 1.4026 | 12.1x noise | **`v1_5` better** |
+| Relative contrast | 0.0137 | 0.0592 | 2.2x | too close to call |
+| Hubness skew | 0.2702 | 0.1069 | 4.3x | **`v4` better** |
+| IVF Gini | 0.0246 | 0.0042 | 1.6x | too close to call |
+
+One clear win each, not a rout. **And `v4` has not plateaued**: from 30k to 100k
+every gate statistic improved by more than the noise floor -- LID -36%, contrast
+-60%, hubness -63%, Gini -88%. Against `v2` at matched length it now wins three
+of four, losing only hubness.
+
+Its support match is close to exact: exact-zero fraction 0.2321 against real
+0.2298, a gap 34x smaller than `v2`'s, and effective rank 28.109 against real
+27.994, the closest of any rung.
+
+### What the ladder actually shows
+
+A trade, not a verdict. `v4` reproduces SIFT's *support* almost exactly and wins
+hubness and IVF Gini; `v1_5` reproduces its *intrinsic dimensionality* far better
+while emitting no exact zeros at all. LID being the one statistic the noise floor
+calls comfortably usable tilts this toward `v1_5` -- but `v4` was still improving
+at 100k, so the remaining gap is not demonstrably terminal.
+
+The sharpest datum is this: **`v4` trains directly on LID's sufficient statistic
+and still loses LID to a plain MLP by 12x the noise floor.** That points at an
+architectural ceiling -- the gate mechanism itself costing intrinsic
+dimensionality -- rather than a tuning problem, and it is the thing to attack
+next if this line continues.
+
+Duplicate-row fraction is 0.00000 for all five rungs against real SIFT's
+0.00062. No continuous generator here has ever touched it.
+
+The open question stands, and is not ours to settle: `AGENTS.md` invariant 1
+makes ANN difficulty the gate and everything else a diagnostic. Read literally it
+still prefers `v1_5`, on the strength of LID. But it is ranking a generator that
+cannot emit a single exact zero above one that reproduces the support to 0.0023 --
+either a real finding about what drives search difficulty, or evidence the four
+statistics are not sufficient on their own.
 
 ## What this does not say
 

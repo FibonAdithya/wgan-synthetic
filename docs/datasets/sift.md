@@ -77,6 +77,16 @@ exact zeros and quantized lattice that a dense MLP generator cannot.
 | `v1` | + generator EMA (`ema_decay: 0.999`) | `configs/sift/v1.yaml` | `runs/x100k_ema_only` | trained |
 | `v1_5` | + distance reg (`alpha: 0.1`, 256 points) | `configs/sift/v1_5.yaml` | `runs/x100k_improved` | trained |
 | `v2` | + gated generator | `configs/sift/v2.yaml` | `runs/x100k_sparse_clamp4` | trained |
+| `v3` | + structured gate (`generator_type: structured_gated`) | `configs/sift/v3.yaml` | `runs/sift_gan_v3`, `runs/x100k_structured` | trained |
+| `v4` | + log-ratio regularizer (`lid_reg_alpha: 0.015`) | `configs/sift/v4.yaml` | `runs/sift/v4_sift1m` | trained |
+
+`v3` and `v4` were measured as a matched pair on one corpus in
+`docs/results/v4-logratio/`; `v3`'s original run against the now-missing
+`sift_base.npy` is in `docs/results/v3-structured/`. **`v4` closes 83% of `v3`'s
+relative-contrast gap and 71% of its hubness-skew gap**, both well clear of
+run-to-run noise. Its LID is not evidence: `lid_reg` fits LID's sufficient
+statistic directly. Neither rung's checkpoints are in this repo — they are on
+the training box, listed in each result page.
 
 Train `v0` (or any rung, by swapping the config):
 
@@ -113,3 +123,57 @@ exits non-zero when the run fails -- or, as now, when the bands are still
 unset, which is verdict `unset` and exit code 2. Pass `--allow-unset` to get
 the report without the non-zero exit, and `--stats-name <label>` to check a
 synthetic series rather than `real`.
+
+## Noise floor
+
+How far each gated statistic moves when *nothing* changes but the seed. A band
+tighter than this is unenforceable, and a ladder rung whose improvement is
+smaller than this is indistinguishable from a reseed. Measured 2026-08-06 from
+two 30k-step `v0` runs identical in every training hyperparameter except seed
+(42 and 43), configs `configs/sift/noisefloor_{a,b}.yaml`. Both were sampled at
+a *fixed* seed of 42, so only the training seed varies, and both were measured
+in a single `eda_report` invocation under the canonical conditions above.
+
+| Statistic | Seed-to-seed spread | As % of real | Distance from real, in units of that spread |
+|---|---|---|---|
+| LID median | 0.164 | 0.9% | 2.7x |
+| Relative contrast median | 0.048 | 2.1% | **0.4x -- noise exceeds signal** |
+| Hubness skew | 0.062 | 3.3% | 1.5x |
+| IVF cell-balance Gini | 0.007 | 2.3% | **0.6x -- noise exceeds signal** |
+
+The last column is the one that matters: it compares the seed-to-seed spread
+against how far the generator sits from the real corpus. For relative contrast
+and IVF Gini, reseeding moves the statistic *further than the generator's entire
+deviation from SIFT*. The two runs do not even agree on the sign of the contrast
+gap -- one lands above the real value, the other below. Neither statistic can
+carry a meaningful band at this ladder's current distance from real, and neither
+should be used to attribute a rung-to-rung improvement. LID median is the one
+comfortably usable statistic; hubness skew is marginal.
+
+**This is n=2.** A single paired difference has one degree of freedom: it
+establishes the floor's order of magnitude and nothing more, and the true spread
+could be wider. Three to five seeds are needed before any of these numbers
+justifies writing a band into `gates/sift.yaml`. No band was set from this
+measurement -- `gates/sift.yaml` is unchanged and every band there is still null.
+
+Two later findings sharpen this, both from `docs/results/v4-logratio/`:
+
+- **This floor is measured on `v0`, and does not transfer.** Re-running `v3`
+  supplied an architecture-matched estimate for the structured-gate rungs -- LID
+  0.0930, contrast 0.0203, hubness 0.0382, Gini 0.0131. Use that one when
+  judging `v3`/`v4`. It makes IVF Gini a *weaker* discriminator than the table
+  above implies, not a stronger one.
+- **The spread above is a lower bound.** It varies the training seed, and the
+  note below is right that it would survive a determinism flag -- but there is a
+  second source it does not capture. Two runs at *identical* seed, corpus and
+  commit still diverge 1-8% on every loss column by step 250, from
+  nondeterministic CUDA reduction order amplified by adversarial dynamics.
+
+Reproduce with:
+
+    python -m src.train.train_wgan_gp --config configs/sift/noisefloor_a.yaml
+    python -m src.train.train_wgan_gp --config configs/sift/noisefloor_b.yaml
+
+then sample each `best_generator.pt` at a fixed seed, pass both to one
+`eda_report --synthetic-path LABEL=PATH`, and difference the two labels'
+entries in `summary.json`. A 30k-step run is ~34 min on one RTX 4060.

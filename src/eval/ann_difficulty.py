@@ -16,8 +16,8 @@ measured in one run and are *not* comparable with published figures for
 SIFT1M, which are measured on the full 1M set against the real query set
 rather than on a self-queried subsample.
 
-This module deliberately does not import from eda_report: it must stay usable
-and testable without plotly or argparse.
+This module deliberately does not import from `src.eval.eda`: it must stay
+usable and testable without plotly or argparse.
 """
 
 from __future__ import annotations
@@ -27,6 +27,38 @@ from dataclasses import dataclass
 import numpy as np
 from sklearn.cluster import MiniBatchKMeans
 from sklearn.neighbors import NearestNeighbors
+
+METRICS = ("l2", "angular")
+
+
+def require_unit_norm(x: np.ndarray, atol: float = 1.0e-4) -> None:
+    """Refuse rows that are not on the unit sphere.
+
+    `angular` is measured as L2 between unit vectors: on the sphere Euclidean
+    distance is sqrt(2 * cosine distance), strictly increasing, so it orders
+    neighbours exactly as cosine does while keeping every estimator below on
+    a true metric -- which cosine distance, failing the triangle inequality,
+    is not.
+
+    That equivalence holds only on the sphere, so rows that are not there are
+    refused rather than normalized here. Normalizing would let the report's
+    `preprocess:` line read `none` while the difficulty panels were measured
+    on normalized rows, with nothing anywhere to surface the divergence.
+
+    An exactly-zero row is accepted. `eda.series.maybe_l2_normalize` clamps
+    its divisor rather than dividing by ~0, so a zero row is a deliberate
+    output of our own preprocessing, not a caller mistake.
+    """
+    norms = np.linalg.norm(x, axis=1)
+    offenders = ~(np.isclose(norms, 1.0, atol=atol) | (norms == 0.0))
+    if not np.any(offenders):
+        return
+    bad = norms[offenders]
+    raise ValueError(
+        f"metric='angular' measures L2 on the unit sphere, so rows must "
+        f"already be unit-norm; {int(offenders.sum())} of {norms.size} are "
+        f"not (norms {bad.min():.6g} to {bad.max():.6g}). Pass --preprocess l2."
+    )
 
 
 def gini(occupancy: np.ndarray) -> float:
@@ -231,9 +263,9 @@ class AnnMetrics:
 def _subsample(x: np.ndarray, max_rows: int, seed: int) -> np.ndarray:
     """Cut to max_rows (0 = keep all).
 
-    Deliberately duplicated from eda_report rather than imported: this module
-    must not depend on the report. It is five lines and the dependency
-    direction is worth more than the sharing.
+    Deliberately duplicated from `eda.series.subsample` rather than imported:
+    this module must not depend on the report. It is five lines and the
+    dependency direction is worth more than the sharing.
     """
     if max_rows <= 0 or x.shape[0] <= max_rows:
         return x
@@ -249,14 +281,24 @@ def compute(
     nlist: int = 256,
     max_rows: int = 20000,
     seed: int = 42,
+    metric: str = "l2",
 ) -> AnnMetrics:
     """Measure every difficulty metric for one set off a single k-NN pass.
 
     Callers must pass the same max_rows for every set they intend to compare:
     LID, relative contrast and hubness all drift with sample count, so
     unequal N makes the overlay meaningless.
+
+    `metric` is the distance the corpus is searched under, from its config's
+    `data.metric`. `angular` requires unit-norm rows and is then measured as
+    L2 between them; see `require_unit_norm`. It defaults to `l2`, so a
+    caller that does not know about metrics is unaffected.
     """
+    if metric not in METRICS:
+        raise ValueError(f"Unknown metric {metric!r}; expected one of {METRICS}.")
     x = np.ascontiguousarray(_subsample(x, max_rows, seed), dtype=np.float32)
+    if metric == "angular":
+        require_unit_norm(x)
     n = x.shape[0]
 
     dist, idx, k_eff = knn(x, k)

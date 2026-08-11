@@ -48,13 +48,18 @@ Fill the real column with:
     python -m src.eval.eda_report \
         --real-path data/openai_250k.npy \
         --output-dir runs/openai/profile \
-        --ann-max-rows 20000 --ann-k 100 --ann-hub-k 10
+        --ann-max-rows 20000 --ann-k 100 --ann-hub-k 10 --metric angular
 
 Read the four values out of runs/openai/profile/summary.json (written by the command above).
 
-`ann_difficulty.py` currently measures everything under L2, including this
-family's `angular` corpus, so these numbers will need re-measuring once
-angular distance support lands (phase (c)).
+`ann_difficulty.py` measures this family under its `data.metric`, which is
+`angular`: L2 between unit-norm rows. On the unit sphere Euclidean distance
+is a strictly increasing function of cosine distance, so it ranks neighbours
+identically -- the corpus is measured under the distance it is searched with.
+Measuring requires `--preprocess l2`, and `ann_difficulty.compute` refuses
+rows that are neither unit-norm nor exactly zero rather than normalizing
+them itself -- an exact zero is what `maybe_l2_normalize` leaves behind, so
+it is accepted rather than treated as a caller mistake.
 
 ## Model family
 

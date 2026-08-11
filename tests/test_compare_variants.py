@@ -9,7 +9,8 @@ import torch
 import yaml
 
 from src.eval import compare_variants as cv
-from src.eval import eda_report
+from src.eval.eda import cli
+from src.eval.eda import config as eda_config
 from src.models.generator import build_generator
 
 
@@ -149,10 +150,10 @@ def test_generate_samples_does_not_depend_on_preceding_variants(
 
 
 def test_report_args_match_eda_report_fields(monkeypatch, tmp_path):
-    """Parity check for Finding 4: compare_variants's Namespace vs eda_report's.
+    """Parity check for Finding 4: compare_variants's Namespace vs the CLI's.
 
-    `build_report_args` hand-builds the Namespace `eda_report.run` consumes.
-    If `eda_report.parse_args` gains a required field and this helper is not
+    `build_report_args` hand-builds the Namespace `eda.pipeline.run` consumes.
+    If `eda.cli.parse_args` gains a required field and this helper is not
     updated, `compare_variants` breaks at runtime only after sampling. Assert
     the field sets stay identical so drift is caught at test time instead.
     """
@@ -163,19 +164,19 @@ def test_report_args_match_eda_report_fields(monkeypatch, tmp_path):
         max_vectors=100,
         num_pairs=200,
         knn=3,
-        ann_k=eda_report.ANN_K_DEFAULT,
-        ann_hub_k=eda_report.ANN_HUB_K_DEFAULT,
-        ann_max_rows=eda_report.ANN_MAX_ROWS_DEFAULT,
-        knn_max_rows=eda_report.KNN_MAX_ROWS_DEFAULT,
-        ivf_nlist=eda_report.IVF_NLIST_DEFAULT,
+        ann_k=eda_config.ANN_K_DEFAULT,
+        ann_hub_k=eda_config.ANN_HUB_K_DEFAULT,
+        ann_max_rows=eda_config.ANN_MAX_ROWS_DEFAULT,
+        knn_max_rows=eda_config.KNN_MAX_ROWS_DEFAULT,
+        ivf_nlist=eda_config.IVF_NLIST_DEFAULT,
         bins=8,
         top_divergent=4,
         seed=42,
-        glyph_samples=eda_report.GLYPH_SAMPLES_DEFAULT,
+        glyph_samples=eda_config.GLYPH_SAMPLES_DEFAULT,
         no_png=True,
         plotlyjs="cdn",
     )
-    report_args = cv.build_report_args(args, specs=["v0=a.npy"])
+    report_args = cv.build_report_args(args, specs=["v0=a.npy"], metric="l2")
 
     monkeypatch.setattr(
         sys,
@@ -188,7 +189,7 @@ def test_report_args_match_eda_report_fields(monkeypatch, tmp_path):
             str(tmp_path / "out2"),
         ],
     )
-    eda_args = eda_report.parse_args()
+    eda_args = cli.parse_args()
 
     assert set(vars(report_args)) == set(vars(eda_args))
 
@@ -592,13 +593,15 @@ def test_main_reports_on_the_variants_a_custom_manifest_resolves(
         ],
     )
 
+    _write_family_config(tmp_path, "configs/sift/v0.yaml")
+
     seen = {}
 
     def fake_run(args):
         seen["specs"] = args.synthetic_path
         return Path(args.output_dir) / "report.html"
 
-    monkeypatch.setattr(cv.eda_report, "run", fake_run)
+    monkeypatch.setattr(cv.pipeline, "run", fake_run)
     monkeypatch.setattr(
         sys,
         "argv",
@@ -626,3 +629,200 @@ def test_main_reports_on_the_variants_a_custom_manifest_resolves(
     label, _, path = seen["specs"][0].partition("=")
     assert label == variant.name
     assert np.load(path).shape[0] == 20
+
+
+# --- Family metric --------------------------------------------------------
+#
+# Read from the repo config, never from run_dir/run_config.yaml: run configs
+# predate `data.metric`, so a run trained before the field existed falls back
+# to l2 -- silently wrong for exactly the angular families this exists for.
+
+
+def _write_family_config(root, rel_path, metric=None):
+    path = root / rel_path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = {"descriptor_dim": 8}
+    if metric is not None:
+        data["metric"] = metric
+    path.write_text(yaml.safe_dump({"data": data}))
+    return path
+
+
+def test_family_metric_reads_angular_from_the_variant_configs(tmp_path):
+    _write_family_config(tmp_path, "configs/deep/v0.yaml", "angular")
+    _write_family_config(tmp_path, "configs/deep/v1.yaml", "angular")
+    variants = (
+        cv.Variant("v0", "configs/deep/v0.yaml", "runs/deep/v0"),
+        cv.Variant("v1", "configs/deep/v1.yaml", "runs/deep/v1"),
+    )
+
+    assert cv.family_metric(variants, tmp_path) == "angular"
+
+
+def test_family_metric_defaults_to_l2_when_a_config_omits_it(tmp_path):
+    """Older configs predate the field; l2 is what they were measured under.
+
+    Written under tmp_path rather than pointed at a real repo config: every
+    shipped config already states data.metric explicitly (configs/sift/v0.yaml
+    included), so reading one would not exercise the fallback and editing
+    that file's metric would silently break this test about defaults.
+    """
+    _write_family_config(tmp_path, "configs/z/v0.yaml")
+    variants = (cv.Variant("v0", "configs/z/v0.yaml", "runs/v0"),)
+
+    assert cv.family_metric(variants, tmp_path) == "l2"
+
+
+def test_family_metric_refuses_configs_that_disagree(tmp_path):
+    _write_family_config(tmp_path, "configs/x/v0.yaml", "l2")
+    _write_family_config(tmp_path, "configs/x/v1.yaml", "angular")
+    variants = (
+        cv.Variant("v0", "configs/x/v0.yaml", "runs/v0"),
+        cv.Variant("v1", "configs/x/v1.yaml", "runs/v1"),
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        cv.family_metric(variants, tmp_path)
+
+    message = str(excinfo.value)
+    assert "v0" in message and "v1" in message
+    assert "angular" in message and "l2" in message
+
+
+def test_family_metric_names_a_config_it_cannot_find(tmp_path):
+    variants = (cv.Variant("v0", "configs/gone/v0.yaml", "runs/v0"),)
+
+    with pytest.raises(SystemExit) as excinfo:
+        cv.family_metric(variants, tmp_path)
+
+    assert "configs/gone/v0.yaml" in str(excinfo.value)
+
+
+def test_family_metric_rejects_a_value_outside_metrics(tmp_path):
+    """A typo or an unsupported distance must die before sampling, not inside
+    ann_difficulty.compute afterwards -- eda.cli's --metric flag is already
+    guarded by choices=list(METRICS); this path needs the same guard."""
+    _write_family_config(tmp_path, "configs/w/v0.yaml", "cosine")
+    variants = (cv.Variant("v0", "configs/w/v0.yaml", "runs/w/v0"),)
+
+    with pytest.raises(SystemExit) as excinfo:
+        cv.family_metric(variants, tmp_path)
+
+    message = str(excinfo.value)
+    assert "configs/w/v0.yaml" in message
+    assert "v0" in message
+    assert "cosine" in message
+    assert "l2" in message and "angular" in message
+
+
+def test_family_metric_requires_at_least_one_variant():
+    with pytest.raises(ValueError):
+        cv.family_metric((), Path("."))
+
+
+def test_main_reads_the_config_of_a_variant_skipped_by_allow_missing(
+    monkeypatch, tmp_path, write_tiny_gated_run
+):
+    """family_metric must see every manifest entry, not only the resolved ones.
+
+    The second variant's run directory is absent, so --allow-missing skips
+    it, and its config is *also* absent. If `main` handed `family_metric`
+    only the resolved variants, that missing config would never be read and
+    this would run to completion instead of raising -- the discriminating
+    property `family_metric(found, root)` vs `family_metric(variants, root)`
+    actually differ on.
+    """
+    variant, _ = write_tiny_gated_run(tmp_path)
+    _write_family_config(tmp_path, variant.config_path, "l2")
+    manifest = write_manifest(
+        tmp_path / "variants.yaml",
+        [
+            {
+                "name": variant.name,
+                "config": variant.config_path,
+                "run_dir": variant.run_dir,
+            },
+            {
+                "name": "absent",
+                "config": "configs/gone/v0.yaml",
+                "run_dir": "runs/nope",
+            },
+        ],
+    )
+
+    monkeypatch.setattr(
+        cv.pipeline, "run", lambda args: Path(args.output_dir) / "report.html"
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "compare_variants.py",
+            "--real-path",
+            str(tmp_path / "real.npy"),
+            "--output-dir",
+            str(tmp_path / "out"),
+            "--root",
+            str(tmp_path),
+            "--variants-manifest",
+            str(manifest),
+            "--allow-missing",
+            "--num-samples",
+            "20",
+            "--batch-size",
+            "8",
+        ],
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        cv.main()
+
+    assert "configs/gone/v0.yaml" in str(excinfo.value)
+
+
+def test_main_hands_the_family_metric_to_the_report(
+    monkeypatch, tmp_path, write_tiny_gated_run
+):
+    variant, _ = write_tiny_gated_run(tmp_path)
+    _write_family_config(tmp_path, variant.config_path, "angular")
+    manifest = write_manifest(
+        tmp_path / "variants.yaml",
+        [
+            {
+                "name": variant.name,
+                "config": variant.config_path,
+                "run_dir": variant.run_dir,
+            }
+        ],
+    )
+
+    seen = {}
+
+    def fake_run(args):
+        seen["metric"] = args.metric
+        return Path(args.output_dir) / "report.html"
+
+    monkeypatch.setattr(cv.pipeline, "run", fake_run)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "compare_variants.py",
+            "--real-path",
+            str(tmp_path / "real.npy"),
+            "--output-dir",
+            str(tmp_path / "out"),
+            "--root",
+            str(tmp_path),
+            "--variants-manifest",
+            str(manifest),
+            "--num-samples",
+            "20",
+            "--batch-size",
+            "8",
+        ],
+    )
+
+    cv.main()
+
+    assert seen["metric"] == "angular"

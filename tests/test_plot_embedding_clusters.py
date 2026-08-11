@@ -174,10 +174,6 @@ def test_draw_scatter_survives_a_cloud_with_no_spread(tmp_path: Path):
     assert out.stat().st_size > 0
 
 
-def test_l2_normalize_gives_unit_rows():
-    x = np.random.default_rng(11).random((5, 16)).astype(np.float32) + 0.1
-    assert np.linalg.norm(pec.l2_normalize(x), axis=1) == pytest.approx(1.0, rel=1e-6)
-
-
-def test_l2_normalize_leaves_an_all_zero_row_finite():
-    assert np.all(np.isfinite(pec.l2_normalize(np.zeros((2, 16), dtype=np.float32))))
+# The normalisation tests that lived here moved to
+# tests/test_normalisation_is_shared.py when this module stopped carrying its
+# own copy of the rule.

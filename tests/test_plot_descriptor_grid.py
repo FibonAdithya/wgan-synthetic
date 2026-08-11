@@ -224,12 +224,12 @@ def test_variant_generating_the_wrong_width_is_refused(
 def test_write_report_survives_a_png_export_failure(tmp_path, monkeypatch, capsys):
     """kaleido needs a Chrome binary; on a headless box `export_pngs` raises.
     The HTML must still exist and the run must not raise -- mirrors
-    `eda_report.run`'s try/except around the same call."""
+    `eda.pipeline.run`'s try/except around the same call."""
 
     def _boom(*args, **kwargs):
         raise RuntimeError("Kaleido requires Google Chrome to be installed.")
 
-    monkeypatch.setattr(pdg.eda_report, "export_pngs", _boom)
+    monkeypatch.setattr(pdg.eda_html, "export_pngs", _boom)
     vecs = np.abs(np.random.default_rng(0).random((2, 128))).astype(np.float32)
     fig = pdg.build_figure([("row", vecs, "#000000")])
     out = pdg.write_report(fig, tmp_path / "out", "cdn", write_png=True)

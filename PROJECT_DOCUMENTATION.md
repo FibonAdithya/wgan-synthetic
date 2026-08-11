@@ -166,9 +166,17 @@ searched under — a property of the family, which is why it sits beside
 It is not a preprocessing instruction. `l2_normalize` is set independently,
 and an `angular` corpus is not thereby normalized nor an `l2` one left alone;
 the two settings answer different questions. The value is validated at load
-time against the two accepted strings and is otherwise inert today: nothing
-consumes it yet. Reading it in `src/eval/ann_difficulty.py`, so difficulty is
-measured under the metric the corpus is actually searched with, is phase (c).
+time against the two accepted strings.
+`src/eval/compare_variants.py` reads it from a family's variant configs and
+threads it into `src/eval/ann_difficulty.py`, so difficulty is measured under
+the metric the corpus is actually searched with. `angular` is measured as L2
+between unit-norm rows, which orders neighbours exactly as cosine does;
+`compute` refuses rows that are neither unit-norm nor exactly zero rather
+than normalizing them, so a report's `preprocess` setting cannot disagree
+with the geometry it measured under. Exact zeros are accepted because
+`eda.series.maybe_l2_normalize` clamps its divisor rather than dividing by
+~0, so a zero row is an output of our own preprocessing rather than a caller
+mistake.
 
 ---
 
@@ -218,19 +226,23 @@ The SIFT ladder:
 | `v1` | + generator EMA (`ema_decay: 0.999`) | `configs/sift/v1.yaml` | `long_ema_only`, `x100k_ema_only` |
 | `v1_5` | + distance reg (`distance_reg_alpha: 0.1`, 256 points) | `configs/sift/v1_5.yaml` | `long_improved`, `x100k_improved`, `bench_improved` |
 | `v2` | + gated generator (`generator_type: gated`) | `configs/sift/v2.yaml` | `x100k_sparse_clamp4` |
+| `v3` | + structured gate (`generator_type: structured_gated`) | `configs/sift/v3.yaml` | `sift_gan_v3`, `x100k_structured` |
+| `v4` | + log-ratio regularizer (`lid_reg_alpha > 0`) | `configs/sift/v4.yaml` | see `docs/results/v4-logratio/` |
 
 Run length is an independent axis and is not a variant: `bench_*` are 3k
 generator steps, `long_*` are 30k, `x100k_*` are 100k. The run directory
 names predate this scheme and are kept as-is because the artifacts under
 them are already named that way.
 
-The four `configs/sift/` configs above are the variant definitions, all at 30k
-steps. Two further configs are run-length or ablation arms of them, not
+The six `configs/sift/v*.yaml` configs above are the variant definitions, all at
+30k steps. Further configs are run-length or ablation arms of them, not
 variants of their own:
 
 | Config | What it is |
 |---|---|
 | `configs/x100k_gated.yaml` | v2 at 100k steps with `logit_clamp: 10.0`, the value the design called for. Untrained — the v2 run that exists (`x100k_sparse_clamp4`) used 4.0, which is what `configs/sift/v2.yaml` reproduces. Kept so the clamp comparison can be run. |
+| `configs/x100k_structured.yaml` | v3 at 100k steps — the arm the experiment plan calls for. Sole delta from `configs/sift/v3.yaml` is run length and logging cadence. |
+| `configs/sift/v3_sift1m.yaml`, `configs/sift/v4_sift1m.yaml` | The paired v3/v4 arms measured in `docs/results/v4-logratio/`. Each differs from its rung by `real_path` and `output_dir` only. Instruments, not rungs: they carry a box-specific absolute corpus path, which a rung must not. |
 | `configs/wgan_gp_sift1m_smoke_improved.yaml` | 200-step smoke test on synthetic data (`synthetic_if_missing: true`), with EMA, the distance regularizer, `num_workers` and the collapse monitor all switched on, so the new training-loop paths get exercised without the dataset. Small model, unrelated hyperparameters to the variants above — not a variant and not for evaluation. Output lands in `runs/wgan_sift1m_smoke_improved`. |
 
 ### Why v2 exists
@@ -242,11 +254,60 @@ flattering while the marginals are plainly wrong. v2's generator multiplies a
 softplus magnitude by a sampled binary gate, producing exact zeros. See
 `src/models/generator.py` (`GatedGenerator`).
 
+### Why v3 exists
+
+v2 produces exact zeros but gets their *distribution* wrong. Its gates are
+sampled independently per coordinate, so the non-zero count per vector is
+Binomial(128, p) with standard deviation about 4.76. Real SIFT measures
+14.45 -- three times as variable -- and its zero pattern is locally
+correlated: +0.32 between adjacent orientation bins and +0.27 between the
+same bin in neighbouring spatial cells. Neither is reachable by tuning v2.
+
+v3 adds a per-vector sparsity level (over-dispersion), a 3x3x3 convolution
+over the (4,4,8) descriptor grid with circular orientation padding (local
+correlation), and fixed smoothing of the gate noise so sampling is
+correlated too. Measurements are in `tools/probes/`; the design is in
+`docs/superpowers/specs/2026-08-03-structured-gate-generator-design.md`.
+
+`noise_kernel_sigma` is calibrated, not tuned during training: the noise
+kernel is deliberately fixed (a learnable one could be driven to zero,
+killing gate stochasticity), so the value has to be right up front. Sweeping
+sigma against the measured correlation profile puts it at `0.65`, which
+reproduces +0.329 at separation 1 and +0.271 at offset 8 against the real
++0.317 and +0.275.
+
+### Why v4 exists
+
+v3 bets that the right architecture reaches SIFT's local geometry without
+being driven there. Nothing in the objective sees local structure: the critic
+is pointwise (`128 -> 1`) and judges each vector alone, and v1_5's distance
+regularizer matches one global scalar. A generator can satisfy both while
+getting neighbourhood geometry wrong.
+
+v4 hedges that bet. Within each minibatch it computes every point's `k`
+nearest neighbours *among the other points in that batch* and matches the
+mean log-ratio profile `p_i = mean[log(r_i / r_k)]`, penalising
+`alpha * ||p_fake - p_real||_1` on the generator loss. `p` is exactly the
+sufficient statistic the Hill estimator collapses to a scalar
+(`LID = -1 / mean_i(p_i)`), so matching it moves LID — but it is bounded and
+smooth where LID's `-1/x` blows up, and being a `(k-1)`-vector it constrains
+the neighbourhood's *shape*, not just its scale. The real-side target is an
+EMA (decay 0.99) rather than a fresh per-batch estimate, which is the same
+cost at lower gradient variance. See `src/train/log_ratio.py`.
+
+**v3 and v4 are not judged the same way.** v3 trains on none of the
+read-out metrics, so if it hits the LID gate that is genuine independent
+evidence. v4 trains on LID's sufficient statistic, so its `lid_median` is a
+*fitted* number and hitting the gate is close to tautological. The real
+question for v4 is what comes with it: `hubness_skew`, `ivf_gini` and
+`relative_contrast` are untouched by the penalty and stay independent under
+both arms. Any write-up of a v4 result must lead with those.
+
 ### `generator_type`
 
-The architecture axis in the `model` config block, accepting `mlp` (default)
-and `gated`. It sits underneath the variant numbering: v0, v1 and v1_5 all
-use `mlp` and differ only in training settings.
+The architecture axis in the `model` config block, accepting `mlp` (default),
+`gated`, and `structured_gated`. It sits underneath the variant numbering:
+v0, v1 and v1_5 all use `mlp` and differ only in training settings.
 
 A third value, `spherical`, is planned and not built. It is phase (b) of the
 multi-dataset design: a generator whose output is unit-norm by construction
@@ -260,6 +321,13 @@ the run config at load time. A checkpoint is therefore only loadable
 alongside the `run_config.yaml` written next to it. Checkpoints do record
 `generator_weights` (`"live"` or `"ema"`), which says which weights the file
 holds, not which architecture produced them.
+
+`gated` was called `sparse` until `b29e317`, and `sparse` is still accepted as
+a deprecated alias for it. Because the architecture is rebuilt from the run
+config, dropping the old name would have made every checkpoint written before
+that rename unloadable — including v2's, whose `run_config.yaml` still says
+`sparse`. Write `gated` in new configs; the alias exists for the ones already
+on disk.
 
 ---
 
@@ -276,6 +344,35 @@ Default (current promoted config):
 - `batch_size: 512`
 - `distance_reg_alpha: 0.0` (disabled by default)
 
+### Generator regularizers
+
+Both are off by default, so v0–v3 behaviour is unchanged when they are absent.
+
+| Config key | Default | Meaning |
+|---|---|---|
+| `training.distance_reg_alpha` | `0.0` | Weight on `\|mean pairwise distance real − fake\|`, a single global scalar. |
+| `training.distance_reg_max_points` | `128` | Batch subsample the distance matrix is computed on. |
+| `training.lid_reg_alpha` | `0.0` | Weight on the local log-ratio penalty (v4). Off means the term is never computed and the real batch is never even transferred. |
+| `training.lid_reg_k` | `20` | Neighbour depth; the profile has `k − 1` entries. |
+| `training.lid_reg_max_points` | `256` | Batch subsample the within-batch neighbour search runs on. |
+
+Both terms are logged per step alongside `wasserstein` and `adv_loss`, as
+`distance_reg` and `lid_reg`.
+
+`lid_reg_alpha` **cannot be set by analogy to `distance_reg_alpha`.**
+`distance_reg` is one scalar; `log_ratio_penalty` is an L1 *sum* over `k − 1`
+components — 19 of them at the default `k` — so it sits on a different scale
+and grows with `k`. Pick it from a measured `lid_reg` value on real batches at
+the config's actual `lid_reg_k`, using `tools/probes/lid_reg_scale_probe.py`.
+The measurement that sized the shipped `0.015`, and the arithmetic against
+`|adv_loss|` behind it, is in the header of `configs/sift/v4.yaml`.
+
+Degenerate batches are dropped rather than clamped, matching
+`src.eval.ann_difficulty.survivor_mask`: a query whose nearest neighbour sits
+at distance zero (duplicates, entirely plausible under mode collapse) or whose
+neighbours all tie contributes nothing, and the penalty is exactly zero when no
+query survives on either side.
+
 Training entrypoint:
 
 - `src/train/train_wgan_gp.py`
@@ -284,17 +381,48 @@ Training entrypoint:
 
 ## Device behavior
 
-Auto device selection (implemented):
+Resolved by `src/device.py` (`resolve_device`), shared by training, sampling
+and eval.
+
+Order for `device: auto`:
 
 1. CUDA (if available)
 2. MPS (Apple Metal, if available)
 3. CPU fallback
 
-Applied in:
+Training passes `strict=True`, which **rejects `auto` when CUDA is present
+and `CUDA_VISIBLE_DEVICES` is unset**. Plain `auto` resolves to a bare
+`cuda`, i.e. `cuda:0`, so on a shared box two runs silently land on the same
+card. Name the device in the config (`device: cuda:0`) or pin the process.
+Sampling and eval stay permissive -- they are short and read-only.
 
-- `src/train/train_wgan_gp.py`
-- `src/sample/generate.py`
-- `src/eval/evaluate_distribution.py`
+### GPU claiming
+
+`src/train/gpu_lock.py` takes an exclusive `flock` for the duration of a run,
+keyed on the card's **UUID** rather than its index, since two processes with
+different `CUDA_VISIBLE_DEVICES` mappings both see their card as index 0. The
+lock is acquired in `main()`, so it covers every CLI launch but not direct
+`train()` calls from tests.
+
+| Config key | Default | Meaning |
+|---|---|---|
+| `training.gpu_lock_timeout_s` | `1800` | Seconds to queue for a busy card before giving up. |
+| `training.gpu_memory_fraction` | `0.9` | Per-process cap, so a bypassed lock degrades a run rather than taking the card down. |
+
+`flock` is advisory and host-local: it coordinates cooperating processes on
+one machine, and does nothing across hosts or against a process that does not
+take the lock.
+
+`run_metadata.json` records a `gpu` block with the card's name, UUID and free
+and total memory at launch.
+
+### Resume
+
+`--resume <checkpoint>` continues a run. `num_gen_steps` is the target
+**total**, not an additional budget. Checkpoints carry both optimiser states,
+the EMA shadow, `ema_step` and `best_cov`. Resuming an EMA-enabled run from a
+checkpoint without a shadow is refused rather than silently restarting the
+average.
 
 ---
 
@@ -328,14 +456,15 @@ published figures, which are measured on the full corpus against the real
 query set. Without a locked pair, a gate result from last month cannot be
 read against today's.
 
-`ann_difficulty.py` currently computes everything under L2, including for the
-four `angular` families. Reading `data.metric` and measuring under the
-corpus's own distance is phase (c) of the multi-dataset design; until it
-lands, angular-family numbers are internally consistent within a report but
-are not the distance the corpus is searched with.
+`ann_difficulty.py` measures each family under its `data.metric`. The four
+`angular` families are measured as L2 between unit-norm rows, which is the
+distance their corpora are searched under; `l2` families are measured as
+given. Reports must therefore run angular families at `--preprocess l2`,
+which `compare_variants` does for every family.
 
-The knobs (`--ann-k`, `--ann-hub-k`, `--ann-max-rows`, `--ivf-nlist`) are
-documented under "Visualization tools" with the EDA report that exposes them.
+The knobs (`--ann-k`, `--ann-hub-k`, `--ann-max-rows`, `--ivf-nlist`,
+`--metric`) are documented under "Visualization tools" with the EDA report
+that exposes them.
 
 ## Checkpoint-based eval
 
@@ -459,14 +588,16 @@ Memory-safe note:
     for LID and relative contrast, `--ann-hub-k` (default 10) the depth for
     the hubness k-occurrence count, `--ann-max-rows` (default 20000) the
     equal-N truncation every set is cut to so the metrics stay comparable
-    across series, and `--ivf-nlist` (default 256) the cluster count for the
-    IVF cell-balance panel. The pre-existing within-set k-NN distance panel
-    is not an ANN-difficulty panel and has its own `--knn-max-rows`
-    (default 20000, the same number), so tuning ANN cost does not silently
-    move it. These numbers are self-queried subsample
-    statistics, not published benchmark figures, and are only comparable
-    across the series in one report; each family's locked values are in its
-    page under `docs/datasets/`.
+    across series, `--ivf-nlist` (default 256) the cluster count for the
+    IVF cell-balance panel, and `--metric` (default `l2`) the distance the
+    corpus is searched under -- `l2` or `angular`, where `angular` requires
+    `--preprocess l2` since it is measured as L2 between unit-norm rows. The
+    pre-existing within-set k-NN distance panel is not an ANN-difficulty
+    panel and has its own `--knn-max-rows` (default 20000, the same
+    number), so tuning ANN cost does not silently move it. These numbers
+    are self-queried subsample statistics, not published benchmark figures,
+    and are only comparable across the series in one report; each family's
+    locked values are in its page under `docs/datasets/`.
   - `--synthetic-path` is optional; without it the report is pure dataset EDA.
     With it, every panel overlays the two so mismatch is visible by eye.
   - `--preprocess l2` (default) matches the training contract, since generator
@@ -524,7 +655,7 @@ before transfer took the three-report set from 5.7MB to 1.5MB.
 
 - Descriptor glyph grid (standalone):
   - `src/eval/plot_descriptor_grid.py`
-  - The same figure as the `eda_report` glyph panel -- `eda_report.
+  - The same figure as the `eda_report` glyph panel -- `src.eval.eda.glyphs.
     fig_descriptor_glyphs` is the single implementation both use -- but
     sourced differently. This CLI loads generator checkpoints and samples
     them directly, so it works with no materialised `.npy` files and can read
@@ -641,7 +772,7 @@ what the fetcher does and `docs/datasets/sift.md` for the family's specifics.
 `configs/sift/v0.yaml` names `data/sift_base.npy` as `data.real_path` — the
 corpus the trained checkpoints in this repo actually used, not the fetched
 `data/sift_250k.npy` subset above. Point `real_path` at whichever file you
-have, per `FOLLOWUPS.md` ("`data.real_path` names a file the fetcher does not
+have, per issue #15 ("`data.real_path` names a file the fetcher does not
 produce").
 
 ## 4) Generate synthetic dataset

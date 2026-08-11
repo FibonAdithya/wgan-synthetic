@@ -20,17 +20,8 @@ import numpy as np
 import torch
 import yaml
 
+from src.device import resolve_device
 from src.models.generator import build_generator
-
-
-def get_device(device_cfg: str) -> torch.device:
-    if device_cfg == "auto":
-        if torch.cuda.is_available():
-            return torch.device("cuda")
-        if torch.backends.mps.is_available():
-            return torch.device("mps")
-        return torch.device("cpu")
-    return torch.device(device_cfg)
 
 
 def parse_args() -> argparse.Namespace:
@@ -55,7 +46,7 @@ def main() -> None:
     with Path(args.config).open("r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
-    device = get_device(config["device"])
+    device = resolve_device(config["device"])
     model_cfg = config["model"]
     data_cfg = config["data"]
 

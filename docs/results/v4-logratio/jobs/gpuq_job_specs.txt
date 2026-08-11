@@ -1,0 +1,88 @@
+Welcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.
+Have fun!
+AI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)
+########## wgan-synthetic-20260810T092530Z-10e250
+{
+  "state": "done",
+  "orphaned": false,
+  "id": "wgan-synthetic-20260810T092530Z-10e250",
+  "lane": "gpu",
+  "project": "wgan-synthetic",
+  "commit": "a86c2badc858be865755b69d519108ff68cd539f",
+  "branch": "sift/gan-v4",
+  "cmd": [
+    "bash",
+    "-c",
+    "python -m src.train.train_wgan_gp --config configs/sift_gan_v3_sift1m.yaml && mkdir -p /workspace/keep/v34-sift1m/v3 && cp runs/sift/v3_sift1m/best_generator.pt runs/sift/v3_sift1m/run_config.yaml runs/sift/v3_sift1m/run_metadata.json /workspace/keep/v34-sift1m/v3/"
+  ],
+  "artifacts": [],
+  "timeout_s": 7200,
+  "attempts": 0,
+  "dedupe_key": null,
+  "submitted_at": "2026-08-10T09:25:30Z",
+  "pid": null,
+  "runner_pid": 67178,
+  "exit_code": 0,
+  "error": null,
+  "stdout_log": "/workspace/queue/logs/wgan-synthetic-20260810T092530Z-10e250.out",
+  "stderr_log": "/workspace/queue/logs/wgan-synthetic-20260810T092530Z-10e250.err"
+}
+########## wgan-synthetic-20260810T092548Z-b3c35a
+{
+  "state": "done",
+  "orphaned": false,
+  "id": "wgan-synthetic-20260810T092548Z-b3c35a",
+  "lane": "gpu",
+  "project": "wgan-synthetic",
+  "commit": "a86c2badc858be865755b69d519108ff68cd539f",
+  "branch": "sift/gan-v4",
+  "cmd": [
+    "bash",
+    "-c",
+    "python -m src.train.train_wgan_gp --config configs/sift_gan_v4_sift1m.yaml && mkdir -p /workspace/keep/v34-sift1m/v4 && cp runs/sift/v4_sift1m/best_generator.pt runs/sift/v4_sift1m/run_config.yaml runs/sift/v4_sift1m/run_metadata.json /workspace/keep/v34-sift1m/v4/"
+  ],
+  "artifacts": [],
+  "timeout_s": 7200,
+  "attempts": 0,
+  "dedupe_key": null,
+  "submitted_at": "2026-08-10T09:25:48Z",
+  "pid": null,
+  "runner_pid": 67178,
+  "exit_code": 0,
+  "error": null,
+  "stdout_log": "/workspace/queue/logs/wgan-synthetic-20260810T092548Z-b3c35a.out",
+  "stderr_log": "/workspace/queue/logs/wgan-synthetic-20260810T092548Z-b3c35a.err"
+}
+########## wgan-synthetic-20260810T105443Z-729d39
+{
+  "state": "done",
+  "orphaned": false,
+  "id": "wgan-synthetic-20260810T105443Z-729d39",
+  "lane": "cpu",
+  "project": "wgan-synthetic",
+  "commit": "a86c2badc858be865755b69d519108ff68cd539f",
+  "branch": "sift/gan-v4",
+  "cmd": [
+    "bash",
+    "-c",
+    "set -euo pipefail
+K=/workspace/keep/v34-sift1m
+for v in v3 v4; do
+  sed 's/^device: .*/device: cpu/' \"$K/$v/run_config.yaml\" > \"$K/$v/run_config_cpu.yaml\"
+  python -m src.sample.generate --checkpoint \"$K/$v/best_generator.pt\" --config \"$K/$v/run_config_cpu.yaml\" --num-samples 20000 --seed 7 --output-path \"$K/samples_$v.npy\"
+done
+python -m src.eval.eda_report --real-path /workspace/data-cache/sift_1m.npy --synthetic-path \"v3=$K/samples_v3.npy\" --synthetic-path \"v4=$K/samples_v4.npy\" --output-dir \"$K/eda\" --ann-k 100 --ann-hub-k 10 --ann-max-rows 20000 --ivf-nlist 256
+echo \"=== EVAL DONE ===\""
+  ],
+  "artifacts": [],
+  "timeout_s": 5400,
+  "attempts": 0,
+  "dedupe_key": null,
+  "submitted_at": "2026-08-10T10:54:43Z",
+  "pid": null,
+  "runner_pid": 67178,
+  "exit_code": 0,
+  "error": null,
+  "stdout_log": "/workspace/queue/logs/wgan-synthetic-20260810T105443Z-729d39.out",
+  "stderr_log": "/workspace/queue/logs/wgan-synthetic-20260810T105443Z-729d39.err"
+}

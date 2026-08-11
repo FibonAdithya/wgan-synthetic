@@ -83,13 +83,22 @@ numbers come from). Reproduce the real column with:
     python -m src.eval.eda_report \
         --real-path data/deep_1m.npy \
         --output-dir runs/deep/profile \
-        --ann-max-rows 20000 --ann-k 100 --ann-hub-k 10
+        --ann-max-rows 20000 --ann-k 100 --ann-hub-k 10 --metric angular
 
 Read the four values out of runs/deep/profile/summary.json (written by the command above).
 
-`ann_difficulty.py` currently measures everything under L2, including this
-family's `angular` corpus, so these numbers will need re-measuring once
-angular distance support lands (phase (c)).
+`ann_difficulty.py` measures this family under its `data.metric`, which is
+`angular`: L2 between unit-norm rows. On the unit sphere Euclidean distance
+is a strictly increasing function of cosine distance, so it ranks neighbours
+identically -- the corpus is measured under the distance it is searched with.
+Measuring requires `--preprocess l2`, and `ann_difficulty.compute` refuses
+rows that are neither unit-norm nor exactly zero rather than normalizing
+them itself -- an exact zero is what `maybe_l2_normalize` leaves behind, so
+it is accepted rather than treated as a caller mistake.
+
+The figures above were measured at `preprocess: l2`, as
+`deep_ladder_summary.json` records, so they were already measured under this
+geometry and stand unchanged.
 
 ## Model family
 
@@ -227,10 +236,13 @@ Pass `--allow-unset` to get the report alone.
 The most discriminating statistic of all, **effective rank**, cannot go in the
 gate at present: `check_gate.GATE_STATISTICS` is a fixed four-name tuple and
 rejects anything else, and widening it would require every other family's gate
-file to grow the key too. See `FOLLOWUPS.md`.
+file to grow the key too. Tracked as an issue rather than done here, since it
+is a schema change to shared code.
 
-All of these numbers move again when phase (c) re-measures this family under
-angular distance.
+These numbers do not move under the metric-aware `ann_difficulty`: they were
+measured at `preprocess: l2`, which on unit-norm rows is the `angular`
+geometry this family is searched with, exactly as the profile section above
+records.
 
 Check a run against it:
 

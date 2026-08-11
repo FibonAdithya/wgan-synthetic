@@ -4,15 +4,19 @@ Writes .npy deliberately: the loader in src/data/dataset.py reads .npy and
 .fvecs, so emitting .npy means neither the loader nor the trainer needs to
 learn about HDF5.
 
-All six families are taken from the ann-benchmarks HDF5 mirrors so this module
-handles one container format. Sets obtained by other routes -- corpus-texmex
-.fvecs, say -- are read directly by load_descriptors and do not come through
-here.
+Five of the six families are taken from the ann-benchmarks HDF5 mirrors. The
+sixth, openai, is not published as an HDF5 at all -- upstream generates it
+from a HuggingFace dataset at benchmark time -- so it is read from that
+dataset's parquet shards instead. Both routes converge on the same seeded
+random sample, so a subset means the same thing whichever container it came
+from. Sets obtained by other routes -- corpus-texmex .fvecs, say -- are read
+directly by load_descriptors and do not come through here.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import time
 from dataclasses import dataclass
@@ -21,8 +25,16 @@ from urllib.request import Request, urlopen
 
 import h5py
 import numpy as np
+import pyarrow as pa
+import pyarrow.parquet as pq
 
 BASE_URL = "http://ann-benchmarks.com"
+
+# Where a HuggingFace dataset's parquet shards are listed. Returns a JSON
+# array of URLs with stable, hash-free names (.../train/0.parquet upward).
+# Preferred over the repository's own filenames, which embed content hashes
+# that would have to be scraped and that change on any re-upload.
+HF_PARQUET_INDEX = "https://huggingface.co/api/datasets/{repo}/parquet/default/train"
 
 # ann-benchmarks.com sits behind Cloudflare, which 403s the default
 # "Python-urllib/x.y" User-Agent as a bot-blocking heuristic -- every family
@@ -48,18 +60,47 @@ class Source:
     default_rows: tuple[int, ...] = (250_000, 1_000_000)
 
 
+@dataclass(frozen=True)
+class ParquetSource:
+    """One family that upstream generates rather than hosts.
+
+    ann-benchmarks names `dbpedia-openai-*-angular` as datasets, but never
+    publishes an HDF5 for them: `ann_benchmarks/datasets.py` builds them on
+    demand from the HuggingFace dataset below. There is therefore no mirror
+    to download, and the registry entry that pointed at one 404'd from the
+    day it was written.
+
+    `column` is the field holding the embedding; the other columns in the
+    dataset are the source text and its identifiers, which nothing here
+    wants.
+    """
+
+    name: str
+    repo: str
+    column: str
+    dim: int
+    metric: str
+    # Only the 250k subset. openai's v0 names openai_250k.npy and the gate's
+    # canonical N is 20,000, so a 1M subset would cost 6GB to go unread.
+    default_rows: tuple[int, ...] = (250_000,)
+
+
 def _ann_benchmarks(name: str, slug: str, dim: int, metric: str) -> Source:
     return Source(name=name, url=f"{BASE_URL}/{slug}.hdf5", dim=dim, metric=metric)
 
 
-SOURCES: dict[str, Source] = {
+SOURCES: dict[str, Source | ParquetSource] = {
     "sift": _ann_benchmarks("sift", "sift-128-euclidean", 128, "l2"),
     "gist": _ann_benchmarks("gist", "gist-960-euclidean", 960, "l2"),
     "deep": _ann_benchmarks("deep", "deep-image-96-angular", 96, "angular"),
     "glove": _ann_benchmarks("glove", "glove-100-angular", 100, "angular"),
     "nytimes": _ann_benchmarks("nytimes", "nytimes-256-angular", 256, "angular"),
-    "openai": _ann_benchmarks(
-        "openai", "dbpedia-openai-1000k-angular", 1536, "angular"
+    "openai": ParquetSource(
+        name="openai",
+        repo="KShivendu/dbpedia-entities-openai-1M",
+        column="openai",
+        dim=1536,
+        metric="angular",
     ),
 }
 
@@ -134,6 +175,93 @@ def fetch(
     return dest
 
 
+def shard_urls(repo: str) -> list[str]:
+    """List a HuggingFace dataset's train-split parquet shards, in order."""
+    request = Request(
+        HF_PARQUET_INDEX.format(repo=repo), headers={"User-Agent": USER_AGENT}
+    )
+    with urlopen(request) as response:
+        urls = json.load(response)
+    if not urls:
+        raise ValueError(
+            f"{repo}: the parquet index listed no shards. The dataset may have "
+            "been renamed, made private, or had its default config changed."
+        )
+    return list(urls)
+
+
+def fetch_shards(source: ParquetSource, cache_dir: Path) -> list[Path]:
+    """Download every parquet shard for `source`, returning them in order.
+
+    Each shard goes through fetch(), so the atomicity and single-flight
+    properties documented there hold per shard: two agents fetching this
+    family at once share the download rather than doubling it.
+    """
+    dest_dir = Path(cache_dir) / source.repo.replace("/", "__")
+    return [
+        fetch(url, dest_dir / f"{i}.parquet")
+        for i, url in enumerate(shard_urls(source.repo))
+    ]
+
+
+def _dense(column: pa.ChunkedArray) -> np.ndarray:
+    """Flatten a parquet list-of-float column into a dense [rows, dim] array.
+
+    Goes through ListArray.flatten() rather than to_pylist(): flatten()
+    respects each chunk's offsets and hands back the values buffer, which
+    reshapes for free. to_pylist() would materialise 59 million Python
+    floats per shard.
+    """
+    parts = []
+    for chunk in column.chunks:
+        values = chunk.flatten().to_numpy(zero_copy_only=False)
+        parts.append(values.reshape(len(chunk), -1))
+    return np.concatenate(parts).astype(np.float32, copy=False)
+
+
+def subset_parquet(
+    shards: list[Path],
+    out_path: Path,
+    *,
+    num_rows: int,
+    seed: int = 42,
+    column: str = "openai",
+) -> Path:
+    """Write a random `num_rows`-row sample drawn across every shard.
+
+    Mirrors subset(): rows are drawn without replacement over the whole
+    corpus and land in sorted index order. Sampling the corpus rather than
+    reading a prefix of it is the point -- the shards are in dataset order,
+    and DBpedia entities are not shuffled, so the first few shards are a
+    topically skewed corpus rather than a smaller version of this one.
+
+    Row counts come from each shard's parquet footer, which is metadata
+    rather than data, so the pass that plans the sample reads almost
+    nothing. Only shards a drawn row lands in are opened, one at a time.
+    """
+    out_path = Path(out_path)
+    counts = [pq.ParquetFile(shard).metadata.num_rows for shard in shards]
+    bounds = np.cumsum([0, *counts])
+    total = int(bounds[-1])
+
+    take = min(num_rows, total)
+    rng = np.random.default_rng(seed)
+    idx = np.sort(rng.choice(total, size=take, replace=False))
+
+    blocks = []
+    for shard, start, stop in zip(shards, bounds[:-1], bounds[1:], strict=True):
+        wanted = idx[(idx >= start) & (idx < stop)] - start
+        if wanted.size == 0:
+            continue
+        table = pq.ParquetFile(shard).read(columns=[column])
+        blocks.append(_dense(table.column(column))[wanted])
+
+    rows = np.ascontiguousarray(np.concatenate(blocks), dtype=np.float32)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    np.save(out_path, rows)
+    return out_path
+
+
 def subset(
     hdf5_path: Path,
     out_path: Path,
@@ -191,16 +319,33 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     source = SOURCES[args.dataset]
-    cache = fetch(source.url, Path(args.cache_dir) / Path(source.url).name)
-    print(f"hdf5: {cache}")
+    parquet = isinstance(source, ParquetSource)
+
+    if parquet:
+        shards = fetch_shards(source, Path(args.cache_dir))
+        print(f"parquet: {len(shards)} shards for {source.repo}")
+    else:
+        cache = fetch(source.url, Path(args.cache_dir) / Path(source.url).name)
+        print(f"hdf5: {cache}")
+
     for rows in args.rows or source.default_rows:
-        out = subset(
-            cache,
-            Path(args.out_dir) / f"{subset_name(source.name, rows)}.npy",
-            num_rows=rows,
-            seed=args.seed,
-            key=source.hdf5_key,
-        )
+        out_path = Path(args.out_dir) / f"{subset_name(source.name, rows)}.npy"
+        if parquet:
+            out = subset_parquet(
+                shards,
+                out_path,
+                num_rows=rows,
+                seed=args.seed,
+                column=source.column,
+            )
+        else:
+            out = subset(
+                cache,
+                out_path,
+                num_rows=rows,
+                seed=args.seed,
+                key=source.hdf5_key,
+            )
         shape = np.load(out, mmap_mode="r").shape
         print(f"subset: {out} {shape}")
         if shape[0] < rows:

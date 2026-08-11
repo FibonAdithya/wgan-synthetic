@@ -60,26 +60,41 @@ bands; the pages are the source of truth for anything family-specific.
 ### Fetching
 
 `src/data/fetch.py` holds a single source registry with one entry per family,
-each naming an ann-benchmarks HDF5 mirror, the dimension and the search
-metric. Running
+naming where the corpus comes from, the dimension and the search metric.
+Running
 
 ```bash
 python -m src.data.fetch <dataset>
 ```
 
-downloads that family's HDF5 into a shared cache once and cuts two
-reproducible random subsets out of it, writing `data/<dataset>_250k.npy` and
-`data/<dataset>_1m.npy`. The download is atomic — the body goes to a sibling
-`.part` file and is `os.replace`d into position, so a concurrent reader sees
-either nothing or a complete file — and single-flight, since the `.part` file
-doubles as an exclusive lock and a second caller waits rather than starting
-its own multi-gigabyte fetch. An existing destination is left alone; these
-files are large and immutable. Subsets are drawn with a seeded RNG, so the
-same seed gives the same rows.
+downloads that family's corpus into a shared cache once and cuts reproducible
+random subsets out of it, writing `data/<dataset>_<rows>.npy`. The download is
+atomic — the body goes to a sibling `.part` file and is `os.replace`d into
+position, so a concurrent reader sees either nothing or a complete file — and
+single-flight, since the `.part` file doubles as an exclusive lock and a
+second caller waits rather than starting its own multi-gigabyte fetch. An
+existing destination is left alone; these files are large and immutable.
+Subsets are drawn with a seeded RNG, so the same seed gives the same rows.
 
-All six come from ann-benchmarks HDF5 so the module handles one container
-format. Descriptor sets obtained another way — corpus-texmex `.fvecs`, say —
-are read directly by the loader and do not come through here.
+Five families are `Source` entries naming an ann-benchmarks HDF5 mirror, and
+default to two subsets each: `data/<dataset>_250k.npy` and
+`data/<dataset>_1m.npy`.
+
+`openai` is a `ParquetSource` and the one exception on both counts.
+ann-benchmarks publishes no HDF5 for it — upstream generates
+`dbpedia-openai-*-angular` on demand from the HuggingFace dataset
+`KShivendu/dbpedia-entities-openai-1M` — so the registry names that dataset
+and the fetcher reads its parquet shards, listed from the HuggingFace API and
+downloaded through the same atomic single-flight helper. It writes only
+`data/openai_250k.npy`, the corpus `configs/openai/v0.yaml` names. Rows are
+sampled across every shard rather than read as a prefix: the shards are in
+dataset order and DBpedia entities are not shuffled, so a prefix would be a
+topically skewed corpus rather than a smaller one. Both kinds end in the same
+seeded draw, so a subset means the same thing whichever container it came
+from.
+
+Descriptor sets obtained another way — corpus-texmex `.fvecs`, say — are read
+directly by the loader and do not come through here.
 
 ---
 
@@ -558,6 +573,27 @@ Memory-safe note:
   - `src/eval/plot_embedding_clusters.py`
   - t-SNE (or UMAP if installed) for real and synthetic subsets.
 
+- Structural EDA for one family:
+  - `src/eval/openai_structure.py`
+  - Answers what the gate statistics cannot: not how hard a corpus is to
+    search, but what a generator for it should look like. Writes one
+    self-contained HTML file plus a `structure.json`.
+  - Measures the eigenvalue spectrum about the origin *and* about the mean
+    — the two are different questions, and the gap between them is how much
+    of a corpus's apparent spread is one shared direction, which is the
+    evidence for or against a `preprocess.center` rung. It does not use
+    scikit-learn's `PCA` for this, because `PCA` always centers and would
+    return the same numbers twice.
+  - Also reports intrinsic dimension (two-NN and LID), anisotropy (the mean
+    vector's norm and the cosine distribution around it), and the noise
+    floor: the spread of each gate statistic across disjoint draws of the
+    same real corpus. A band narrower than that spread would reject real
+    data, so it bounds how tight any band can be. It sets no bands.
+  - Named for openai because its questions are that family's — very high
+    ambient dimension, low intrinsic dimension, unit-norm rows — and it
+    deliberately lives outside `src/eval/eda/` rather than growing the
+    shared report to answer them.
+
 - Distributional EDA report:
   - `src/eval/eda_report.py`
   - One self-contained interactive HTML file (plotly bundled inline, opens
@@ -599,6 +635,14 @@ Memory-safe note:
     are self-queried subsample statistics, not published benchmark figures,
     and are only comparable across the series in one report; each family's
     locked values are in its page under `docs/datasets/`.
+  - `--max-panel-dim` (default 256) drops the per-dimension marginals and
+    correlation panels above that width. Both are quadratic in the dimension
+    -- the marginals dropdown carries one visibility flag per (button, trace)
+    pair and the correlation heatmap is dim x dim -- so at openai's 1536 each
+    costs tens of megabytes of report to say less than it does at 128. The
+    default keeps both for sift (128), deep (96), glove (100) and nytimes
+    (256) and drops them for gist (960) and openai (1536); raise it to force
+    them back on. Omission is silent, the same way the glyph panel's is.
   - `--synthetic-path` is optional; without it the report is pure dataset EDA.
     With it, every panel overlays the two so mismatch is visible by eye.
   - `--preprocess l2` (default) matches the training contract, since generator

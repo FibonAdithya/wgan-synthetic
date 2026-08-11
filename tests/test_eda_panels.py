@@ -151,3 +151,44 @@ def test_glyph_panel_is_omitted_for_non_128_dimensional_data():
     panel = _by_title(panels.PANELS, "Descriptor glyphs", ctx)
 
     assert panel.build(ctx) is None
+
+
+WIDE_PANEL_TITLES = ["Per-dimension marginals", "Correlation structure"]
+
+
+def test_per_dimension_panels_are_omitted_above_the_width_threshold():
+    """Both scale with the square of the width.
+
+    The marginals dropdown carries one visibility flag per (button, trace)
+    pair and the correlation heatmap is dim x dim, so at openai's 1536 each
+    costs tens of megabytes of report to say less than it does at 128.
+    """
+    ctx = _context(dim=config.MAX_PANEL_DIM_DEFAULT + 1)
+
+    for title in WIDE_PANEL_TITLES:
+        assert _by_title(panels.PANELS, title, ctx).build(ctx) is None, title
+
+
+def test_per_dimension_panels_survive_at_the_threshold():
+    """The bound is inclusive, which is what keeps nytimes at exactly 256."""
+    ctx = _context(dim=config.MAX_PANEL_DIM_DEFAULT)
+
+    for title in WIDE_PANEL_TITLES:
+        assert isinstance(_by_title(panels.PANELS, title, ctx).build(ctx), go.Figure), (
+            title
+        )
+
+
+def test_the_width_threshold_splits_the_six_families_where_intended():
+    """Pins the boundary against the descriptor widths it was chosen for.
+
+    Moving the default without moving this test would silently change which
+    families get a report they can open.
+    """
+    kept = {"sift": 128, "deep": 96, "glove": 100, "nytimes": 256}
+    dropped = {"gist": 960, "openai": 1536}
+
+    for name, dim in kept.items():
+        assert dim <= config.MAX_PANEL_DIM_DEFAULT, name
+    for name, dim in dropped.items():
+        assert dim > config.MAX_PANEL_DIM_DEFAULT, name

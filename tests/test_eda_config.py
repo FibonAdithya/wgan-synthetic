@@ -27,6 +27,7 @@ def _full_namespace() -> argparse.Namespace:
         no_png=False,
         glyph_samples=8,
         plotlyjs="inline",
+        max_panel_dim=256,
     )
 
 
@@ -57,6 +58,18 @@ def test_missing_glyph_samples_falls_back_to_the_default():
     del ns.glyph_samples
 
     assert config.EdaConfig.from_args(ns).glyph_samples == config.GLYPH_SAMPLES_DEFAULT
+
+
+def test_missing_max_panel_dim_falls_back_to_the_default():
+    """Namespaces are still built by hand outside the CLI, as in compare_variants.
+
+    One built before this field existed must land on the default rather than
+    raising an AttributeError deep inside a panel.
+    """
+    ns = _full_namespace()
+    del ns.max_panel_dim
+
+    assert config.EdaConfig.from_args(ns).max_panel_dim == config.MAX_PANEL_DIM_DEFAULT
 
 
 def test_synthetic_path_none_becomes_an_empty_list():

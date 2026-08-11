@@ -123,7 +123,7 @@ that does not need re-measuring, for the reason given above.
 
 | Variant | Delta | Config | Run | Status |
 |---|---|---|---|---|
-| `v0` | plain WGAN-GP | `configs/glove/v0.yaml` | `runs/glove/v0_seed{42..46}` | trained -- n=5 seeds, see `## Noise floor` |
+| `v0` | plain WGAN-GP | `configs/glove/v0_seed42.yaml` through `configs/glove/v0_seed46.yaml`, five-seed instruments of `configs/glove/v0.yaml` | `runs/glove/v0_seed{42..46}` | trained -- n=5 seeds, see `## Noise floor` |
 
 Train `v0`:
 
@@ -174,6 +174,11 @@ How far each statistic moves when *nothing* changes but the training seed. A
 band tighter than this spread is unenforceable, and a ladder rung whose
 improvement is smaller than it is indistinguishable from a reseed.
 
+`docs/datasets/sift.md#noise-floor` is this measurement's methodological
+precedent: it ran the same seed-reseed test at n=2 and said three to five
+seeds were needed before any of its numbers could justify a band. This
+sweep, at n=5, is that follow-through.
+
 Measured 2026-08-10 from five 30k-step `v0` runs, identical in every training
 hyperparameter except seed (42 through 46), configs `configs/glove/v0_seed42.yaml`
 through `configs/glove/v0_seed46.yaml`. Each run's checkpoint was sampled for
@@ -182,20 +187,41 @@ varies between the five, and `real` plus all five were measured together in a
 single `eda_report` invocation under the canonical conditions above. The
 result is committed as `docs/datasets/glove_v0_noise_floor.json`.
 
-| Statistic | mean | spread across draws (n=5) | as % of mean | distance from real, in units of that spread |
+| Statistic | mean | spread across draws (n=5) | as % of mean | distance from real, in units of the training-seed spread |
 |---|---|---|---|---|
 | LID median | 16.438292 | 15.697354 -- 17.453755 | 10.68% | 10.6x |
 | Relative contrast | 1.839151 | 1.781112 -- 1.895765 | 6.23% | 3.9x |
 | Hubness skew | 1.695891 | 1.535497 -- 1.797769 | 15.47% | 15.0x |
 | IVF cell-balance Gini | 0.262707 | 0.254021 -- 0.277913 | 9.09% | 13.3x |
 
-The last column is the one that decides gateability: it compares the
-seed-to-seed spread against how far `v0`'s mean sits from real. Relative
-contrast has the smallest margin, at 3.9x its own spread; LID median, hubness
-skew and IVF Gini clear it further still, at 10.6x, 15.0x and 13.3x. All four
-separate cleanly from noise at `v0`'s current distance from real -- this
-sweep does not disqualify any of the four statistics. That is a fact about
-this measurement, not a recommendation to set a band: see below.
+The last column's denominator is the **training-seed spread measured in this
+sweep** -- how far a statistic moves when only the training seed changes and
+the sample stays fixed. That is the right yardstick for one specific
+question: could a later ladder rung's improvement be told from a reseed of
+the same generator. By it, all four clear a wide margin: relative contrast at
+3.9x its own spread, LID median at 10.6x, hubness skew at 15.0x, IVF Gini at
+13.3x. None of `v0`'s five draws, on any statistic, is close enough to real to
+be mistaken for a reseed -- that is a fact about this measurement, not a
+recommendation to set a band: see below.
+
+Training-seed spread is not the spread a gate *band* is judged against,
+though, and the two must not be conflated. `gates/glove.yaml` bands reject a
+generator by comparing it to draws of the *real* corpus, so the denominator
+that decides whether a statistic can carry a band is the real-side subsample
+spread measured in `## Hubness skew is below the noise floor at this N`
+above -- a different noise source, measured by a different procedure. For
+LID median, relative contrast and IVF Gini the distinction is academic: both
+spreads are small relative to `v0`'s gap from real, so either denominator
+gives the same verdict. It is not academic for hubness skew. Measured
+against the real-side range (3.463--8.331, a spread of 4.8678), `v0`'s gap
+from the single real draw this page's tables call "Real" is 3.9439 --
+**0.81x** of that range, and 0.58x against the real-side mean (4.4976 across
+eight draws) instead. Both are under 1x, which by `docs/datasets/sift.md`'s
+own convention is the bolded "noise exceeds signal" case. Hubness's 15.0x in
+the table above is a true number about training-seed noise; it is not
+evidence that hubness clears the real-side noise floor, and quoted alone it
+says the opposite of the truth. See "Hubness skew is coarse, not useless"
+below for what the real-side comparison does and does not license.
 
 `v0` misses real on all four statistics, every one in the direction that
 makes the synthetic set easier to search: LID median low (16.438292 against
@@ -224,12 +250,20 @@ real-side floor's eight draws (`docs/datasets/glove_noise_floor.json`) span
 do not overlap**, so a band admitting the real range would reject `v0`
 decisively rather than pass it.
 
-The accurate statement is that a hubness band is coarse, not useless: it can
-only catch a generator whose deficit exceeds the real-side spread, which
-`v0`'s does by a wide margin. A later rung that closed most of that gap would
-land inside the real-side noise (3.463--8.331) and stop being judgeable by
-this statistic alone -- indistinguishable there from a reseed of the real
-corpus.
+That margin is worth sizing, because it is what makes the separation fragile
+rather than comfortable: the gap between the two ranges is 3.463 - 1.798 =
+1.6653, which is 0.342 of the real-side range (4.8678). With only eight real
+draws underestimating the true real-side spread, a margin of a third of the
+range is not a large one.
+
+**Hubness distinguishes a generator this far off, and cannot resolve one
+much closer.** Both halves of that are true at once and neither stands in
+for the whole. The accurate statement is that a hubness band is coarse, not
+useless: it can only catch a generator whose deficit exceeds the real-side
+spread, which `v0`'s does by a wide margin. A later rung that closed most of
+that gap would land inside the real-side noise (3.463--8.331) and stop being
+judgeable by this statistic alone -- indistinguishable there from a reseed of
+the real corpus.
 
 **This is n=5 on the synthetic side.** Five points bound the floor's order of
 magnitude with more confidence than a single paired difference would, but

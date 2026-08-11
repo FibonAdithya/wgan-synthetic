@@ -23,3 +23,28 @@ scaling or a deadline. The larger cells are stable and approximately linear.
 
 These timings are operational diagnostics only. They do not measure or change
 the ANN-difficulty gate.
+
+## Linearity check
+
+`linear-grid/` adds N = 200k through 900k in 100k increments, measured on the
+same RTX 4060 with the same batch size and repeat count. Linear regressions over
+the combined 100k–1M points give:
+
+| Version | Phase | Seconds / 1M vectors | R² | Conclusion |
+|---|---|---:|---:|---|
+| v1 | generation median | 0.493 | 0.9987 | linear |
+| v2 | generation median | 0.552 | 1.0000 | linear |
+| v4 | generation median | 0.811 | 0.9968 | linear |
+| v1 | host median | 0.414 | 0.6197 | not reliably linear |
+| v2 | host median | 0.635 | 0.9816 | broadly linear, with small-N residuals |
+| v4 | host median | 0.378 | 0.6295 | not reliably linear |
+| v1 | p95 budget | 0.973 | 0.8645 | noisy/nonlinear |
+| v2 | p95 budget | 1.231 | 0.9981 | linear |
+| v4 | p95 budget | 1.258 | 0.9592 | broadly linear but noisy |
+
+The model forward pass is therefore linear in N to high precision. Host copy
+and NumPy array assembly are not: v1 drops sharply at 800k and v4 at 700k in
+the added run, while the separately measured 1M cells rise again. Those phase
+discontinuities propagate into the p95 budget. Do not describe the complete
+pipeline as linear without qualifying that the statement applies to GPU
+generation, not consistently to host materialization.

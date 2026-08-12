@@ -20,6 +20,7 @@ expensive half of the job; a crash inside the grid must not re-pay it.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -198,17 +199,67 @@ def _corpus_from_dir(name: str, corpus_dir: Path) -> Corpus:
     )
 
 
-def _is_complete(corpus_dir: Path, num_vectors: int, num_queries: int, k: int) -> bool:
-    """True only when a cached corpus exists *and* matches what was asked for.
+MANIFEST_NAME = "manifest.json"
 
-    Existence alone is not enough: a work directory reused across a smoke
-    test (say, --num-vectors 20000) and the real run (1,000,000) would
-    otherwise serve the smoke corpus back to the real run with no error and
-    no warning -- every number in the table silently wrong while the table
-    itself looks entirely normal. Shapes are read via `mmap_mode="r"`, which
-    touches only the header, so validating them costs nothing beyond a stat.
+# The fields a cache hit must agree on before its shapes are even trusted.
+# `dim` is deliberately not in this list: unlike the rest, it is an *output*
+# of materialization (the generator's or the source file's own dimension),
+# not an input a caller chose, so there is nothing to compare it against
+# before paying the cost the cache exists to avoid. It is still written into
+# the manifest for a human to read.
+_MANIFEST_COMPARABLE_KEYS = (
+    "seed",
+    "batch_size",
+    "num_vectors",
+    "num_queries",
+    "k",
+    "source",
+)
+
+
+def _manifest_matches(expected: dict[str, object], cached: dict[str, object]) -> bool:
+    return all(
+        expected.get(key) == cached.get(key) for key in _MANIFEST_COMPARABLE_KEYS
+    )
+
+
+def _write_manifest(corpus_dir: Path, manifest: dict[str, object]) -> None:
+    (corpus_dir / MANIFEST_NAME).write_text(
+        json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8"
+    )
+
+
+def _is_complete(
+    corpus_dir: Path,
+    num_vectors: int,
+    num_queries: int,
+    k: int,
+    manifest: dict[str, object],
+) -> bool:
+    """True only when a cached corpus exists, matches the requested shapes,
+    *and* was drawn from the same inputs recorded in `manifest`.
+
+    Shape-only validation caught a smoke-test cache (--num-vectors 20000)
+    being served back to the real run (1,000,000): same directory, different
+    size, no error. It did not catch a *same-shape* cache served back after
+    --seed, --batch-size, --real-path or --real-hdf5-path changed -- same
+    shapes, silently different data, and nothing downstream would notice.
+    `manifest.json` closes that gap: any mismatch against `manifest` on the
+    fields in `_MANIFEST_COMPARABLE_KEYS` is a cache miss, which triggers a
+    full rematerialization rather than an error -- a run that asked for
+    different inputs is entitled to get them, not to be told no.
+
+    Shapes are read via `mmap_mode="r"`, which touches only the header, so
+    validating them costs nothing beyond a stat; the manifest is a few dozen
+    bytes of JSON.
     """
-    names = ("vectors.npy", "queries.npy", "truth_distances.npy", "truth_ids.npy")
+    names = (
+        "vectors.npy",
+        "queries.npy",
+        "truth_distances.npy",
+        "truth_ids.npy",
+        MANIFEST_NAME,
+    )
     if not all((corpus_dir / n).exists() for n in names):
         return False
     try:
@@ -216,6 +267,9 @@ def _is_complete(corpus_dir: Path, num_vectors: int, num_queries: int, k: int) -
         queries = np.load(corpus_dir / "queries.npy", mmap_mode="r")
         truth_distances = np.load(corpus_dir / "truth_distances.npy", mmap_mode="r")
         truth_ids = np.load(corpus_dir / "truth_ids.npy", mmap_mode="r")
+        cached_manifest = json.loads(
+            (corpus_dir / MANIFEST_NAME).read_text(encoding="utf-8")
+        )
     except (OSError, ValueError):
         # A partially written or corrupt cache is a miss, not a crash.
         return False
@@ -224,6 +278,7 @@ def _is_complete(corpus_dir: Path, num_vectors: int, num_queries: int, k: int) -
         and queries.shape[0] == num_queries
         and truth_distances.shape == (num_queries, k)
         and truth_ids.shape == (num_queries, k)
+        and _manifest_matches(manifest, cached_manifest)
     )
 
 
@@ -247,17 +302,33 @@ def materialize_real(
     shape check further down -- because by that point the caller has already
     lost track of which file the queries came from, and the error would name
     a mismatch without naming a cause.
+
+    The cache-hit check covers `real_path` and the resolved hdf5 path (via
+    `manifest.json`'s `source` field), not just the requested shapes -- a
+    cache populated from one SIFT file must not be served back after
+    `--real-path`/`--real-hdf5-path` point somewhere else. This is why
+    `resolved_hdf5` is computed unconditionally, before the cache check runs,
+    rather than only on a miss.
     """
     corpus_dir = Path(work_dir) / "real"
-    if _is_complete(corpus_dir, num_vectors, num_queries, k):
-        return _corpus_from_dir("real", corpus_dir)
-
-    corpus_dir.mkdir(parents=True, exist_ok=True)
     cache_dir = Path(cache_dir)
-    vectors = normalize(load_descriptors(Path(real_path))[:num_vectors])
     resolved_hdf5 = (
         Path(hdf5_path) if hdf5_path is not None else _select_sift_hdf5(cache_dir)
     )
+    manifest: dict[str, object] = {
+        "seed": None,
+        "batch_size": None,
+        "num_vectors": num_vectors,
+        "num_queries": num_queries,
+        "k": k,
+        "dim": None,
+        "source": f"{Path(real_path)}|{resolved_hdf5}",
+    }
+    if _is_complete(corpus_dir, num_vectors, num_queries, k, manifest):
+        return _corpus_from_dir("real", corpus_dir)
+
+    corpus_dir.mkdir(parents=True, exist_ok=True)
+    vectors = normalize(load_descriptors(Path(real_path))[:num_vectors])
     raw_queries = read_hdf5_queries(cache_dir, num_queries, hdf5_path=resolved_hdf5)
     if raw_queries.shape[1] != vectors.shape[1]:
         raise ValueError(
@@ -273,6 +344,8 @@ def materialize_real(
     np.save(corpus_dir / "vectors.npy", vectors)
     np.save(corpus_dir / "queries.npy", queries)
     _write_truth(corpus_dir, vectors, queries, k, adapter)
+    manifest["dim"] = int(vectors.shape[1])
+    _write_manifest(corpus_dir, manifest)
     return _corpus_from_dir("real", corpus_dir)
 
 
@@ -319,9 +392,25 @@ def materialize_variant(
     holdout of the corpus. That mirrors how SIFT's query set relates to its
     base set -- same distribution, different sample -- so each corpus is
     searched the way it would actually be used.
+
+    The cache-hit check covers `seed` and `batch_size` (via `manifest.json`),
+    not just the requested shapes -- a cache drawn under one `--seed` must
+    not be served back to a run asking for a different one; same shapes,
+    silently different draw. `source` additionally covers `root` and the
+    variant's own checkpoint directory, so pointing `--root` somewhere else
+    invalidates the cache too.
     """
     corpus_dir = Path(work_dir) / variant.name
-    if _is_complete(corpus_dir, num_vectors, num_queries, k):
+    manifest: dict[str, object] = {
+        "seed": seed,
+        "batch_size": batch_size,
+        "num_vectors": num_vectors,
+        "num_queries": num_queries,
+        "k": k,
+        "dim": None,
+        "source": str(Path(root) / variant.run_dir),
+    }
+    if _is_complete(corpus_dir, num_vectors, num_queries, k, manifest):
         return _corpus_from_dir(variant.name, corpus_dir)
 
     corpus_dir.mkdir(parents=True, exist_ok=True)
@@ -334,4 +423,6 @@ def materialize_variant(
     np.save(corpus_dir / "vectors.npy", vectors)
     np.save(corpus_dir / "queries.npy", queries)
     _write_truth(corpus_dir, vectors, queries, k, adapter)
+    manifest["dim"] = int(vectors.shape[1])
+    _write_manifest(corpus_dir, manifest)
     return _corpus_from_dir(variant.name, corpus_dir)

@@ -64,7 +64,15 @@ class BuiltIndex:
     handle: object
     train_seconds: float
     add_seconds: float
-    index_bytes: int
+    # An analytic estimate from the vectors/codes/graph an adapter *knows* it
+    # allocated, not a measured device allocation -- cuVS exposes no API to
+    # ask an index its real footprint. It omits whatever structure each
+    # adapter's `build()` doesn't account for (IVF's coarse-quantizer
+    # centroids, PQ's codebook tables); see the comment at each computation
+    # for exactly what is and is not counted. `peak_vram_bytes` below is the
+    # measured figure and does not have this gap, but it is card-wide rather
+    # than per-index (see `_device_used_bytes`).
+    index_bytes_estimated: int
     peak_vram_bytes: int | None = None
     dataset: object | None = None
 
@@ -198,13 +206,20 @@ class FlatAdapter(_CuvsAdapter):
             handle=handle,
             train_seconds=0.0,
             add_seconds=elapsed,
-            index_bytes=int(vectors.nbytes),
+            # Brute force has no structure beyond the vectors themselves, so
+            # this estimate has nothing to omit.
+            index_bytes_estimated=int(vectors.nbytes),
             peak_vram_bytes=max(self._device_used_bytes() - before, 0),
             # See BuiltIndex.dataset: the handle points into this buffer.
             dataset=device_vectors,
         )
 
     def search(self, built, queries, k, param):
+        # `_res()` looks redundant here -- `build()` already created the
+        # resources handle -- but it is not: it is what populates
+        # `self._cupy` before `_to_device` below reads it, and it is what
+        # turns a missing cuVS into `INSTALL_HINT`'s friendly RuntimeError
+        # rather than a bare ModuleNotFoundError from the import beneath it.
         self._res()
         from cuvs.neighbors import brute_force
 
@@ -242,13 +257,19 @@ class IvfFlatAdapter(_CuvsAdapter):
             handle=handle,
             train_seconds=elapsed,
             add_seconds=0.0,
-            index_bytes=int(vectors.nbytes),
+            # Estimate: the raw vectors only. Excludes the n_lists coarse-
+            # quantizer centroids and cuVS's inverted-list bookkeeping --
+            # both real device allocations this does not measure.
+            index_bytes_estimated=int(vectors.nbytes),
             peak_vram_bytes=max(self._device_used_bytes() - before, 0),
             # See BuiltIndex.dataset: the handle points into this buffer.
             dataset=device_vectors,
         )
 
     def search(self, built, queries, k, param):
+        # See FlatAdapter.search: not redundant with build()'s resources --
+        # it populates self._cupy before _to_device below reads it, and it
+        # is what turns a missing cuVS into INSTALL_HINT's RuntimeError.
         self._res()
         from cuvs.neighbors import ivf_flat
 
@@ -293,18 +314,24 @@ class IvfPqAdapter(_CuvsAdapter):
         self.sync()
         elapsed = time.perf_counter() - started
         # Compressed: one PQ_BITS-bit code per PQ_DIM subspace per vector.
+        # Estimate: the codes only. Excludes the PQ codebook tables (one
+        # per subspace) and the n_lists coarse-quantizer centroids -- both
+        # real device allocations this does not measure.
         codes = vectors.shape[0] * PQ_DIM * PQ_BITS // 8
         return BuiltIndex(
             handle=handle,
             train_seconds=elapsed,
             add_seconds=0.0,
-            index_bytes=int(codes),
+            index_bytes_estimated=int(codes),
             peak_vram_bytes=max(self._device_used_bytes() - before, 0),
             # See BuiltIndex.dataset: the handle points into this buffer.
             dataset=device_vectors,
         )
 
     def search(self, built, queries, k, param):
+        # See FlatAdapter.search: not redundant with build()'s resources --
+        # it populates self._cupy before _to_device below reads it, and it
+        # is what turns a missing cuVS into INSTALL_HINT's RuntimeError.
         self._res()
         from cuvs.neighbors import ivf_pq
 
@@ -346,19 +373,25 @@ class CagraAdapter(_CuvsAdapter):
         handle = cagra.build(params, device_vectors)
         self.sync()
         elapsed = time.perf_counter() - started
-        # Vectors plus a graph_degree-wide uint32 adjacency row per vector.
+        # Estimate: vectors plus a graph_degree-wide uint32 adjacency row per
+        # vector. No coarse quantizer or codebook to omit here, unlike the
+        # two IVF adapters, but it is still an analytic figure, not a
+        # measured allocation.
         graph = vectors.shape[0] * CAGRA_GRAPH_DEGREE * 4
         return BuiltIndex(
             handle=handle,
             train_seconds=elapsed,
             add_seconds=0.0,
-            index_bytes=int(vectors.nbytes + graph),
+            index_bytes_estimated=int(vectors.nbytes + graph),
             peak_vram_bytes=max(self._device_used_bytes() - before, 0),
             # See BuiltIndex.dataset: the handle points into this buffer.
             dataset=device_vectors,
         )
 
     def search(self, built, queries, k, param):
+        # See FlatAdapter.search: not redundant with build()'s resources --
+        # it populates self._cupy before _to_device below reads it, and it
+        # is what turns a missing cuVS into INSTALL_HINT's RuntimeError.
         self._res()
         from cuvs.neighbors import cagra
 
@@ -395,7 +428,7 @@ class NumpyFlatAdapter(IndexAdapter):
             handle=stored,
             train_seconds=time.perf_counter() - started,
             add_seconds=0.0,
-            index_bytes=int(stored.nbytes),
+            index_bytes_estimated=int(stored.nbytes),
         )
 
     def search(self, built, queries, k, param):

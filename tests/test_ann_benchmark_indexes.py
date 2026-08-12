@@ -189,7 +189,7 @@ def test_numpy_adapter_is_a_working_stand_in_for_the_runner():
     vectors = np.eye(4, dtype=np.float32)
     built = adapter.build(vectors)
     assert built.train_seconds >= 0.0
-    assert built.index_bytes == vectors.nbytes
+    assert built.index_bytes_estimated == vectors.nbytes
 
     dist, ids = adapter.search(built, vectors[:2], k=2, param=None)
     assert dist.shape == (2, 2)

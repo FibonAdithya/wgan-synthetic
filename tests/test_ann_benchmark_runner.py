@@ -70,6 +70,28 @@ class ExplodingSearchAdapter(indexes.NumpyFlatAdapter):
         return super().search(built, queries, k, param)
 
 
+class LyingDistancesAdapter(indexes.NumpyFlatAdapter):
+    """Exact search (correct ids) that reports wildly wrong distances.
+
+    Stands in for IVF-PQ's asymmetric distance computation: an index whose
+    reported distances are not in the same space as the stored vectors.
+    `run_grid` must score recall from distances it recomputes from the
+    corpus vectors and the returned ids -- never from what `search()` itself
+    hands back -- so this adapter's bogus distances must have zero effect on
+    the recorded recall.
+    """
+
+    name = "lying_distances"
+
+    def search(self, built, queries, k, param):
+        _, ids = super().search(built, queries, k, param)
+        # If these were used for scoring, every point would compare as a
+        # miss (a real ground-truth distance can never be this large), and
+        # recall would come out near 0.0 instead of the true 1.0.
+        bogus_distances = np.full((queries.shape[0], k), 1.0e9, dtype=np.float32)
+        return bogus_distances, ids
+
+
 class CountingAdapter(indexes.NumpyFlatAdapter):
     """Exact search that counts every `search()` call it receives.
 
@@ -182,7 +204,7 @@ def test_build_record_carries_the_fixed_parameters(tiny_corpus, tmp_path):
         records_path=tmp_path / "records.json",
     )
     assert builds[0].params == {"metric": "sqeuclidean"}
-    assert builds[0].index_bytes == 64
+    assert builds[0].index_bytes_estimated == 64
 
 
 def test_warmup_precedes_every_cells_timed_repeats(tiny_corpus, tmp_path):
@@ -198,3 +220,24 @@ def test_warmup_precedes_every_cells_timed_repeats(tiny_corpus, tmp_path):
         records_path=tmp_path / "records.json",
     )
     assert adapter.search_calls == 5
+
+
+def test_recall_is_scored_from_recomputed_exact_distances_not_the_adapters_own(
+    tiny_corpus, tmp_path
+):
+    # CRITICAL 2 regression test: an adapter reporting distances in the
+    # wrong space (IVF-PQ's asymmetric distance computation, stood in for
+    # here by deliberately bogus values) must not be able to inflate -- or
+    # in this case, wreck -- its own recall. `run_grid` must recompute
+    # exact distances from the corpus vectors and the returned ids and score
+    # against those, so the recall recorded here is the true 1.0 (the ids
+    # are exact), even though every reported distance was 1e9.
+    _, searches = runner.run_grid(
+        [tiny_corpus],
+        [LyingDistancesAdapter()],
+        k=2,
+        repeats=1,
+        records_path=tmp_path / "records.json",
+    )
+    assert searches[0].failed is None
+    assert searches[0].recall == pytest.approx(1.0)

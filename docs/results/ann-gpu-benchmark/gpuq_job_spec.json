@@ -1,0 +1,33 @@
+{
+  "id": "wgan-synthetic-20260812T140307Z-46a363",
+  "lane": "gpu",
+  "project": "wgan-synthetic",
+  "commit": "159f1cef025262458da2e7cee5ed142c929b37af",
+  "branch": "benchmark-algos",
+  "cmd": [
+    "python",
+    "-m",
+    "src.eval.ann_benchmark",
+    "--real-path",
+    "/workspace/data-cache/sift_1m.npy",
+    "--cache-dir",
+    "/workspace/data-cache",
+    "--root",
+    "/workspace/annbench-root",
+    "--work-dir",
+    "/workspace/annbench-work",
+    "--output-dir",
+    "docs/results/ann-gpu-benchmark"
+  ],
+  "artifacts": [
+    "docs/results/ann-gpu-benchmark"
+  ],
+  "timeout_s": 5400,
+  "attempts": 0,
+  "dedupe_key": null,
+  "submitted_at": "2026-08-12T14:03:07Z",
+  "pid": null,
+  "runner_pid": 67178,
+  "exit_code": 0,
+  "error": null
+}

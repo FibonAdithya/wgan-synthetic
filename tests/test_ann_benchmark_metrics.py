@@ -94,3 +94,18 @@ def test_qps_at_recall_is_order_independent():
     assert metrics.qps_at_recall(descending, 0.875) == pytest.approx(
         metrics.qps_at_recall(ascending, 0.875)
     )
+
+
+def test_qps_at_recall_collapses_ties_to_the_best_qps_in_the_bracket():
+    # Two configurations both measured 0.90 recall. The sweep's real result
+    # at that recall is the faster one (300 QPS); interpolation must bracket
+    # on that, not on whichever tied point happens to sort first.
+    points = [(0.80, 400.0), (0.90, 50.0), (0.90, 300.0)]
+    assert metrics.qps_at_recall(points, 0.90) == pytest.approx(300.0)
+
+
+def test_qps_at_recall_collapses_ties_when_all_points_clear_target():
+    # Both points already clear the target and share the lowest recall; the
+    # fastest of the tie must win, not the one that sorts first.
+    points = [(0.90, 50.0), (0.90, 300.0)]
+    assert metrics.qps_at_recall(points, 0.80) == pytest.approx(300.0)

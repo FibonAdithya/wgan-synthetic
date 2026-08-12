@@ -76,12 +76,27 @@ def qps_at_recall(points: Sequence[tuple[float, float]], target: float) -> float
     interesting thing the table can say -- so it is reported rather than
     replaced with the nearest point or an extrapolation.
 
+    Points sharing a recall are first collapsed to their Pareto-best (the
+    max QPS at that recall) -- standard ann-benchmarks practice. Several
+    configurations can land on the same measured recall, and only the
+    fastest of them is what the sweep actually achieved there; keeping a
+    slower duplicate around would let it shadow the faster one, whether it
+    lands inside the interpolation bracket or as the fastest already-passing
+    point.
+
     Interpolation is linear in log(qps) because QPS spans orders of magnitude
     across a sweep while recall does not.
     """
-    ordered = sorted((float(r), float(q)) for r, q in points)
-    if not ordered:
+    if not points:
         return None
+
+    best_qps_by_recall: dict[float, float] = {}
+    for r, q in points:
+        r, q = float(r), float(q)
+        if r not in best_qps_by_recall or q > best_qps_by_recall[r]:
+            best_qps_by_recall[r] = q
+    ordered = sorted(best_qps_by_recall.items())
+
     if ordered[-1][0] < target:
         return None
     if ordered[0][0] >= target:
@@ -92,8 +107,8 @@ def qps_at_recall(points: Sequence[tuple[float, float]], target: float) -> float
 
     for (r0, q0), (r1, q1) in zip(ordered, ordered[1:]):
         if r0 < target <= r1:
-            if r1 == r0:
-                return q1
+            # `ordered` holds one entry per distinct recall (deduplicated
+            # above), so r1 == r0 can't happen here.
             frac = (target - r0) / (r1 - r0)
             if q0 <= 0.0 or q1 <= 0.0:
                 return float(q0 + frac * (q1 - q0))

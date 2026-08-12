@@ -20,7 +20,6 @@ expensive half of the job; a crash inside the grid must not re-pay it.
 
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -39,6 +38,7 @@ from src.eval.compare_variants import (
     Variant,
     invert_samples,
     load_preprocess_state,
+    variant_seed,
 )
 from src.eval.evaluate_distribution import load_generator
 from src.train.train_wgan_gp import sample_generator
@@ -74,25 +74,27 @@ def normalize(x: np.ndarray) -> np.ndarray:
     return (out / np.clip(norm, EPS, None)).astype(np.float32)
 
 
-def _seed(base: int, name: str, salt: str) -> int:
-    digest = hashlib.sha256(f"{salt}:{name}".encode()).digest()
-    return (base + int.from_bytes(digest[:4], "big")) % (2**31)
-
-
 def corpus_seed(base_seed: int, name: str) -> int:
-    """Seed for a variant's corpus draw, independent of run order."""
-    return _seed(base_seed, name, "corpus")
+    """Seed for a variant's corpus draw, independent of run order.
+
+    Delegates to `compare_variants.variant_seed`, which already derives a
+    per-name seed via sha256 over `(base_seed, name)`; salting the digest
+    input with a `"corpus:"` prefix is the only thing added here, and it is
+    what keeps this draw from ever coinciding with `query_seed`'s.
+    """
+    return variant_seed(base_seed, f"corpus:{name}")
 
 
 def query_seed(base_seed: int, name: str) -> int:
     """Seed for a variant's query draw.
 
-    Salted differently from `corpus_seed` so the two draws cannot coincide.
-    If they did, every query would be an exact member of the index and recall
-    would read 1.0 for every configuration of every algorithm -- a failure
-    that produces a perfectly plausible-looking table.
+    Salted differently from `corpus_seed` (`"query:"` vs `"corpus:"`) so the
+    two draws cannot coincide. If they did, every query would be an exact
+    member of the index and recall would read 1.0 for every configuration of
+    every algorithm -- a failure that produces a perfectly plausible-looking
+    table.
     """
-    return _seed(base_seed, name, "query")
+    return variant_seed(base_seed, f"query:{name}")
 
 
 def read_hdf5_queries(cache_dir: Path, num_queries: int) -> np.ndarray:
@@ -153,10 +155,32 @@ def _corpus_from_dir(name: str, corpus_dir: Path) -> Corpus:
     )
 
 
-def _is_complete(corpus_dir: Path) -> bool:
-    return all(
-        (corpus_dir / n).exists()
-        for n in ("vectors.npy", "queries.npy", "truth_distances.npy", "truth_ids.npy")
+def _is_complete(corpus_dir: Path, num_vectors: int, num_queries: int, k: int) -> bool:
+    """True only when a cached corpus exists *and* matches what was asked for.
+
+    Existence alone is not enough: a work directory reused across a smoke
+    test (say, --num-vectors 20000) and the real run (1,000,000) would
+    otherwise serve the smoke corpus back to the real run with no error and
+    no warning -- every number in the table silently wrong while the table
+    itself looks entirely normal. Shapes are read via `mmap_mode="r"`, which
+    touches only the header, so validating them costs nothing beyond a stat.
+    """
+    names = ("vectors.npy", "queries.npy", "truth_distances.npy", "truth_ids.npy")
+    if not all((corpus_dir / n).exists() for n in names):
+        return False
+    try:
+        vectors = np.load(corpus_dir / "vectors.npy", mmap_mode="r")
+        queries = np.load(corpus_dir / "queries.npy", mmap_mode="r")
+        truth_distances = np.load(corpus_dir / "truth_distances.npy", mmap_mode="r")
+        truth_ids = np.load(corpus_dir / "truth_ids.npy", mmap_mode="r")
+    except (OSError, ValueError):
+        # A partially written or corrupt cache is a miss, not a crash.
+        return False
+    return (
+        vectors.shape[0] == num_vectors
+        and queries.shape[0] == num_queries
+        and truth_distances.shape == (num_queries, k)
+        and truth_ids.shape == (num_queries, k)
     )
 
 
@@ -172,7 +196,7 @@ def materialize_real(
 ) -> Corpus:
     """The real corpus, normalized, with SIFT's own query set."""
     corpus_dir = Path(work_dir) / "real"
-    if _is_complete(corpus_dir):
+    if _is_complete(corpus_dir, num_vectors, num_queries, k):
         return _corpus_from_dir("real", corpus_dir)
 
     corpus_dir.mkdir(parents=True, exist_ok=True)
@@ -229,7 +253,7 @@ def materialize_variant(
     searched the way it would actually be used.
     """
     corpus_dir = Path(work_dir) / variant.name
-    if _is_complete(corpus_dir):
+    if _is_complete(corpus_dir, num_vectors, num_queries, k):
         return _corpus_from_dir(variant.name, corpus_dir)
 
     corpus_dir.mkdir(parents=True, exist_ok=True)

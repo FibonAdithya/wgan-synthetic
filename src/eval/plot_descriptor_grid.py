@@ -42,7 +42,14 @@ from src.train.train_wgan_gp import sample_generator
 # Geometry, the negative-ray treatment and the figure itself come from
 # `eda.glyphs`, which draws the same panel from materialised arrays.
 REAL_COLORS = eda_glyphs.GLYPH_REAL_COLORS
-VARIANT_COLORS = ("#ff7f0e", "#2ca02c", "#9467bd", "#8c564b")
+VARIANT_COLORS = (
+    "#ff7f0e",
+    "#2ca02c",
+    "#9467bd",
+    "#8c564b",
+    "#d62728",
+    "#e377c2",
+)
 # Any variant not in `cv.VARIANTS`. Deliberately outside the palette above:
 # wrapping the index into it instead handed an unknown name v0's orange, and
 # two identically-coloured rows are unreadable in a figure whose whole job is

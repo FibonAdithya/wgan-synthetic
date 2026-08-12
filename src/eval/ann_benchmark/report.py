@@ -25,6 +25,7 @@ exists to surface.
 
 from __future__ import annotations
 
+import html as html_module
 import json
 from collections import defaultdict
 from collections.abc import Sequence
@@ -60,8 +61,10 @@ thead th { background: #f7fafc; } tbody th { text-align: left; }
 def _is_exact_cell(index: str, cell_searches: Sequence[SearchRecord]) -> bool:
     """An "exact" cell has no swept knob: every search record has no param.
 
-    Falls back to the `flat` index name when a build failed before any
-    search ran, since there is then nothing to inspect.
+    Falls back to the `flat` index name when the cell has no search records
+    at all -- whether because the build failed before any search ran, or
+    because a successful build simply produced zero search records -- since
+    there is then nothing to inspect.
     """
     if cell_searches:
         return all(s.param_name == "" for s in cell_searches)
@@ -155,9 +158,22 @@ def _fmt(value: object, digits: int = 1) -> str:
     return str(value)
 
 
-def _qps_cell(row: dict[str, object]) -> str:
+def _escape_markdown_cell(text: str) -> str:
+    """Escape characters that would break a GFM table cell.
+
+    A raw `|` splits the cell into extra columns and misaligns the whole
+    table; a raw newline ends the row early. Both are realistic in a cuVS/
+    CUDA failure message (C++ template types, `<unnamed>` frames), so a
+    failure string is escaped before it is ever interpolated into a row --
+    the same string that is this table's most important diagnostic must not
+    be the thing that corrupts the table it's reported in.
+    """
+    return text.replace("|", "\\|").replace("\r\n", " ").replace("\n", " ")
+
+
+def _qps_cell(row: dict[str, object], *, escape) -> str:
     if row["failed"] is not None:
-        return f"{BUILD_FAILED}: {row['failed']}"
+        return f"{BUILD_FAILED}: {escape(str(row['failed']))}"
     if row["search_failed"]:
         return SEARCH_FAILED
     if row["is_exact"]:
@@ -206,7 +222,9 @@ def write_markdown(
         lines.append(
             f"| {row['corpus']} | {row['index']} | "
             f"{_fmt(row['train_seconds'], 2)} | {_fmt(row['add_seconds'], 2)} | "
-            f"{_fmt(megabytes)} | {_qps_cell(row)} | {_recall_cell(row)} |"
+            f"{_fmt(megabytes)} | "
+            f"{_qps_cell(row, escape=_escape_markdown_cell)} | "
+            f"{_recall_cell(row)} |"
         )
     lines.append("")
     path = Path(path)
@@ -281,17 +299,18 @@ def write_html(
         f"<td>{_fmt(row['train_seconds'], 2)}</td>"
         f"<td>{_fmt(row['add_seconds'], 2)}</td>"
         f"<td>{_fmt(None if row['index_bytes'] is None else float(row['index_bytes']) / 1e6)}</td>"
-        f"<td>{_qps_cell(row)}</td><td>{_recall_cell(row)}</td>"
+        f"<td>{_qps_cell(row, escape=html_module.escape)}</td>"
+        f"<td>{_recall_cell(row)}</td>"
         "</tr>"
         for row in sorted(rows, key=lambda r: (str(r["index"]), str(r["corpus"])))
     )
     failed_lines = [
-        f"{b.corpus}/{b.index}: {BUILD_FAILED} -- {b.failed}"
+        f"{b.corpus}/{b.index}: {BUILD_FAILED} -- {html_module.escape(b.failed)}"
         for b in builds
         if b.failed
     ] + [
         f"{s.corpus}/{s.index} ({s.param_name}={s.param_value}): "
-        f"search failed -- {s.failed}"
+        f"search failed -- {html_module.escape(s.failed)}"
         for s in searches
         if s.failed
     ]

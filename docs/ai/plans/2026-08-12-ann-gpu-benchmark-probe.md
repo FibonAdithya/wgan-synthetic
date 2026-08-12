@@ -163,6 +163,38 @@ initialization rather than a deadline worth budgeting against.
 warmup search before its timed repeats. `min`/`median`/`p95` then describe
 steady-state throughput, which is what the table claims to report.
 
+## Job staging — a single root the manifest already understands
+
+`compare_variants.resolve_variants` joins one root to every manifest entry
+(`run_dir = root / variant.run_dir`), but the rungs are spread over two trees:
+`v0`/`v1`/`v1_5` under `keep/wgan-synthetic`, `v2` under `keep/wgan-sparse-v2`.
+Rather than teach the manifest about per-variant roots — a code change, and one
+that would outlive this benchmark — a staging root of symlinks is assembled and
+`--root` points at it. The manifest is then correct as written.
+
+    R=/workspace/annbench-root
+    mkdir -p $R/runs $R/data
+    ln -sfn /workspace/checkouts/wgan-synthetic/configs      $R/configs
+    ln -sfn /workspace/checkouts/wgan-synthetic/src          $R/src
+    ln -sfn /workspace/keep/wgan-synthetic/long_baseline     $R/runs/long_baseline
+    ln -sfn /workspace/keep/wgan-synthetic/x100k_ema_only    $R/runs/x100k_ema_only
+    ln -sfn /workspace/keep/wgan-synthetic/x100k_improved    $R/runs/x100k_improved
+    ln -sfn /workspace/keep/wgan-sparse-v2/x100k_sparse_clamp4 \
+                                                             $R/runs/x100k_sparse_clamp4
+    ln -sfn /workspace/data-cache/sift_1m.npy                $R/data/sift_1m.npy
+
+Verified against the real loader:
+
+    load_variants(configs/eval/sift.yaml)  ->  ['v0', 'v1', 'v1_5', 'v2']
+    resolve_variants(..., /workspace/annbench-root)
+        RESOLVED: ['v0', 'v1', 'v1_5', 'v2']
+        SKIPPED:  (none)
+
+All four rungs carry `best_generator.pt`, `run_config.yaml` *and*
+`run_metadata.json`, so `_inversion_blocker` passes and no variant is silently
+dropped. This is the check that would otherwise have failed late, inside the
+grid, after the expensive corpus draw.
+
 ## Decisions taken from this probe
 
 1. Install `cuvs-cu13` / `cupy-cuda13x`, not the `cu12` variants.

@@ -14,8 +14,8 @@ from src.eval.eda import config as eda_config
 from src.models.generator import build_generator
 
 
-def test_variants_are_the_four_named_ones():
-    assert [v.name for v in cv.VARIANTS] == ["v0", "v1", "v1_5", "v2"]
+def test_variants_are_the_six_named_ones():
+    assert [v.name for v in cv.VARIANTS] == ["v0", "v1", "v1_5", "v2", "v3", "v4"]
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -444,7 +444,7 @@ def write_manifest(path: Path, entries: list[dict]) -> Path:
     return path
 
 
-def test_the_default_manifest_still_holds_the_four_historical_runs():
+def test_the_default_manifest_still_holds_the_six_historical_runs():
     """The manifest is the source of `VARIANTS`, so it pins the same values.
 
     Moving the list out of source must not quietly change what the headline
@@ -458,6 +458,8 @@ def test_the_default_manifest_still_holds_the_four_historical_runs():
         ("v1", "configs/sift/v1.yaml", "runs/x100k_ema_only"),
         ("v1_5", "configs/sift/v1_5.yaml", "runs/x100k_improved"),
         ("v2", "configs/sift/v2.yaml", "runs/x100k_sparse_clamp4"),
+        ("v3", "configs/sift/v3.yaml", "runs/sift_gan_v3"),
+        ("v4", "configs/sift/v4.yaml", "runs/x100k_structured"),
     ]
     assert variants == cv.VARIANTS, "VARIANTS must be exactly the default manifest"
 

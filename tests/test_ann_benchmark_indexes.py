@@ -97,3 +97,65 @@ def test_numpy_adapter_is_a_working_stand_in_for_the_runner():
     # Each query is a row of the index, so its own row is the nearest at 0.
     assert dist[:, 0] == pytest.approx([0.0, 0.0])
     assert list(ids[:, 0]) == [0, 1]
+
+
+def test_exact_neighbours_matches_a_hand_computed_answer():
+    from src.eval.ann_benchmark import groundtruth
+
+    vectors = np.array(
+        [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [3.0, 0.0]], dtype=np.float32
+    )
+    queries = np.array([[0.0, 0.0]], dtype=np.float32)
+    dist, ids = groundtruth.exact_neighbours(
+        vectors, queries, k=3, adapter=indexes.NumpyFlatAdapter()
+    )
+    assert list(ids[0]) == [0, 1, 2]
+    assert dist[0] == pytest.approx([0.0, 1.0, 1.0])
+
+
+def test_exact_neighbours_rejects_k_larger_than_the_corpus():
+    from src.eval.ann_benchmark import groundtruth
+
+    vectors = np.zeros((3, 2), dtype=np.float32)
+    queries = np.zeros((1, 2), dtype=np.float32)
+    with pytest.raises(ValueError, match="k=5"):
+        groundtruth.exact_neighbours(
+            vectors, queries, k=5, adapter=indexes.NumpyFlatAdapter()
+        )
+
+
+def test_exact_neighbours_rejects_mismatched_dimensions():
+    from src.eval.ann_benchmark import groundtruth
+
+    vectors = np.zeros((3, 4), dtype=np.float32)
+    queries = np.zeros((1, 5), dtype=np.float32)
+    with pytest.raises(ValueError, match="dimension mismatch"):
+        groundtruth.exact_neighbours(
+            vectors, queries, k=1, adapter=indexes.NumpyFlatAdapter()
+        )
+
+
+def test_gpu_and_numpy_exact_neighbours_agree():
+    # The GPU brute-force path and the numpy fallback must agree exactly on
+    # ties and ordering: `recall_at_k` compares found distances directly
+    # against whichever one produced ground truth. Skipped where cuVS is not
+    # installed (the CPU-only `make check` box); runs for real on the GPU box.
+    try:
+        import cuvs  # noqa: F401
+    except ImportError:
+        pytest.skip("cuVS is not installed; the GPU path cannot run")
+
+    from src.eval.ann_benchmark import groundtruth
+
+    rng = np.random.default_rng(0)
+    vectors = rng.standard_normal((50, 8)).astype(np.float32)
+    queries = rng.standard_normal((5, 8)).astype(np.float32)
+
+    gpu_dist, gpu_ids = groundtruth.exact_neighbours(
+        vectors, queries, k=10, adapter=indexes.FlatAdapter()
+    )
+    numpy_dist, numpy_ids = groundtruth.exact_neighbours(
+        vectors, queries, k=10, adapter=indexes.NumpyFlatAdapter()
+    )
+    assert list(gpu_ids.flatten()) == list(numpy_ids.flatten())
+    assert gpu_dist == pytest.approx(numpy_dist, abs=1e-4)

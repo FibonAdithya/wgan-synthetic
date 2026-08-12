@@ -280,3 +280,91 @@ def test_write_json_carries_peak_vram_but_markdown_does_not_column_it(tmp_path):
     report.write_markdown(md_path, rows, target_recall=0.90)
     text = md_path.read_text()
     assert "123456" not in text
+
+
+# --- Fix round 1: failure messages must not corrupt the medium they render
+# into. A raw cuVS/CUDA error string can contain `|` (breaks a GFM table
+# cell), `<`/`>` (parsed as HTML tags) and `&` (starts an HTML entity) --
+# exactly the characters C++ template-type error text carries.
+
+
+def test_markdown_escapes_a_pipe_in_the_failure_message_so_columns_stay_aligned(
+    tmp_path,
+):
+    path = tmp_path / "out.md"
+    malicious = "RuntimeError: bad | alloc <T> & <unnamed>"
+    builds = [
+        BuildRecord(
+            corpus="real",
+            index="ivf_flat",
+            train_seconds=None,
+            add_seconds=None,
+            index_bytes=None,
+            params={},
+            failed=malicious,
+        )
+    ]
+    rows = report.headline_rows(builds, [], target_recall=0.90)
+    report.write_markdown(path, rows, target_recall=0.90)
+    text = path.read_text()
+    row_line = next(line for line in text.splitlines() if line.startswith("| real |"))
+    # The header/row format is 7 columns -> 8 unescaped `|` delimiters. If the
+    # injected `|` were left raw, this row would have 9 and every column
+    # after it would be shifted for the rest of the table.
+    unescaped_pipes = row_line.replace("\\|", "").count("|")
+    assert unescaped_pipes == 8
+    assert "\\|" in row_line
+    # The message is escaped, not dropped -- it must still be legible.
+    assert "bad" in row_line and "alloc" in row_line
+
+
+def test_html_escapes_failure_messages_in_the_table_and_the_failed_cells_list(
+    tmp_path,
+):
+    path = tmp_path / "out.html"
+    build_failure = "std::bad_alloc<template<float>> & <unnamed>"
+    search_failure = "cuvs search failed: <script>alert(1)</script> & boom"
+    builds = [
+        BuildRecord(
+            corpus="real",
+            index="flat",
+            train_seconds=None,
+            add_seconds=None,
+            index_bytes=None,
+            params={},
+            failed=build_failure,
+        ),
+        BuildRecord(
+            corpus="v2",
+            index="ivf_flat",
+            train_seconds=1.0,
+            add_seconds=0.0,
+            index_bytes=64,
+            params={"n_lists": 8},
+        ),
+    ]
+    searches = [
+        SearchRecord(
+            corpus="v2",
+            index="ivf_flat",
+            param_name="n_probes",
+            param_value=1,
+            recall=None,
+            qps_min=None,
+            qps_median=None,
+            qps_p95=None,
+            num_queries=10,
+            failed=search_failure,
+        )
+    ]
+    report.write_html(path, builds, searches, target_recall=0.90)
+    text = path.read_text()
+
+    # Neither raw failure string appears unescaped: a live `<script>` tag or
+    # a stray `<`/`>` pair would corrupt the DOM rather than just look ugly.
+    assert "<template<float>>" not in text
+    assert "<script>alert(1)</script>" not in text
+    # The escaped forms are present -- the message survives, legibly.
+    assert "&lt;template&lt;float&gt;&gt;" in text
+    assert "&amp;" in text
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in text

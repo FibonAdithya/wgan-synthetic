@@ -77,6 +77,89 @@ def test_read_hdf5_queries_names_the_key_when_it_is_absent(tmp_path):
         corpora.read_hdf5_queries(cache, num_queries=5)
 
 
+def test_read_hdf5_queries_picks_sift_not_whatever_sorts_first(tmp_path):
+    # Reproduces the failure found on the GPU box: a cache holding several
+    # ann-benchmarks families at once, where "deep-image..." sorts before
+    # "sift...". Taking candidates[0] would search real SIFT with DEEP-image
+    # queries -- both files carry a `test` key, so nothing about existence or
+    # key-presence would catch it.
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    deep_queries = np.zeros((2, 96), dtype=np.float32)
+    sift_queries = np.ones((2, 128), dtype=np.float32)
+    with h5py.File(cache / "deep-image-96-angular.hdf5", "w") as f:
+        f.create_dataset("test", data=deep_queries)
+    with h5py.File(cache / "glove-100-angular.hdf5", "w") as f:
+        f.create_dataset("test", data=np.full((2, 100), 2.0, dtype=np.float32))
+    with h5py.File(cache / "sift-128-euclidean.hdf5", "w") as f:
+        f.create_dataset("test", data=sift_queries)
+
+    got = corpora.read_hdf5_queries(cache, num_queries=2)
+    assert got.shape == (2, 128)
+    assert got == pytest.approx(sift_queries)
+
+
+def test_read_hdf5_queries_raises_on_an_ambiguous_sift_match(tmp_path):
+    # Two candidates both matching the SIFT name hint must not be resolved by
+    # sort order either -- that is exactly the bug being fixed, one level in.
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    with h5py.File(cache / "sift-128-euclidean.hdf5", "w") as f:
+        f.create_dataset("test", data=np.zeros((2, 128), dtype=np.float32))
+    with h5py.File(cache / "sift-small-128-euclidean.hdf5", "w") as f:
+        f.create_dataset("test", data=np.zeros((2, 128), dtype=np.float32))
+
+    with pytest.raises(ValueError, match="ambiguous"):
+        corpora.read_hdf5_queries(cache, num_queries=2)
+
+
+def test_read_hdf5_queries_explicit_path_overrides_selection(tmp_path):
+    # An explicit hdf5_path is the caller's word: it must be used even when
+    # it does not match the SIFT name hint and even when other candidates
+    # (including ones that would themselves be ambiguous) are present.
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    named_anything = cache / "not-named-like-sift-at-all.hdf5"
+    expected = np.full((2, 128), 7.0, dtype=np.float32)
+    with h5py.File(named_anything, "w") as f:
+        f.create_dataset("test", data=expected)
+    with h5py.File(cache / "sift-a-128-euclidean.hdf5", "w") as f:
+        f.create_dataset("test", data=np.zeros((2, 128), dtype=np.float32))
+    with h5py.File(cache / "sift-b-128-euclidean.hdf5", "w") as f:
+        f.create_dataset("test", data=np.zeros((2, 128), dtype=np.float32))
+
+    got = corpora.read_hdf5_queries(cache, num_queries=2, hdf5_path=named_anything)
+    assert got == pytest.approx(expected)
+
+
+def test_materialize_real_raises_when_the_hdf5_dimension_does_not_match(tmp_path):
+    # End-to-end version of the same hazard: the wrong-family HDF5 must be
+    # caught inside materialize_real, naming the file, rather than surfacing
+    # later as an opaque dimension mismatch with no file attached to it.
+    raw = np.array([[3.0, 4.0, 0.0], [0.0, 5.0, 0.0]], dtype=np.float32)
+    real_path = tmp_path / "real.npy"
+    np.save(real_path, raw)
+
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    wrong_dim_hdf5 = cache / "deep-image-96-angular.hdf5"
+    with h5py.File(wrong_dim_hdf5, "w") as f:
+        f.create_dataset("test", data=np.zeros((1, 96), dtype=np.float32))
+
+    work = tmp_path / "work"
+    with pytest.raises(ValueError, match=str(wrong_dim_hdf5)):
+        corpora.materialize_real(
+            real_path=real_path,
+            cache_dir=cache,
+            work_dir=work,
+            num_vectors=2,
+            num_queries=1,
+            k=1,
+            hdf5_path=wrong_dim_hdf5,
+            adapter=indexes.NumpyFlatAdapter(),
+        )
+
+
 def test_query_seed_differs_from_corpus_seed():
     # The query draw must not reproduce the corpus draw, or every query would
     # be an exact member of the index and recall would read as 1.0 everywhere.

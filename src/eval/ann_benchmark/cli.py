@@ -36,6 +36,17 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--real-path", type=str, default="data/sift_1m.npy")
     parser.add_argument("--cache-dir", type=str, default="data/cache")
+    parser.add_argument(
+        "--real-hdf5-path",
+        type=str,
+        default=None,
+        help=(
+            "Explicit ann-benchmarks HDF5 to read SIFT's query set from. "
+            "Overrides selecting one out of --cache-dir by name match, which "
+            "is required (and raises) when the cache holds more than one "
+            "family's file -- e.g. deep-image, glove and sift side by side."
+        ),
+    )
     parser.add_argument("--variants-manifest", type=str, default=DEFAULT_MANIFEST)
     parser.add_argument("--root", type=str, default=".")
     parser.add_argument("--work-dir", type=str, default="runs/ann_benchmark")
@@ -99,6 +110,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             num_vectors=args.num_vectors,
             num_queries=args.num_queries,
             k=args.k,
+            hdf5_path=Path(args.real_hdf5_path) if args.real_hdf5_path else None,
         )
     ]
     for variant in found:

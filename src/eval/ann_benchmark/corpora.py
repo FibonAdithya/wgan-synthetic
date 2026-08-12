@@ -45,6 +45,11 @@ from src.train.train_wgan_gp import sample_generator
 
 EPS = 1.0e-8
 HDF5_QUERY_KEY = "test"
+# ann-benchmarks names its files "<dataset>-<dim>-<metric>.hdf5". A cache
+# holding more than one family (deep-image, glove, sift, ...) needs a
+# deliberate way to pick SIFT's out; matching this substring in the filename
+# is that way. See `_select_sift_hdf5`.
+SIFT_NAME_HINT = "sift"
 
 
 @dataclass(frozen=True)
@@ -97,12 +102,17 @@ def query_seed(base_seed: int, name: str) -> int:
     return variant_seed(base_seed, f"query:{name}")
 
 
-def read_hdf5_queries(cache_dir: Path, num_queries: int) -> np.ndarray:
-    """Read SIFT's own query set out of the cached ann-benchmarks HDF5.
+def _select_sift_hdf5(cache_dir: Path) -> Path:
+    """Pick the ann-benchmarks HDF5 that holds SIFT's own query set.
 
-    `src.data.fetch` reads only the `train` key and never writes the queries
-    to disk, so this reaches into the cache the fetcher already populated
-    rather than adding a download or changing the fetcher.
+    A cache populated for this project can hold more than one family's file
+    at once -- e.g. `deep-image-96-angular.hdf5`, `glove-100-angular.hdf5`
+    and `sift-128-euclidean.hdf5` side by side -- and every one of them
+    carries a `test` key, so that alone cannot tell them apart. Taking
+    whichever `*.hdf5` sorts first (`deep-image...` before `sift...`) picked
+    the wrong family silently: same key present, same-shaped array, wrong
+    corpus entirely. Matching the SIFT name is deliberate instead of
+    positional, and an ambiguous match raises rather than guessing.
     """
     cache_dir = Path(cache_dir)
     candidates = sorted(cache_dir.glob("*.hdf5"))
@@ -112,10 +122,43 @@ def read_hdf5_queries(cache_dir: Path, num_queries: int) -> np.ndarray:
             "`python -m src.data.fetch sift`; pass --cache-dir if it lives "
             "elsewhere on this box."
         )
-    with h5py.File(candidates[0], "r") as handle:
+    matches = [p for p in candidates if SIFT_NAME_HINT in p.name.lower()]
+    if not matches:
+        raise FileNotFoundError(
+            f"no SIFT .hdf5 in {cache_dir} (found "
+            f"{[p.name for p in candidates]}). Populate it with "
+            "`python -m src.data.fetch sift`, or pass an explicit "
+            "hdf5_path/--real-hdf5-path naming the file to use."
+        )
+    if len(matches) > 1:
+        raise ValueError(
+            f"ambiguous SIFT .hdf5 in {cache_dir}: "
+            f"{[p.name for p in matches]}. Pass an explicit "
+            "hdf5_path/--real-hdf5-path naming the one to use; an ambiguous "
+            "cache must not be resolved by sort order."
+        )
+    return matches[0]
+
+
+def read_hdf5_queries(
+    cache_dir: Path, num_queries: int, *, hdf5_path: Path | None = None
+) -> np.ndarray:
+    """Read SIFT's own query set out of the cached ann-benchmarks HDF5.
+
+    `src.data.fetch` reads only the `train` key and never writes the queries
+    to disk, so this reaches into the cache the fetcher already populated
+    rather than adding a download or changing the fetcher.
+
+    `hdf5_path`, when given, names the file directly and skips selection by
+    name entirely -- the caller's word is final. Otherwise the SIFT file is
+    picked out of `cache_dir` by `_select_sift_hdf5`, which raises rather
+    than guessing when the cache holds more than one plausible candidate.
+    """
+    path = Path(hdf5_path) if hdf5_path is not None else _select_sift_hdf5(cache_dir)
+    with h5py.File(path, "r") as handle:
         if HDF5_QUERY_KEY not in handle:
             raise KeyError(
-                f"{candidates[0]} has no {HDF5_QUERY_KEY!r} dataset; found "
+                f"{path} has no {HDF5_QUERY_KEY!r} dataset; found "
                 f"{sorted(handle.keys())}. The real query set is what the "
                 "'real' corpus is searched with."
             )
@@ -192,16 +235,41 @@ def materialize_real(
     num_vectors: int,
     num_queries: int,
     k: int,
+    hdf5_path: Path | None = None,
     adapter: IndexAdapter | None = None,
 ) -> Corpus:
-    """The real corpus, normalized, with SIFT's own query set."""
+    """The real corpus, normalized, with SIFT's own query set.
+
+    `hdf5_path` names the ann-benchmarks HDF5 to read queries from directly;
+    otherwise it is picked out of `cache_dir` by matching SIFT's name (see
+    `_select_sift_hdf5`). Either way, the queries' dimension is checked
+    against the corpus's here -- not left to `groundtruth.exact_neighbours`'s
+    shape check further down -- because by that point the caller has already
+    lost track of which file the queries came from, and the error would name
+    a mismatch without naming a cause.
+    """
     corpus_dir = Path(work_dir) / "real"
     if _is_complete(corpus_dir, num_vectors, num_queries, k):
         return _corpus_from_dir("real", corpus_dir)
 
     corpus_dir.mkdir(parents=True, exist_ok=True)
+    cache_dir = Path(cache_dir)
     vectors = normalize(load_descriptors(Path(real_path))[:num_vectors])
-    queries = normalize(read_hdf5_queries(Path(cache_dir), num_queries))
+    resolved_hdf5 = (
+        Path(hdf5_path) if hdf5_path is not None else _select_sift_hdf5(cache_dir)
+    )
+    raw_queries = read_hdf5_queries(cache_dir, num_queries, hdf5_path=resolved_hdf5)
+    if raw_queries.shape[1] != vectors.shape[1]:
+        raise ValueError(
+            f"{resolved_hdf5} holds {raw_queries.shape[1]}-d queries but the "
+            f"real corpus at {real_path} is {vectors.shape[1]}-d. This is "
+            "almost certainly the wrong ann-benchmarks HDF5 -- a cache "
+            "holding more than one family's file (deep-image, glove, sift, "
+            "...) can otherwise silently search the real corpus with another "
+            "dataset's queries. Pass an explicit hdf5_path/--real-hdf5-path "
+            "naming SIFT's file."
+        )
+    queries = normalize(raw_queries)
     np.save(corpus_dir / "vectors.npy", vectors)
     np.save(corpus_dir / "queries.npy", queries)
     _write_truth(corpus_dir, vectors, queries, k, adapter)

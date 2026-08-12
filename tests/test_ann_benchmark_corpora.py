@@ -12,6 +12,7 @@ import numpy as np
 import pytest
 
 from src.eval.ann_benchmark import corpora, indexes
+from src.eval.compare_variants import Variant
 
 
 def test_normalize_puts_every_row_on_the_unit_sphere():
@@ -147,3 +148,101 @@ def test_materialize_real_reuses_the_cache_on_a_second_call(tmp_path):
     real_path.unlink()
     second = corpora.materialize_real(**kwargs)
     assert second.vectors_path.stat().st_mtime_ns == stamp
+
+
+def test_materialize_real_rematerializes_when_the_cache_shape_does_not_match(
+    tmp_path,
+):
+    # Reproduces the exact hazard the brief warns about: a work dir populated
+    # by a small smoke run (e.g. --num-vectors 20000) must not be silently
+    # served back to a later call asking for a different size (the real run,
+    # --num-vectors 1000000). Existence-only caching would return the smoke
+    # corpus with no error and no warning, and every number downstream would
+    # be quietly wrong.
+    raw = np.array(
+        [[3.0, 4.0], [0.0, 5.0], [5.0, 0.0], [1.0, 1.0], [2.0, 2.0]],
+        dtype=np.float32,
+    )
+    real_path = tmp_path / "real.npy"
+    np.save(real_path, raw)
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    with h5py.File(cache / "sift-128-euclidean.hdf5", "w") as f:
+        f.create_dataset(
+            "test",
+            data=np.array([[1.0, 1.0], [2.0, 2.0], [3.0, 3.0]], dtype=np.float32),
+        )
+    work = tmp_path / "work"
+
+    small = corpora.materialize_real(
+        real_path=real_path,
+        cache_dir=cache,
+        work_dir=work,
+        num_vectors=3,
+        num_queries=1,
+        k=2,
+        adapter=indexes.NumpyFlatAdapter(),
+    )
+    assert small.num_vectors == 3
+    assert small.num_queries == 1
+
+    # A second call against the same work_dir but a different requested size
+    # must rematerialize, not serve the stale 3/1 cache back as if it were
+    # the 5/3 corpus.
+    big = corpora.materialize_real(
+        real_path=real_path,
+        cache_dir=cache,
+        work_dir=work,
+        num_vectors=5,
+        num_queries=3,
+        k=2,
+        adapter=indexes.NumpyFlatAdapter(),
+    )
+    assert big.num_vectors == 5
+    assert big.num_queries == 3
+    vectors = np.load(big.vectors_path)
+    assert vectors.shape == (5, 2)
+    queries = np.load(big.queries_path)
+    assert queries.shape == (3, 2)
+    assert np.load(big.truth_ids_path).shape == (3, 2)
+    assert np.load(big.truth_distances_path).shape == (3, 2)
+
+
+def test_materialize_variant_threads_corpus_and_query_seeds_correctly(
+    tmp_path, monkeypatch
+):
+    # This is the property the whole task exists to guarantee: the vectors
+    # draw must use corpus_seed and the queries draw must use query_seed. If
+    # those two arguments were ever swapped, every query would land inside
+    # its own index and recall would read 1.0 everywhere -- silently, with
+    # no error and a perfectly plausible-looking table. Monkeypatching _draw
+    # pins the wiring directly rather than inferring it from output shapes.
+    calls = []
+
+    def fake_draw(variant, root, count, batch_size, seed):
+        calls.append((count, seed))
+        rng = np.random.default_rng(seed)
+        return rng.normal(size=(count, 4)).astype(np.float32)
+
+    monkeypatch.setattr(corpora, "_draw", fake_draw)
+
+    variant = Variant(name="v2", config_path="configs/v2.yaml", run_dir="runs/v2")
+    work = tmp_path / "work"
+    corpus = corpora.materialize_variant(
+        variant,
+        root=tmp_path,
+        work_dir=work,
+        num_vectors=5,
+        num_queries=3,
+        k=2,
+        batch_size=8,
+        seed=42,
+        adapter=indexes.NumpyFlatAdapter(),
+    )
+
+    expected_corpus_seed = corpora.corpus_seed(42, "v2")
+    expected_query_seed = corpora.query_seed(42, "v2")
+    assert expected_corpus_seed != expected_query_seed
+    assert calls == [(5, expected_corpus_seed), (3, expected_query_seed)]
+    assert corpus.num_vectors == 5
+    assert corpus.num_queries == 3

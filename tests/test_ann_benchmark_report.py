@@ -15,7 +15,7 @@ def _builds():
             index="ivf_flat",
             train_seconds=12.0,
             add_seconds=0.0,
-            index_bytes=1024,
+            index_bytes_estimated=1024,
             params={"n_lists": 4096},
         ),
         BuildRecord(
@@ -23,7 +23,7 @@ def _builds():
             index="ivf_flat",
             train_seconds=9.0,
             add_seconds=0.0,
-            index_bytes=1024,
+            index_bytes_estimated=1024,
             params={"n_lists": 4096},
         ),
     ]
@@ -54,7 +54,8 @@ def _searches():
 def test_headline_interpolates_qps_at_the_target_recall():
     rows = report.headline_rows(_builds(), _searches(), target_recall=0.875)
     real = next(r for r in rows if r["corpus"] == "real")
-    assert real["qps_at_target"] == pytest.approx(200.0)
+    assert real["qps_at_target"].qps == pytest.approx(200.0)
+    assert real["qps_at_target"].interpolated is True
 
 
 def test_headline_reports_none_when_the_target_is_unreachable():
@@ -125,7 +126,7 @@ def _flat_build(corpus="real", failed=None):
         index="flat",
         train_seconds=0.0 if failed is None else None,
         add_seconds=1.0 if failed is None else None,
-        index_bytes=2048 if failed is None else None,
+        index_bytes_estimated=2048 if failed is None else None,
         params={},
         failed=failed,
     )
@@ -193,7 +194,7 @@ def test_headline_distinguishes_search_failure_from_unreachable_target():
             index="ivf_flat",
             train_seconds=1.0,
             add_seconds=0.0,
-            index_bytes=64,
+            index_bytes_estimated=64,
             params={"n_lists": 8},
         )
     ]
@@ -224,7 +225,7 @@ def test_markdown_shows_search_failed_not_not_reached(tmp_path):
             index="ivf_flat",
             train_seconds=1.0,
             add_seconds=0.0,
-            index_bytes=64,
+            index_bytes_estimated=64,
             params={"n_lists": 8},
         )
     ]
@@ -267,7 +268,7 @@ def test_write_json_carries_peak_vram_but_markdown_does_not_column_it(tmp_path):
             index="ivf_flat",
             train_seconds=1.0,
             add_seconds=0.0,
-            index_bytes=64,
+            index_bytes_estimated=64,
             params={"n_lists": 8},
             peak_vram_bytes=123456,
         )
@@ -299,7 +300,7 @@ def test_markdown_escapes_a_pipe_in_the_failure_message_so_columns_stay_aligned(
             index="ivf_flat",
             train_seconds=None,
             add_seconds=None,
-            index_bytes=None,
+            index_bytes_estimated=None,
             params={},
             failed=malicious,
         )
@@ -318,6 +319,102 @@ def test_markdown_escapes_a_pipe_in_the_failure_message_so_columns_stay_aligned(
     assert "bad" in row_line and "alloc" in row_line
 
 
+# --- Fix round 2: a curve that never touches the target recall must never
+# be reported as if it had. Mirrors the real CAGRA bug: every swept knob
+# already clears 0.90 recall, so the fastest (lowest-recall) point is a
+# floor, not a match, and must say so.
+
+
+def _floor_build():
+    return BuildRecord(
+        corpus="real",
+        index="cagra",
+        train_seconds=5.0,
+        add_seconds=0.0,
+        index_bytes_estimated=1024,
+        params={"graph_degree": 64},
+    )
+
+
+def _floor_searches():
+    def rec(param, recall, q):
+        return SearchRecord(
+            corpus="real",
+            index="cagra",
+            param_name="itopk_size",
+            param_value=param,
+            recall=recall,
+            qps_min=q * 0.9,
+            qps_median=q,
+            qps_p95=q * 1.1,
+            num_queries=10,
+        )
+
+    # Both knobs clear 0.90 recall already -- the real, measured CAGRA shape.
+    return [rec(32, 0.9374, 261_483.0), rec(64, 0.97, 150_000.0)]
+
+
+def test_headline_reports_a_floor_not_a_target_match_when_every_point_clears_recall():
+    rows = report.headline_rows([_floor_build()], _floor_searches(), target_recall=0.90)
+    point = rows[0]["qps_at_target"]
+    assert point.qps == pytest.approx(261_483.0)
+    assert point.recall == pytest.approx(0.9374)
+    assert point.interpolated is False
+
+
+def test_markdown_renders_the_floor_case_with_its_true_recall_not_bare(tmp_path):
+    path = tmp_path / "out.md"
+    rows = report.headline_rows([_floor_build()], _floor_searches(), target_recall=0.90)
+    report.write_markdown(path, rows, target_recall=0.90)
+    text = path.read_text()
+    assert report.FLOOR_LABEL in text
+    assert "0.937" in text
+
+
+def test_html_renders_the_floor_case_with_its_true_recall_not_bare(tmp_path):
+    path = tmp_path / "out.html"
+    report.write_html(path, [_floor_build()], _floor_searches(), target_recall=0.90)
+    text = path.read_text()
+    assert report.FLOOR_LABEL in text
+    assert "0.937" in text
+
+
+def test_html_escapes_corpus_and_index_names_the_same_way_as_a_failure_beside_them(
+    tmp_path,
+):
+    # `corpus`/`index` sit right next to a failure string in the same row;
+    # the failure string was already escaped, so leaving these two columns
+    # raw was an inconsistent trust boundary within one row.
+    path = tmp_path / "out.html"
+    builds = [
+        BuildRecord(
+            corpus="v<2>",
+            index="ivf_flat",
+            train_seconds=1.0,
+            add_seconds=0.0,
+            index_bytes_estimated=64,
+            params={"n_lists": 8},
+        )
+    ]
+    searches = [
+        SearchRecord(
+            corpus="v<2>",
+            index="ivf_flat",
+            param_name="n_probes",
+            param_value=1,
+            recall=0.95,
+            qps_min=90.0,
+            qps_median=100.0,
+            qps_p95=110.0,
+            num_queries=10,
+        )
+    ]
+    report.write_html(path, builds, searches, target_recall=0.90)
+    text = path.read_text()
+    assert "v<2>" not in text
+    assert "v&lt;2&gt;" in text
+
+
 def test_html_escapes_failure_messages_in_the_table_and_the_failed_cells_list(
     tmp_path,
 ):
@@ -330,7 +427,7 @@ def test_html_escapes_failure_messages_in_the_table_and_the_failed_cells_list(
             index="flat",
             train_seconds=None,
             add_seconds=None,
-            index_bytes=None,
+            index_bytes_estimated=None,
             params={},
             failed=build_failure,
         ),
@@ -339,7 +436,7 @@ def test_html_escapes_failure_messages_in_the_table_and_the_failed_cells_list(
             index="ivf_flat",
             train_seconds=1.0,
             add_seconds=0.0,
-            index_bytes=64,
+            index_bytes_estimated=64,
             params={"n_lists": 8},
         ),
     ]

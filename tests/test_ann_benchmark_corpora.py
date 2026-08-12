@@ -7,6 +7,8 @@ data/sift_1m.npy is raw SIFT with norms in the hundreds. Indexing both as
 they sit on disk would measure the scale gap rather than the corpora.
 """
 
+import json
+
 import h5py
 import numpy as np
 import pytest
@@ -329,3 +331,199 @@ def test_materialize_variant_threads_corpus_and_query_seeds_correctly(
     assert calls == [(5, expected_corpus_seed), (3, expected_query_seed)]
     assert corpus.num_vectors == 5
     assert corpus.num_queries == 3
+
+
+# --- manifest.json: a same-shape cache hit must still respect --seed,
+# --batch-size, --real-path and --real-hdf5-path. Shape-only validation
+# (above) already caught a different-size cache being served back; it did
+# not catch a same-size cache holding a *different draw*, which is what
+# these pin down.
+
+
+def test_materialize_variant_writes_a_manifest_recording_its_inputs(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(
+        corpora,
+        "_draw",
+        lambda variant, root, count, batch_size, seed: np.random.default_rng(seed)
+        .normal(size=(count, 4))
+        .astype(np.float32),
+    )
+    variant = Variant(name="v2", config_path="configs/v2.yaml", run_dir="runs/v2")
+    work = tmp_path / "work"
+    corpora.materialize_variant(
+        variant,
+        root=tmp_path,
+        work_dir=work,
+        num_vectors=5,
+        num_queries=3,
+        k=2,
+        batch_size=8,
+        seed=42,
+        adapter=indexes.NumpyFlatAdapter(),
+    )
+    manifest = json.loads((work / "v2" / "manifest.json").read_text())
+    assert manifest["seed"] == 42
+    assert manifest["batch_size"] == 8
+    assert manifest["num_vectors"] == 5
+    assert manifest["num_queries"] == 3
+    assert manifest["k"] == 2
+    assert manifest["dim"] == 4
+
+
+def test_materialize_variant_rematerializes_when_the_seed_changes(
+    tmp_path, monkeypatch
+):
+    # Same shape, different --seed: existence- or shape-only caching would
+    # silently serve the seed=42 draw back to a run that asked for seed=99.
+    monkeypatch.setattr(
+        corpora,
+        "_draw",
+        lambda variant, root, count, batch_size, seed: np.random.default_rng(seed)
+        .normal(size=(count, 4))
+        .astype(np.float32),
+    )
+    variant = Variant(name="v2", config_path="configs/v2.yaml", run_dir="runs/v2")
+    work = tmp_path / "work"
+    kwargs = dict(
+        root=tmp_path,
+        work_dir=work,
+        num_vectors=5,
+        num_queries=3,
+        k=2,
+        batch_size=8,
+        adapter=indexes.NumpyFlatAdapter(),
+    )
+    first = corpora.materialize_variant(variant, seed=42, **kwargs)
+    first_vectors = np.load(first.vectors_path).copy()
+
+    second = corpora.materialize_variant(variant, seed=99, **kwargs)
+    second_vectors = np.load(second.vectors_path)
+
+    assert first.num_vectors == second.num_vectors == 5
+    assert not np.array_equal(first_vectors, second_vectors)
+
+
+def test_materialize_variant_rematerializes_when_batch_size_changes(
+    tmp_path, monkeypatch
+):
+    calls = []
+
+    def fake_draw(variant, root, count, batch_size, seed):
+        calls.append(batch_size)
+        return np.random.default_rng(seed).normal(size=(count, 4)).astype(np.float32)
+
+    monkeypatch.setattr(corpora, "_draw", fake_draw)
+    variant = Variant(name="v2", config_path="configs/v2.yaml", run_dir="runs/v2")
+    work = tmp_path / "work"
+    kwargs = dict(
+        variant=variant,
+        root=tmp_path,
+        work_dir=work,
+        num_vectors=5,
+        num_queries=3,
+        k=2,
+        seed=42,
+        adapter=indexes.NumpyFlatAdapter(),
+    )
+    corpora.materialize_variant(batch_size=8, **kwargs)
+    corpora.materialize_variant(batch_size=99, **kwargs)
+
+    # Each materialize_variant call draws twice (vectors, then queries), so
+    # a real draw at each batch_size shows up as two calls; a cache hit on
+    # the second materialize_variant call would leave only the first pair.
+    assert calls == [8, 8, 99, 99]
+
+
+def test_materialize_real_writes_a_manifest_recording_its_inputs(tmp_path):
+    raw = np.array([[3.0, 4.0], [0.0, 5.0], [5.0, 0.0]], dtype=np.float32)
+    real_path = tmp_path / "real.npy"
+    np.save(real_path, raw)
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    with h5py.File(cache / "sift-128-euclidean.hdf5", "w") as f:
+        f.create_dataset("test", data=np.array([[1.0, 1.0]], dtype=np.float32))
+    work = tmp_path / "work"
+
+    corpora.materialize_real(
+        real_path=real_path,
+        cache_dir=cache,
+        work_dir=work,
+        num_vectors=3,
+        num_queries=1,
+        k=2,
+        adapter=indexes.NumpyFlatAdapter(),
+    )
+    manifest = json.loads((work / "real" / "manifest.json").read_text())
+    assert manifest["num_vectors"] == 3
+    assert manifest["num_queries"] == 1
+    assert manifest["k"] == 2
+    assert manifest["dim"] == 2
+    assert str(real_path) in manifest["source"]
+
+
+def test_materialize_real_rematerializes_when_the_real_path_changes(tmp_path):
+    # Same requested shape, a different source file: a shape-only cache
+    # check cannot tell these apart, but the data is different every time.
+    raw_a = np.array([[3.0, 4.0], [0.0, 5.0], [5.0, 0.0]], dtype=np.float32)
+    raw_b = np.array([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]], dtype=np.float32)
+    path_a = tmp_path / "a.npy"
+    path_b = tmp_path / "b.npy"
+    np.save(path_a, raw_a)
+    np.save(path_b, raw_b)
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    with h5py.File(cache / "sift-128-euclidean.hdf5", "w") as f:
+        f.create_dataset("test", data=np.array([[1.0, 1.0]], dtype=np.float32))
+    work = tmp_path / "work"
+    kwargs = dict(
+        cache_dir=cache,
+        work_dir=work,
+        num_vectors=3,
+        num_queries=1,
+        k=2,
+        adapter=indexes.NumpyFlatAdapter(),
+    )
+
+    first = corpora.materialize_real(real_path=path_a, **kwargs)
+    first_vectors = np.load(first.vectors_path).copy()
+
+    second = corpora.materialize_real(real_path=path_b, **kwargs)
+    second_vectors = np.load(second.vectors_path)
+
+    assert not np.array_equal(first_vectors, second_vectors)
+
+
+def test_materialize_real_rematerializes_when_the_hdf5_path_changes(tmp_path):
+    # Same real_path, same requested shape, a different --real-hdf5-path:
+    # the query set changes even though the corpus vectors would not.
+    raw = np.array([[3.0, 4.0], [0.0, 5.0], [5.0, 0.0]], dtype=np.float32)
+    real_path = tmp_path / "real.npy"
+    np.save(real_path, raw)
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    hdf5_a = cache / "sift-a-128-euclidean.hdf5"
+    hdf5_b = cache / "sift-b-128-euclidean.hdf5"
+    with h5py.File(hdf5_a, "w") as f:
+        f.create_dataset("test", data=np.array([[1.0, 0.0]], dtype=np.float32))
+    with h5py.File(hdf5_b, "w") as f:
+        f.create_dataset("test", data=np.array([[0.0, 1.0]], dtype=np.float32))
+    work = tmp_path / "work"
+    kwargs = dict(
+        real_path=real_path,
+        cache_dir=cache,
+        work_dir=work,
+        num_vectors=3,
+        num_queries=1,
+        k=2,
+        adapter=indexes.NumpyFlatAdapter(),
+    )
+
+    first = corpora.materialize_real(hdf5_path=hdf5_a, **kwargs)
+    first_queries = np.load(first.queries_path).copy()
+
+    second = corpora.materialize_real(hdf5_path=hdf5_b, **kwargs)
+    second_queries = np.load(second.queries_path)
+
+    assert not np.array_equal(first_queries, second_queries)

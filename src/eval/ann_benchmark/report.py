@@ -28,7 +28,7 @@ from __future__ import annotations
 import html as html_module
 import json
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import asdict
 from pathlib import Path
 
@@ -43,6 +43,7 @@ NOT_REACHED = "not reached"
 SEARCH_FAILED = "search failed"
 BUILD_FAILED = "build failed"
 EXACT_CEILING = "exact ceiling"
+FLOOR_LABEL = "floor"
 
 REPORT_CSS = """
 body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; margin: 0 auto;
@@ -119,7 +120,7 @@ def headline_rows(
                 "train_seconds": build.train_seconds,
                 "add_seconds": build.add_seconds,
                 "build_seconds": build_seconds,
-                "index_bytes": build.index_bytes,
+                "index_bytes_estimated": build.index_bytes_estimated,
                 "peak_vram_bytes": build.peak_vram_bytes,
                 "is_exact": is_exact,
                 "qps_at_target": qps_at_target,
@@ -171,23 +172,67 @@ def _escape_markdown_cell(text: str) -> str:
     return text.replace("|", "\\|").replace("\r\n", " ").replace("\n", " ")
 
 
-def _qps_cell(row: dict[str, object], *, escape) -> str:
+def _qps_cell(row: dict[str, object], *, escape: Callable[[str], str]) -> str:
+    """Render the QPS-at-target cell -- and make a floor visually distinct.
+
+    A `RecallPoint` with `interpolated=False` was never evaluated at
+    `target_recall`; it is the fastest point on a curve that already cleared
+    the target everywhere it was measured. Printing its `qps` bare, under a
+    column header naming the target, is exactly the CAGRA mislabeling bug
+    this function exists to prevent -- so the floor case always carries its
+    true recall alongside the number.
+    """
     if row["failed"] is not None:
         return f"{BUILD_FAILED}: {escape(str(row['failed']))}"
     if row["search_failed"]:
         return SEARCH_FAILED
     if row["is_exact"]:
         return f"{_fmt(row['exact_qps'])} ({EXACT_CEILING})"
-    if row["qps_at_target"] is None:
+    point = row["qps_at_target"]
+    if point is None:
         peak = _fmt(row["peak_recall"], 3)
         return f"{NOT_REACHED} (peak recall {peak})"
-    return _fmt(row["qps_at_target"])
+    if not point.interpolated:
+        return f"{_fmt(point.qps)} ({FLOOR_LABEL} @ recall {_fmt(point.recall, 3)})"
+    return _fmt(point.qps)
 
 
 def _recall_cell(row: dict[str, object]) -> str:
     if row["failed"] is not None or row["search_failed"]:
         return "—"
     return _fmt(row["peak_recall"], 3)
+
+
+def _sorted_rows(rows: Sequence[dict[str, object]]) -> list[dict[str, object]]:
+    """Row order shared by both writers: grouped by index, then corpus."""
+    return sorted(rows, key=lambda r: (str(r["index"]), str(r["corpus"])))
+
+
+def _row_cells(
+    row: dict[str, object], *, escape: Callable[[str], str]
+) -> dict[str, str]:
+    """Render one row's cells -- shared by the markdown and HTML writers.
+
+    A column change (formatting, a new field) is made once here rather than
+    twice. `escape` is applied to every string-valued cell, `corpus` and
+    `index` included: a failure message beside them was already escaped, and
+    leaving the two name columns unescaped while their neighbour was escaped
+    is an inconsistent trust boundary within the same row.
+    """
+    megabytes = (
+        None
+        if row["index_bytes_estimated"] is None
+        else float(row["index_bytes_estimated"]) / 1e6
+    )
+    return {
+        "corpus": escape(str(row["corpus"])),
+        "index": escape(str(row["index"])),
+        "train_seconds": _fmt(row["train_seconds"], 2),
+        "add_seconds": _fmt(row["add_seconds"], 2),
+        "index_mb": _fmt(megabytes),
+        "qps": _qps_cell(row, escape=escape),
+        "recall": _recall_cell(row),
+    }
 
 
 def write_markdown(
@@ -209,22 +254,22 @@ def write_markdown(
         "not comparable with published SIFT1M results. Build time is train and",
         "add phases, timed separately. The flat/exact index has no swept knob;",
         "its row reports the single measured QPS as the exact-search ceiling,",
-        "not an interpolated value at the target recall.",
+        "not an interpolated value at the target recall. A QPS figure marked",
+        "'floor' was not evaluated at the target: every measured point on",
+        "that curve already cleared it, so the fastest (lowest-recall) point",
+        "is reported at the recall it was actually measured at, not at the",
+        "target -- see `metrics.RecallPoint`.",
         "",
-        "| Corpus | Index | Train (s) | Add (s) | Index (MB) | "
+        "| Corpus | Index | Train (s) | Add (s) | Index (MB, est.) | "
         f"QPS @ recall {target_recall:.2f} | Peak recall |",
         "|---|---|---|---|---|---|---|",
     ]
-    for row in sorted(rows, key=lambda r: (str(r["index"]), str(r["corpus"]))):
-        megabytes = (
-            None if row["index_bytes"] is None else float(row["index_bytes"]) / 1e6
-        )
+    for row in _sorted_rows(rows):
+        cells = _row_cells(row, escape=_escape_markdown_cell)
         lines.append(
-            f"| {row['corpus']} | {row['index']} | "
-            f"{_fmt(row['train_seconds'], 2)} | {_fmt(row['add_seconds'], 2)} | "
-            f"{_fmt(megabytes)} | "
-            f"{_qps_cell(row, escape=_escape_markdown_cell)} | "
-            f"{_recall_cell(row)} |"
+            f"| {cells['corpus']} | {cells['index']} | "
+            f"{cells['train_seconds']} | {cells['add_seconds']} | "
+            f"{cells['index_mb']} | {cells['qps']} | {cells['recall']} |"
         )
     lines.append("")
     path = Path(path)
@@ -295,14 +340,16 @@ def write_html(
     rows = headline_rows(builds, searches, target_recall=target_recall)
     table_rows = "".join(
         "<tr>"
-        f"<th>{row['corpus']}</th><td>{row['index']}</td>"
-        f"<td>{_fmt(row['train_seconds'], 2)}</td>"
-        f"<td>{_fmt(row['add_seconds'], 2)}</td>"
-        f"<td>{_fmt(None if row['index_bytes'] is None else float(row['index_bytes']) / 1e6)}</td>"
-        f"<td>{_qps_cell(row, escape=html_module.escape)}</td>"
-        f"<td>{_recall_cell(row)}</td>"
+        f"<th>{cells['corpus']}</th><td>{cells['index']}</td>"
+        f"<td>{cells['train_seconds']}</td>"
+        f"<td>{cells['add_seconds']}</td>"
+        f"<td>{cells['index_mb']}</td>"
+        f"<td>{cells['qps']}</td>"
+        f"<td>{cells['recall']}</td>"
         "</tr>"
-        for row in sorted(rows, key=lambda r: (str(r["index"]), str(r["corpus"])))
+        for cells in (
+            _row_cells(row, escape=html_module.escape) for row in _sorted_rows(rows)
+        )
     )
     failed_lines = [
         f"{b.corpus}/{b.index}: {BUILD_FAILED} -- {html_module.escape(b.failed)}"
@@ -324,6 +371,12 @@ def write_html(
         "card-wide delta measured around each build, not a per-index "
         "allocation.</div>"
     )
+    floor_note = (
+        '<div class="note">A QPS figure marked "floor" was not evaluated at '
+        "the target recall: every measured point on that curve already "
+        "cleared it, so the fastest (lowest-recall) point is reported at "
+        "the recall it was actually measured at.</div>"
+    )
 
     html = (
         "<!doctype html><html><head><meta charset='utf-8'>"
@@ -334,10 +387,11 @@ def write_html(
         "<h1>GPU ANN benchmark</h1>"
         f'<div class="meta">target recall@10 = {target_recall:.2f}</div>'
         f"{vram_note}"
+        f"{floor_note}"
         + figure.to_html(full_html=False, include_plotlyjs=False)
         + "<h2>Headline table</h2>"
         "<table><thead><tr><th>Corpus</th><th>Index</th><th>Train (s)</th>"
-        "<th>Add (s)</th><th>Index (MB)</th>"
+        "<th>Add (s)</th><th>Index (MB, est.)</th>"
         f"<th>QPS @ recall {target_recall:.2f}</th><th>Peak recall</th>"
         f"</tr></thead><tbody>{table_rows}</tbody></table>"
         f"{failed_html}"

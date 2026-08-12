@@ -41,7 +41,7 @@ class BuildRecord:
     index: str
     train_seconds: float | None
     add_seconds: float | None
-    index_bytes: int | None
+    index_bytes_estimated: int | None
     params: dict[str, object]
     peak_vram_bytes: int | None = None
     failed: str | None = None
@@ -101,20 +101,27 @@ def _time_search(
     on-device) work has actually finished before the first timed clock
     starts. Skipping that second fence would let the warmup's tail overlap
     the first timed call and corrupt exactly the number this exists to fix.
+
+    Returns the *ids* from the last timed repeat, not the distances the
+    adapter reported alongside them: recall is scored from distances
+    recomputed against the stored vectors (see `metrics.
+    recompute_exact_distances`), never from what the index itself claims a
+    distance is -- that recomputation happens in the caller, after this
+    function returns, so it never falls inside a timed region.
     """
     adapter.sync()
     adapter.search(built, queries, k, param)  # warmup: discarded, untimed
     adapter.sync()
 
     seconds: list[float] = []
-    distances = None
+    ids = None
     for _ in range(repeats):
         adapter.sync()
         started = time.perf_counter()
-        distances, _ = adapter.search(built, queries, k, param)
+        _, ids = adapter.search(built, queries, k, param)
         adapter.sync()
         seconds.append(time.perf_counter() - started)
-    return distances, seconds
+    return ids, seconds
 
 
 def run_grid(
@@ -145,7 +152,7 @@ def run_grid(
                         index=adapter.name,
                         train_seconds=None,
                         add_seconds=None,
-                        index_bytes=None,
+                        index_bytes_estimated=None,
                         params=adapter.describe(),
                         failed=f"{type(exc).__name__}: {exc}",
                     )
@@ -159,7 +166,7 @@ def run_grid(
                     index=adapter.name,
                     train_seconds=built.train_seconds,
                     add_seconds=built.add_seconds,
-                    index_bytes=built.index_bytes,
+                    index_bytes_estimated=built.index_bytes_estimated,
                     params=adapter.describe(),
                     peak_vram_bytes=built.peak_vram_bytes,
                 )
@@ -168,10 +175,18 @@ def run_grid(
 
             for param in adapter.sweep_params():
                 try:
-                    distances, seconds = _time_search(
+                    ids, seconds = _time_search(
                         adapter, built, queries, k, param, repeats
                     )
-                    recall = metrics.recall_at_k(distances, truth)
+                    # Scoring, not search: recomputed from the stored
+                    # vectors and the returned ids, outside every timed
+                    # region, so an adapter's own reported distances (e.g.
+                    # IVF-PQ's asymmetric, quantized ones) never enter the
+                    # recall figure.
+                    exact_distances = metrics.recompute_exact_distances(
+                        vectors, queries, ids
+                    )
+                    recall = metrics.recall_at_k(exact_distances, truth)
                     throughput = [metrics.qps(queries.shape[0], s) for s in seconds]
                     summary = metrics.summarize(throughput)
                     searches.append(

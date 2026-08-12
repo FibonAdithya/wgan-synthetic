@@ -197,6 +197,38 @@ whole lifetime.** This is not in the plan, and it is not reproducible on a
 CPU-only box, so no test in `make check` can catch it; the guard is a test
 pinning that the reference is retained.
 
+## cuVS and numpy break ties differently — and that is fine, by design
+
+With a corpus containing exact duplicates (50 unit vectors, each repeated three
+times, k=6):
+
+    cuvs  ids q0:  [ 2  0  1 59 57 58]
+    numpy ids q0:  [ 0  1  2 57 58 59]
+    distances equal: True
+    ids identical:   False
+
+The two paths return the *same* neighbours at the *same* distances in a
+different order within each tie group. numpy's `argsort(kind="stable")` breaks
+ties by ascending index; cuVS makes no such guarantee.
+
+This does not affect any number in the benchmark, because `recall_at_k`
+compares **distances** against the true k-th distance and never touches
+neighbour ids:
+
+    threshold = truth[:, -1:] * (1.0 + eps)
+    return float(np.mean(found <= threshold))
+
+That is a load-bearing property rather than an incidental one. Real SIFT
+contains duplicate vectors, so tie groups are not hypothetical, and the GPU
+path is the one that runs in production. **Rewriting `recall_at_k` to match
+neighbour ids instead of distances would silently depress recall on every
+corpus with duplicates**, in a way no CPU-only test would reproduce.
+
+For the same reason, `tests` comparing the GPU and numpy ground-truth paths
+must compare distances, or use continuously-distributed fixtures where exact
+ties cannot arise. An id-equality assertion over duplicate-bearing data would
+fail on the box while nothing is actually wrong.
+
 ## Warmup is required, and the plan omits it
 
 Timing the same CAGRA search six times over 1M vectors, each region fenced with

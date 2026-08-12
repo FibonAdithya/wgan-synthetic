@@ -47,13 +47,26 @@ INSTALL_HINT = (
 
 @dataclass(frozen=True)
 class BuiltIndex:
-    """One built index plus what building it cost."""
+    """One built index plus what building it cost.
+
+    `dataset` holds the device array the index was built from, for cuVS
+    adapters. cuVS does not copy or take ownership of the dataset passed to
+    `build()` -- the index stores a pointer into that buffer. If nothing
+    outside the index keeps a Python reference to it, cupy's refcounting GC
+    frees the block as soon as `build()` returns, the allocator hands that
+    memory to the next allocation, and every later `search()` reads whatever
+    now lives there: no exception, just silently wrong, plausible-looking
+    results. Keeping `dataset` here for the `BuiltIndex`'s whole lifetime is
+    what prevents that. `None` for `NumpyFlatAdapter`, which owns its data on
+    the host and has no such lifetime hazard.
+    """
 
     handle: object
     train_seconds: float
     add_seconds: float
     index_bytes: int
     peak_vram_bytes: int | None = None
+    dataset: object | None = None
 
 
 def require_device_stack() -> None:
@@ -187,6 +200,8 @@ class FlatAdapter(_CuvsAdapter):
             add_seconds=elapsed,
             index_bytes=int(vectors.nbytes),
             peak_vram_bytes=max(self._device_used_bytes() - before, 0),
+            # See BuiltIndex.dataset: the handle points into this buffer.
+            dataset=device_vectors,
         )
 
     def search(self, built, queries, k, param):
@@ -229,6 +244,8 @@ class IvfFlatAdapter(_CuvsAdapter):
             add_seconds=0.0,
             index_bytes=int(vectors.nbytes),
             peak_vram_bytes=max(self._device_used_bytes() - before, 0),
+            # See BuiltIndex.dataset: the handle points into this buffer.
+            dataset=device_vectors,
         )
 
     def search(self, built, queries, k, param):
@@ -283,6 +300,8 @@ class IvfPqAdapter(_CuvsAdapter):
             add_seconds=0.0,
             index_bytes=int(codes),
             peak_vram_bytes=max(self._device_used_bytes() - before, 0),
+            # See BuiltIndex.dataset: the handle points into this buffer.
+            dataset=device_vectors,
         )
 
     def search(self, built, queries, k, param):
@@ -335,6 +354,8 @@ class CagraAdapter(_CuvsAdapter):
             add_seconds=0.0,
             index_bytes=int(vectors.nbytes + graph),
             peak_vram_bytes=max(self._device_used_bytes() - before, 0),
+            # See BuiltIndex.dataset: the handle points into this buffer.
+            dataset=device_vectors,
         )
 
     def search(self, built, queries, k, param):

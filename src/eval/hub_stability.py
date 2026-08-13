@@ -79,6 +79,18 @@ STATISTICS = (
 STABLE_MAX_RANGE_PCT = 10.0
 MIN_SEPARATION_IN_RANGES = 1.0
 
+# Floating-point representation tolerance for inclusive boundary checks.
+# Not part of the pre-registered rule, but necessary to enforce that the
+# rule's inclusive bounds are truly inclusive when computed from fixtures.
+# Concretely: _spread(1.0, 0.95, 1.05)["range_pct_of_mean"] evaluates to
+# 10.000000000000009 (IEEE 754: 1.05 - 0.95 is not exactly 0.1), so a
+# literal "<=" would reject the very boundary the rule calls inclusive.
+# Applied to both stability and discrimination comparisons for symmetry,
+# though only the stability side has a demonstrated need. At 1e-9 against
+# bounds of 10.0 and 1.0, this cannot move any verdict at the scale of
+# the spreads measured in this study (0.32% to 108%).
+BOUNDARY_EPSILON = 1e-9
+
 
 def evaluate_rule(
     real_spread: dict,
@@ -92,7 +104,9 @@ def evaluate_rule(
     STABLE_MAX_RANGE_PCT of the real-side mean. Discriminating: the synthetic
     mean sits at least MIN_SEPARATION_IN_RANGES real-side ranges away, so a
     band drawn around real would reject that generator. Both bounds are
-    inclusive.
+    inclusive, enforced via BOUNDARY_EPSILON to handle IEEE 754 rounding
+    in the stability comparison (where _spread(1.0, 0.95, 1.05) evaluates
+    to 10.000000000000009, so a literal "<=" would reject the true boundary).
 
     Overlapping draws downgrade a pass to "provisional" rather than granting
     it. Their spread is a lower bound on the true subsample spread, so a cell
@@ -106,8 +120,7 @@ def evaluate_rule(
     gate.
     """
     range_pct = float(real_spread["range_pct_of_mean"])
-    # Add small tolerance for floating point precision
-    stable = range_pct <= STABLE_MAX_RANGE_PCT + 1e-9
+    stable = range_pct <= STABLE_MAX_RANGE_PCT + BOUNDARY_EPSILON
 
     if synthetic_mean is None:
         return {
@@ -128,8 +141,7 @@ def evaluate_rule(
         discriminating = False
     else:
         separation = abs(float(real_spread["mean"]) - synthetic_mean) / real_range
-        # Add small tolerance for floating point precision
-        discriminating = separation >= MIN_SEPARATION_IN_RANGES - 1e-9
+        discriminating = separation >= MIN_SEPARATION_IN_RANGES
 
     if not (stable and discriminating):
         verdict = "rejected"

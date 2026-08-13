@@ -22,7 +22,7 @@ The spec names three possible phase-2 shapes and which one runs is decided by th
 - **Do not add the candidate statistics to `ann_difficulty.summary()`.** That changes `summary.json` for every family; it belongs to phase 2, for the winner only.
 - **Every band in `gates/glove.yaml` stays null.** This plan does not touch that file.
 - **No model is trained.** The only GPU work is sampling from existing checkpoints and neighbour search.
-- **`make check` (ruff lint + ruff format-check + pytest) must pass before every commit.**
+- **Each task's final test step is its gate.** `make check` (ruff lint + ruff format-check + pytest) runs in full at Task 7 and Task 11, and must be green before the PR.
 - **Python interpreter:** worktrees have no `.venv`. Use `/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/python`.
 - **`gpuq` is at `/venv/main/bin/gpuq` on the box and is not on the ssh PATH.** Always pin `--commit "$(git rev-parse HEAD)"`. Neighbour-search and sampling jobs go in `--lane gpu`; never declare `runs/` as an `--artifact`.
 
@@ -232,13 +232,7 @@ Expected: FAIL with `TypeError: knn() got an unexpected keyword argument 'backen
 
 - [ ] **Step 3: Implement the backend**
 
-In `src/eval/ann_difficulty.py`, add the module-level import beside the existing ones:
-
-```python
-import torch
-```
-
-Add above `knn`:
+Add above `knn` in `src/eval/ann_difficulty.py`. Note the import is function-local, not module-level: this module currently costs numpy + sklearn to import, and the sklearn path — still the default, and what every committed figure used — should not start paying torch's import time because a second backend exists.
 
 ```python
 def _knn_torch(
@@ -252,7 +246,13 @@ def _knn_torch(
 
     Returns the raw (n, want) arrays including each row's own index; the
     caller drops it via `_exclude_self`.
+
+    torch is imported here rather than at module scope so the default
+    sklearn path -- what every figure under docs/datasets/ was measured
+    with -- does not pay torch's import cost to have this backend exist.
     """
+    import torch
+
     device = "cuda" if torch.cuda.is_available() else "cpu"
     corpus = torch.from_numpy(np.ascontiguousarray(x, dtype=np.float32)).to(device)
     n = corpus.shape[0]

@@ -140,7 +140,23 @@ def run_grid(
     for corpus in corpora_list:
         vectors = np.load(corpus.vectors_path)
         queries = np.load(corpus.queries_path)
-        truth = np.load(corpus.truth_distances_path)
+        # Recomputed from `truth_ids`, not loaded from `truth_distances.npy`.
+        # cuVS brute_force computes ground-truth distances via the
+        # ||x||^2 + ||q||^2 - 2 q.x expansion; `recompute_exact_distances`
+        # (used below for every adapter's found distances too) computes
+        # ((q - x)**2).sum(-1) in plain numpy. Both are exact squared L2
+        # mathematically, but they round differently in float32 -- measured
+        # on the box, a max relative difference of 4.6e-5 against
+        # `recall_at_k`'s 1e-6 tie tolerance, which alone was enough to
+        # score the `flat` exact index at ~0.97 recall instead of 1.0.
+        # Recomputing the truth side with the identical function used for
+        # the found side makes the two arithmetically identical, which is
+        # what an exact index scoring exactly 1.0 against exact ground
+        # truth depends on. `truth_distances.npy` is still written and
+        # cached (see `corpora._write_truth`) as the exact-kNN record; only
+        # scoring uses this recomputation instead.
+        truth_ids = np.load(corpus.truth_ids_path)
+        truth = metrics.recompute_exact_distances(vectors, queries, truth_ids)
 
         for adapter in adapters:
             try:

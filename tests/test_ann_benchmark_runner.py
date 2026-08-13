@@ -222,6 +222,62 @@ def test_warmup_precedes_every_cells_timed_repeats(tiny_corpus, tmp_path):
     assert adapter.search_calls == 5
 
 
+def test_exact_adapter_still_scores_one_when_stored_truth_distances_differ(
+    tmp_path,
+):
+    # CRITICAL regression test (291f8c4 fixed one bug and introduced this
+    # one): cuVS brute_force and `metrics.recompute_exact_distances` are both
+    # exact squared L2 but round differently in float32 -- measured on the
+    # box, up to a 4.6e-5 relative difference, an order of magnitude bigger
+    # than `recall_at_k`'s 1e-6 tie tolerance. Concretely, this makes a
+    # numpy-recomputed *found* distance for the true kth neighbour come out
+    # slightly *larger* than cuVS's *truth* distance for that same neighbour,
+    # so `found <= truth_kth * (1+eps)` fails for a genuinely exact match.
+    # `truth_distances.npy` here is deliberately perturbed *down* by
+    # `1 - 3e-5` -- comfortably inside that observed discrepancy and outside
+    # `eps` -- to stand in for that different-arithmetic source (`truth_ids`
+    # is left correct). `run_grid` must not use the perturbed array for
+    # scoring: it recomputes the truth side from `truth_ids` with the same
+    # function used for the found side, so an exact adapter against exact
+    # ids must still score exactly 1.0 no matter what the stored (and
+    # still-cached) distances say. Confirmed this fails pre-fix (recall
+    # ~0.75, not 1.0) and passes post-fix.
+    vectors = np.eye(4, dtype=np.float32)
+    queries = np.eye(4, dtype=np.float32)[:2]
+    corpus_dir = tmp_path / "perturbed"
+    corpus_dir.mkdir()
+    np.save(corpus_dir / "vectors.npy", vectors)
+    np.save(corpus_dir / "queries.npy", queries)
+
+    adapter = indexes.NumpyFlatAdapter()
+    built = adapter.build(vectors)
+    dist, ids = adapter.search(built, queries, k=2, param=None)
+    perturbed_dist = (dist.astype(np.float64) * (1 - 3e-5)).astype(np.float32)
+    np.save(corpus_dir / "truth_distances.npy", perturbed_dist)
+    np.save(corpus_dir / "truth_ids.npy", ids)
+
+    corpus = corpora.Corpus(
+        name="perturbed",
+        vectors_path=corpus_dir / "vectors.npy",
+        queries_path=corpus_dir / "queries.npy",
+        truth_distances_path=corpus_dir / "truth_distances.npy",
+        truth_ids_path=corpus_dir / "truth_ids.npy",
+        num_vectors=4,
+        num_queries=2,
+        dim=4,
+    )
+
+    _, searches = runner.run_grid(
+        [corpus],
+        [indexes.NumpyFlatAdapter()],
+        k=2,
+        repeats=1,
+        records_path=tmp_path / "records.json",
+    )
+    assert searches[0].failed is None
+    assert searches[0].recall == pytest.approx(1.0)
+
+
 def test_recall_is_scored_from_recomputed_exact_distances_not_the_adapters_own(
     tiny_corpus, tmp_path
 ):

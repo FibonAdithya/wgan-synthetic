@@ -27,6 +27,7 @@ def build_context(cfg: EdaConfig) -> panels.Context:
             nlist=cfg.ivf_nlist,
             max_rows=cfg.ann_max_rows,
             seed=cfg.seed,
+            metric=cfg.metric,
         )
         for s in sets
     }
@@ -92,7 +93,10 @@ def run(args: argparse.Namespace) -> Path:
     )
 
     report_html = html.build_report(
-        sections, meta_html, html.plotlyjs_head(cfg.plotlyjs, out_dir)
+        sections,
+        meta_html,
+        html.plotlyjs_head(cfg.plotlyjs, out_dir),
+        heading=f"Descriptor EDA: {Path(cfg.real_path).stem}",
     )
     report_path = out_dir / "eda_report.html"
     report_path.write_text(report_html, encoding="utf-8")
@@ -115,6 +119,7 @@ def run(args: argparse.Namespace) -> Path:
             "k_hub": cfg.ann_hub_k,
             "max_rows": cfg.ann_max_rows,
             "nlist": cfg.ivf_nlist,
+            "metric": cfg.metric,
         },
         "knn_settings": {"k": cfg.knn, "max_rows": cfg.knn_max_rows},
         "stats": stats,

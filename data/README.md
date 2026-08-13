@@ -14,19 +14,30 @@ the pipeline assumes a particular width.
 
     python -m src.data.fetch <dataset>
 
-downloads the family's ann-benchmarks HDF5 into a shared cache once and cuts
-two reproducible subsets from it, landing at `data/<dataset>_<rows>.npy` —
+downloads the family's corpus into a shared cache once and cuts reproducible
+subsets from it, landing at `data/<dataset>_<rows>.npy` —
 `data/deep_250k.npy`, `data/sift_1m.npy`, and so on. These files are not
 tracked in git; treat `data/` as a local cache and refetch rather than
-copying subsets between machines. The HDF5 download is atomic and
-single-flight, so several agents on one box can run the command concurrently
-without racing.
+copying subsets between machines. The download is atomic and single-flight,
+so several agents on one box can run the command concurrently without
+racing.
 
-`--cache-dir` (default `data/cache`) is where the downloaded HDF5 itself
-lives — a single large, immutable file per family, separate from the `.npy`
-subsets cut from it. On a multi-user box it is worth pointing at a shared
-location (e.g. `--cache-dir /shared/ann-cache`) so the multi-gigabyte
-download happens once for everyone instead of once per user.
+Five families come from the ann-benchmarks HDF5 mirrors and default to two
+subsets each, 250k and 1M. `openai` is the exception in both respects:
+ann-benchmarks publishes no HDF5 for it — upstream generates that family
+from the HuggingFace dataset `KShivendu/dbpedia-entities-openai-1M` at
+benchmark time — so the fetcher reads that dataset's parquet shards
+directly, and it writes only `openai_250k.npy`, since `configs/openai/v0.yaml`
+names that file and the family's canonical N is far smaller. Both routes end
+in the same seeded random sample over the whole corpus, so a subset means
+the same thing whichever container it came from.
+
+`--cache-dir` (default `data/cache`) is where the downloaded corpus itself
+lives — one large immutable HDF5 per family, or for `openai` a directory of
+parquet shards — separate from the `.npy` subsets cut from it. On a
+multi-user box it is worth pointing at a shared location (e.g. `--cache-dir
+/shared/ann-cache`) so the multi-gigabyte download happens once for everyone
+instead of once per user.
 
 If a family's corpus holds fewer rows than requested (NYTimes is the one
 case among the six where this is plausible), the fetcher clamps to what

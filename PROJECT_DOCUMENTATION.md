@@ -60,26 +60,41 @@ bands; the pages are the source of truth for anything family-specific.
 ### Fetching
 
 `src/data/fetch.py` holds a single source registry with one entry per family,
-each naming an ann-benchmarks HDF5 mirror, the dimension and the search
-metric. Running
+naming where the corpus comes from, the dimension and the search metric.
+Running
 
 ```bash
 python -m src.data.fetch <dataset>
 ```
 
-downloads that family's HDF5 into a shared cache once and cuts two
-reproducible random subsets out of it, writing `data/<dataset>_250k.npy` and
-`data/<dataset>_1m.npy`. The download is atomic — the body goes to a sibling
-`.part` file and is `os.replace`d into position, so a concurrent reader sees
-either nothing or a complete file — and single-flight, since the `.part` file
-doubles as an exclusive lock and a second caller waits rather than starting
-its own multi-gigabyte fetch. An existing destination is left alone; these
-files are large and immutable. Subsets are drawn with a seeded RNG, so the
-same seed gives the same rows.
+downloads that family's corpus into a shared cache once and cuts reproducible
+random subsets out of it, writing `data/<dataset>_<rows>.npy`. The download is
+atomic — the body goes to a sibling `.part` file and is `os.replace`d into
+position, so a concurrent reader sees either nothing or a complete file — and
+single-flight, since the `.part` file doubles as an exclusive lock and a
+second caller waits rather than starting its own multi-gigabyte fetch. An
+existing destination is left alone; these files are large and immutable.
+Subsets are drawn with a seeded RNG, so the same seed gives the same rows.
 
-All six come from ann-benchmarks HDF5 so the module handles one container
-format. Descriptor sets obtained another way — corpus-texmex `.fvecs`, say —
-are read directly by the loader and do not come through here.
+Five families are `Source` entries naming an ann-benchmarks HDF5 mirror, and
+default to two subsets each: `data/<dataset>_250k.npy` and
+`data/<dataset>_1m.npy`.
+
+`openai` is a `ParquetSource` and the one exception on both counts.
+ann-benchmarks publishes no HDF5 for it — upstream generates
+`dbpedia-openai-*-angular` on demand from the HuggingFace dataset
+`KShivendu/dbpedia-entities-openai-1M` — so the registry names that dataset
+and the fetcher reads its parquet shards, listed from the HuggingFace API and
+downloaded through the same atomic single-flight helper. It writes only
+`data/openai_250k.npy`, the corpus `configs/openai/v0.yaml` names. Rows are
+sampled across every shard rather than read as a prefix: the shards are in
+dataset order and DBpedia entities are not shuffled, so a prefix would be a
+topically skewed corpus rather than a smaller one. Both kinds end in the same
+seeded draw, so a subset means the same thing whichever container it came
+from.
+
+Descriptor sets obtained another way — corpus-texmex `.fvecs`, say — are read
+directly by the loader and do not come through here.
 
 ---
 
@@ -166,9 +181,17 @@ searched under — a property of the family, which is why it sits beside
 It is not a preprocessing instruction. `l2_normalize` is set independently,
 and an `angular` corpus is not thereby normalized nor an `l2` one left alone;
 the two settings answer different questions. The value is validated at load
-time against the two accepted strings and is otherwise inert today: nothing
-consumes it yet. Reading it in `src/eval/ann_difficulty.py`, so difficulty is
-measured under the metric the corpus is actually searched with, is phase (c).
+time against the two accepted strings.
+`src/eval/compare_variants.py` reads it from a family's variant configs and
+threads it into `src/eval/ann_difficulty.py`, so difficulty is measured under
+the metric the corpus is actually searched with. `angular` is measured as L2
+between unit-norm rows, which orders neighbours exactly as cosine does;
+`compute` refuses rows that are neither unit-norm nor exactly zero rather
+than normalizing them, so a report's `preprocess` setting cannot disagree
+with the geometry it measured under. Exact zeros are accepted because
+`eda.series.maybe_l2_normalize` clamps its divisor rather than dividing by
+~0, so a zero row is an output of our own preprocessing rather than a caller
+mistake.
 
 ---
 
@@ -205,10 +228,9 @@ is exactly one config change from the one above it, so a difference visible
 in an EDA overlay attributes to a single cause. Because the ladders are
 independent, a variant number means nothing across families: SIFT's `v2` and
 a future GIST `v2` are unrelated, and only ever compare within one dataset.
-Each family's ladder and its status live in its page under `docs/datasets/`;
-SIFT
-is the only family with trained rungs today, and the other five have a `v0`
-baseline config only.
+Each family's ladder and its status live in its page under `docs/datasets/`.
+SIFT and DEEP have trained rungs above `v0`; GloVe has a trained `v0` and
+nothing above it; the other three have a `v0` baseline config only.
 
 The SIFT ladder:
 
@@ -235,6 +257,7 @@ variants of their own:
 | `configs/x100k_gated.yaml` | v2 at 100k steps with `logit_clamp: 10.0`, the value the design called for. Untrained — the v2 run that exists (`x100k_sparse_clamp4`) used 4.0, which is what `configs/sift/v2.yaml` reproduces. Kept so the clamp comparison can be run. |
 | `configs/x100k_structured.yaml` | v3 at 100k steps — the arm the experiment plan calls for. Sole delta from `configs/sift/v3.yaml` is run length and logging cadence. |
 | `configs/sift/v3_sift1m.yaml`, `configs/sift/v4_sift1m.yaml` | The paired v3/v4 arms measured in `docs/results/v4-logratio/`. Each differs from its rung by `real_path` and `output_dir` only. Instruments, not rungs: they carry a box-specific absolute corpus path, which a rung must not. |
+| `configs/sift/v4_sift1m_x100k.yaml` | v4 at 100k steps — the length-matched arm against `v2`, whose run is also 100k. Five keys from `v4_sift1m.yaml`, all run length and logging cadence, at the same cadence as `x100k_structured.yaml`. Exists because the ladder's gate regression starts at `v2` and `v3`/`v4` are 30k runs, so their comparison against `v2` confounds the model change with training length. |
 | `configs/wgan_gp_sift1m_smoke_improved.yaml` | 200-step smoke test on synthetic data (`synthetic_if_missing: true`), with EMA, the distance regularizer, `num_workers` and the collapse monitor all switched on, so the new training-loop paths get exercised without the dataset. Small model, unrelated hyperparameters to the variants above — not a variant and not for evaluation. Output lands in `runs/wgan_sift1m_smoke_improved`. |
 
 ### Why v2 exists
@@ -448,14 +471,15 @@ published figures, which are measured on the full corpus against the real
 query set. Without a locked pair, a gate result from last month cannot be
 read against today's.
 
-`ann_difficulty.py` currently computes everything under L2, including for the
-four `angular` families. Reading `data.metric` and measuring under the
-corpus's own distance is phase (c) of the multi-dataset design; until it
-lands, angular-family numbers are internally consistent within a report but
-are not the distance the corpus is searched with.
+`ann_difficulty.py` measures each family under its `data.metric`. The four
+`angular` families are measured as L2 between unit-norm rows, which is the
+distance their corpora are searched under; `l2` families are measured as
+given. Reports must therefore run angular families at `--preprocess l2`,
+which `compare_variants` does for every family.
 
-The knobs (`--ann-k`, `--ann-hub-k`, `--ann-max-rows`, `--ivf-nlist`) are
-documented under "Visualization tools" with the EDA report that exposes them.
+The knobs (`--ann-k`, `--ann-hub-k`, `--ann-max-rows`, `--ivf-nlist`,
+`--metric`) are documented under "Visualization tools" with the EDA report
+that exposes them.
 
 ## Checkpoint-based eval
 
@@ -548,6 +572,27 @@ Memory-safe note:
   - `src/eval/plot_embedding_clusters.py`
   - t-SNE (or UMAP if installed) for real and synthetic subsets.
 
+- Structural EDA for one family:
+  - `src/eval/openai_structure.py`
+  - Answers what the gate statistics cannot: not how hard a corpus is to
+    search, but what a generator for it should look like. Writes one
+    self-contained HTML file plus a `structure.json`.
+  - Measures the eigenvalue spectrum about the origin *and* about the mean
+    — the two are different questions, and the gap between them is how much
+    of a corpus's apparent spread is one shared direction, which is the
+    evidence for or against a `preprocess.center` rung. It does not use
+    scikit-learn's `PCA` for this, because `PCA` always centers and would
+    return the same numbers twice.
+  - Also reports intrinsic dimension (two-NN and LID), anisotropy (the mean
+    vector's norm and the cosine distribution around it), and the noise
+    floor: the spread of each gate statistic across disjoint draws of the
+    same real corpus. A band narrower than that spread would reject real
+    data, so it bounds how tight any band can be. It sets no bands.
+  - Named for openai because its questions are that family's — very high
+    ambient dimension, low intrinsic dimension, unit-norm rows — and it
+    deliberately lives outside `src/eval/eda/` rather than growing the
+    shared report to answer them.
+
 - Distributional EDA report:
   - `src/eval/eda_report.py`
   - One self-contained interactive HTML file (plotly bundled inline, opens
@@ -579,14 +624,24 @@ Memory-safe note:
     for LID and relative contrast, `--ann-hub-k` (default 10) the depth for
     the hubness k-occurrence count, `--ann-max-rows` (default 20000) the
     equal-N truncation every set is cut to so the metrics stay comparable
-    across series, and `--ivf-nlist` (default 256) the cluster count for the
-    IVF cell-balance panel. The pre-existing within-set k-NN distance panel
-    is not an ANN-difficulty panel and has its own `--knn-max-rows`
-    (default 20000, the same number), so tuning ANN cost does not silently
-    move it. These numbers are self-queried subsample
-    statistics, not published benchmark figures, and are only comparable
-    across the series in one report; each family's locked values are in its
-    page under `docs/datasets/`.
+    across series, `--ivf-nlist` (default 256) the cluster count for the
+    IVF cell-balance panel, and `--metric` (default `l2`) the distance the
+    corpus is searched under -- `l2` or `angular`, where `angular` requires
+    `--preprocess l2` since it is measured as L2 between unit-norm rows. The
+    pre-existing within-set k-NN distance panel is not an ANN-difficulty
+    panel and has its own `--knn-max-rows` (default 20000, the same
+    number), so tuning ANN cost does not silently move it. These numbers
+    are self-queried subsample statistics, not published benchmark figures,
+    and are only comparable across the series in one report; each family's
+    locked values are in its page under `docs/datasets/`.
+  - `--max-panel-dim` (default 256) drops the per-dimension marginals and
+    correlation panels above that width. Both are quadratic in the dimension
+    -- the marginals dropdown carries one visibility flag per (button, trace)
+    pair and the correlation heatmap is dim x dim -- so at openai's 1536 each
+    costs tens of megabytes of report to say less than it does at 128. The
+    default keeps both for sift (128), deep (96), glove (100) and nytimes
+    (256) and drops them for gist (960) and openai (1536); raise it to force
+    them back on. Omission is silent, the same way the glyph panel's is.
   - `--synthetic-path` is optional; without it the report is pure dataset EDA.
     With it, every panel overlays the two so mismatch is visible by eye.
   - `--preprocess l2` (default) matches the training contract, since generator

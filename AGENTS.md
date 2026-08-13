@@ -11,8 +11,9 @@ Train WGAN-GP models that reproduce the *nearest-neighbour search difficulty*
 of six benchmark vector families, so ANN algorithms can be stressed against
 synthetic corpora instead of the real ones. The target is not a matching
 distribution: a synthetic set succeeds when an index finds it as hard, and
-hard in the same way, as the real set. Only SIFT has trained models today;
-the other five families have a `v0` config and a documented profile.
+hard in the same way, as the real set. SIFT and DEEP have trained ladders and
+GloVe has a trained `v0`; the other three families have a `v0` config and a
+documented profile.
 
 ## Source of truth, in order
 

@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 
+from src.eval.ann_difficulty import METRICS
 from src.eval.eda.config import (
     ANN_HUB_K_DEFAULT,
     ANN_K_DEFAULT,
@@ -34,6 +35,8 @@ from src.eval.eda.config import (
     GLYPH_SAMPLES_DEFAULT,
     IVF_NLIST_DEFAULT,
     KNN_MAX_ROWS_DEFAULT,
+    MAX_PANEL_DIM_DEFAULT,
+    METRIC_DEFAULT,
 )
 
 
@@ -119,6 +122,17 @@ def parse_args() -> argparse.Namespace:
         default=IVF_NLIST_DEFAULT,
         help="Cluster count for the IVF cell-balance panel.",
     )
+    parser.add_argument(
+        "--metric",
+        type=str,
+        default=METRIC_DEFAULT,
+        choices=list(METRICS),
+        help=(
+            "Distance the corpus is searched under, from the family's "
+            "`data.metric`. 'angular' is measured as L2 on the unit sphere, "
+            "so it requires --preprocess l2."
+        ),
+    )
     parser.add_argument("--bins", type=int, default=80)
     parser.add_argument(
         "--top-divergent",
@@ -141,6 +155,18 @@ def parse_args() -> argparse.Namespace:
             "the panel off. The panel is skipped automatically unless every "
             "series is 128-dimensional, since the (cell, orientation bin) "
             "mapping it draws exists only for SIFT descriptors."
+        ),
+    )
+    parser.add_argument(
+        "--max-panel-dim",
+        type=int,
+        default=MAX_PANEL_DIM_DEFAULT,
+        help=(
+            "Drop the per-dimension marginals and correlation panels above "
+            "this width. Both scale with the square of the dimension and stop "
+            "being readable well before they stop being cheap, so the default "
+            "keeps them for sift, deep, glove and nytimes and drops them for "
+            "gist and openai. Raise it to force them back on."
         ),
     )
     parser.add_argument(

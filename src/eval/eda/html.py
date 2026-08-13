@@ -78,7 +78,16 @@ def build_report(
     sections: list[tuple[str, str, go.Figure]],
     meta_html: str,
     head_script: str,
+    heading: str = "Descriptor EDA",
 ) -> str:
+    """Assemble the page. `heading` names the corpus in the tab and the h1.
+
+    Defaulted rather than required because `compare_variants` calls this
+    too. It used to be the literal string "SIFT descriptor EDA", which
+    titled every family's report after the one family that had a ladder --
+    an openai report announcing itself as SIFT is the kind of wrong that
+    survives review because nobody reads their own report's header.
+    """
     body = []
     for title, note, fig in sections:
         body.append(f"<h2>{title}</h2>")
@@ -87,11 +96,11 @@ def build_report(
         body.append(fig.to_html(full_html=False, include_plotlyjs=False))
     return (
         "<!doctype html><html><head><meta charset='utf-8'>"
-        "<title>SIFT descriptor EDA</title>"
+        f"<title>{heading}</title>"
         f"<style>{REPORT_CSS}</style>"
         f"{head_script}"
         "</head><body>"
-        "<h1>SIFT descriptor EDA</h1>"
+        f"<h1>{heading}</h1>"
         f"{meta_html}" + "".join(body) + "</body></html>"
     )
 

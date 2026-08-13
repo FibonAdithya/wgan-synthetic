@@ -12,6 +12,7 @@ def _full_namespace() -> argparse.Namespace:
         synthetic_format="auto",
         output_dir="out",
         preprocess="l2",
+        metric="l2",
         max_vectors=50000,
         num_pairs=200000,
         knn=5,
@@ -26,6 +27,7 @@ def _full_namespace() -> argparse.Namespace:
         no_png=False,
         glyph_samples=8,
         plotlyjs="inline",
+        max_panel_dim=256,
     )
 
 
@@ -58,9 +60,25 @@ def test_missing_glyph_samples_falls_back_to_the_default():
     assert config.EdaConfig.from_args(ns).glyph_samples == config.GLYPH_SAMPLES_DEFAULT
 
 
+def test_missing_max_panel_dim_falls_back_to_the_default():
+    """Namespaces are still built by hand outside the CLI, as in compare_variants.
+
+    One built before this field existed must land on the default rather than
+    raising an AttributeError deep inside a panel.
+    """
+    ns = _full_namespace()
+    del ns.max_panel_dim
+
+    assert config.EdaConfig.from_args(ns).max_panel_dim == config.MAX_PANEL_DIM_DEFAULT
+
+
 def test_synthetic_path_none_becomes_an_empty_list():
     """argparse leaves a repeatable append-action flag at None when unused."""
     ns = _full_namespace()
     ns.synthetic_path = None
 
     assert config.EdaConfig.from_args(ns).synthetic_path == []
+
+
+def test_from_args_carries_the_metric():
+    assert config.EdaConfig.from_args(_full_namespace()).metric == "l2"

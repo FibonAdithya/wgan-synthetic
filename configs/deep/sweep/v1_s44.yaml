@@ -1,0 +1,55 @@
+# DEEP sweep cell `v1_s44` -- GENERATED, do not edit by hand.
+#
+# Regenerate with: python scripts/make_deep_sweep_configs.py
+# Base rung: configs/deep/v1.yaml
+# Deltas from that rung: seed=44 (plus output_dir)
+#
+# Every other key is inherited from the base rung, which is what makes
+# a difference between two cells attributable to the swept variable.
+
+seed: 44
+device: auto
+output_dir: runs/deep/sweep/v1_s44
+data:
+  real_path: data/deep_1m.npy
+  format: npy
+  metric: angular
+  descriptor_dim: 96
+  holdout_fraction: 0.05
+  synthetic_if_missing: false
+  synthetic_num_vectors: 100000
+  preprocess:
+    center: false
+    whiten: false
+    l2_normalize: true
+model:
+  latent_dim: 96
+  generator_hidden_dims:
+  - 512
+  - 1024
+  - 1024
+  critic_hidden_dims:
+  - 1024
+  - 512
+  - 256
+  negative_slope: 0.2
+  generator_type: mlp
+training:
+  batch_size: 512
+  num_gen_steps: 30000
+  n_critic: 3
+  lr_g: 0.0001
+  lr_d: 0.0001
+  betas:
+  - 0.0
+  - 0.9
+  lambda_gp: 5.0
+  ema_decay: 0.999
+  distance_reg_alpha: 0.0
+  distance_reg_max_points: 256
+  spectrum_reg_alpha: 0.1
+  num_workers: 0
+  amp: false
+  log_every: 250
+  eval_every: 1000
+  save_every: 2000

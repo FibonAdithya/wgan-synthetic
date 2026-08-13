@@ -78,7 +78,7 @@ exact zeros and quantized lattice that a dense MLP generator cannot.
 | `v1_5` | + distance reg (`alpha: 0.1`, 256 points) | `configs/sift/v1_5.yaml` | `runs/x100k_improved` | trained |
 | `v2` | + gated generator | `configs/sift/v2.yaml` | `runs/x100k_sparse_clamp4` | trained |
 | `v3` | + structured gate (`generator_type: structured_gated`) | `configs/sift/v3.yaml` | `runs/sift_gan_v3`, `runs/x100k_structured` | trained |
-| `v4` | + log-ratio regularizer (`lid_reg_alpha: 0.015`) | `configs/sift/v4.yaml` | `runs/sift/v4_sift1m` | trained |
+| `v4` | + log-ratio regularizer (`lid_reg_alpha: 0.015`) | `configs/sift/v4.yaml` | `runs/sift/v4_sift1m`, `runs/sift/v4_sift1m_x100k` | trained, 30k and 100k |
 
 `v3` and `v4` were measured as a matched pair on one corpus in
 `docs/results/v4-logratio/`; `v3`'s original run against the now-missing
@@ -87,6 +87,20 @@ relative-contrast gap and 71% of its hubness-skew gap**, both well clear of
 run-to-run noise. Its LID is not evidence: `lid_reg` fits LID's sufficient
 statistic directly. Neither rung's checkpoints are in this repo — they are on
 the training box, listed in each result page.
+
+**`v4` is not simply the best rung here, though.** At a matched 100k run length
+the ladder splits rather than ordering: against `v1_5`, the best dense rung,
+`v4` is clearly better on hubness skew (4.3x the noise floor) while `v1_5` is
+clearly better on LID median (12.1x), with relative contrast and IVF Gini too
+close to call. `v4` reproduces the *support* almost exactly — exact-zero
+fraction within 0.0023 of real, against the dense rungs' 0.230, since they emit
+no exact zeros at all — while `v1_5` reproduces the *intrinsic dimensionality*.
+LID being the one comfortably usable statistic tilts the gate toward `v1_5`.
+
+`v4` had not plateaued at 100k: every gate statistic improved from 30k by more
+than the noise floor. Tables, the noise arithmetic and the open question this
+raises about invariant 1 are in `docs/results/v4-logratio/`, under "Against the
+baseline".
 
 Train `v0` (or any rung, by swapping the config):
 

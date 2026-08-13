@@ -9,6 +9,10 @@ scikit-learn==1.9.0
 scipy==1.18.0
 # HDF5 reader for the ann-benchmarks mirrors, used only by src/data/fetch.py.
 h5py==3.16.0
+# Parquet reader for the one family ann-benchmarks generates rather than
+# hosts: openai comes from a HuggingFace dataset's shards, not an HDF5
+# mirror. Also only used by src/data/fetch.py.
+pyarrow==25.0.0
 plotly==6.9.0
 # Static PNG export in src/eval/eda_report.py. Kaleido v1 drives a headless
 # Chrome; run `plotly_get_chrome` once if no browser is installed. The HTML

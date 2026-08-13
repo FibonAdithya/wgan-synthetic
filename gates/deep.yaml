@@ -7,12 +7,36 @@
 # different directions: a set can be too easy on contrast while being too
 # clustered on Gini, and one number would hide that.
 #
-# EVERY BAND BELOW IS UNSET (null). Bands are set once this family has a
-# trained ladder to show what is achievable; inventing numbers before that
-# would gate against a guess. While they are null, `check_gate` reports each
-# statistic as "unset" and exits non-zero with verdict "unset" -- an
+# TWO BANDS ARE NOW SET, TWO REMAIN NULL, for different reasons.
+#
+# Calibrated 2026-08-10 from a three-seed sweep of the whole ladder (seeds 42,
+# 43, 44 x v0/v1/v2, 30k steps each). The measured run-to-run noise is what
+# makes these numbers defensible; `docs/datasets/deep_seed_sweep_summary.json`
+# is the committed summary they were read from.
+#
+# The bands encode WHAT THE LADDER ACHIEVES TODAY, widened by the measured
+# noise: best rung mean +/- 3 pooled standard deviations. They catch a future
+# run that gets worse. They do NOT assert the synthetic set resembles real
+# DEEP -- it does not, and lid_median is still 0.71 short. Read them as a
+# regression guard, not a certificate.
+#
+# hubness_skew and ivf_gini stay null, and NOT because they are too noisy to
+# measure. The ladder already reproduces both to within run-to-run noise:
+# their gap to real is 0.04 and 0.27 standard deviations respectively. There
+# is no gap left to gate, so any band wide enough to admit an honest run would
+# also admit one that missed. Setting them would be theatre.
+#
+# While any band is null, `check_gate` exits 2 with verdict "unset" -- an
 # unenforceable gate must not be mistaken for a passing one. Pass
 # `--allow-unset` to run the checker for its report alone.
+#
+# EXPECT REAL DEEP TO FAIL THIS GATE. `check_gate` defaults to
+# `--stats-name real`, and these bands describe what the *synthetic* ladder
+# reaches; real DEEP is outside them on both set statistics because it is
+# harder to search than anything the ladder produces. That is the gate working,
+# not a miscalibration. Check a synthetic series with `--stats-name <label>`.
+# Verified 2026-08-10 against the sweep summary: all nine cells sit inside both
+# bands with zero band failures, and `real` fails both.
 #
 # To set a band, replace min and/or max with numbers. A band with one bound is
 # legal and counts as set: several of these statistics only fail in one
@@ -41,25 +65,44 @@ canonical:
 statistics:
   # Local intrinsic dimensionality, median over surviving queries. Too low
   # means the synthetic set is easier to search than the real one.
+  #
+  # Band = v2 mean 16.8505 +/- 3 x 0.0640 (pooled sd over all nine cells).
+  # All nine seed-sweep cells sit inside it. Real is 17.5612, well above the
+  # upper bound: every rung produces a set measurably easier to search than
+  # real DEEP, and closing that is the open modelling problem, not a gate
+  # failure to be tuned away.
   lid_median:
-    min: null
-    max: null
+    min: 16.6584
+    max: 17.0426
 
   # Median (mean distance / nearest distance). Collapses toward 1.0 when
   # neighbours stop being distinguishable from the bulk.
+  #
+  # Band = v2 mean 1.8683 +/- 3 x 0.0063. All nine cells inside. Real is
+  # 1.8323, below the lower bound -- synthetic contrast runs slightly high,
+  # consistent with the LID shortfall being a single underlying difference.
   relative_contrast_median:
-    min: null
-    max: null
+    min: 1.8495
+    max: 1.8872
 
   # Skew of the k-occurrence distribution. High skew means a few hub vectors
   # dominate neighbour lists, which is a real property of deep and not
   # something a generator gets for free.
+  #
+  # UNSET DELIBERATELY: the ladder already matches real here. Real 1.9401 vs
+  # v1 mean 1.9422 -- a gap of 0.002 against a pooled sd of 0.057, i.e. 0.04
+  # sd. The published claim that v1 matched hubness "by two orders of
+  # magnitude" was one seed landing well; across three seeds the rung's gap
+  # swings by +/-0.16.
   hubness_skew:
     min: null
     max: null
 
   # Gini of IVF cell occupancy at nlist above. 0.0 is a perfectly even
   # partition; a lopsided one drives how many cells a query must probe.
+  #
+  # UNSET DELIBERATELY, same reason: real 0.3046 vs v1 mean 0.3069, a gap of
+  # 0.27 sd. Nothing to gate.
   ivf_gini:
     min: null
     max: null

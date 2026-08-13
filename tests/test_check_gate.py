@@ -454,19 +454,78 @@ def test_check_gate_resolves_dataset_to_the_repo_gate_file(tmp_path: Path, write
     assert report["gate_file"].endswith("gates/sift.yaml")
 
 
+# Which families have had bands calibrated from a measured seed sweep. A band
+# may only appear here once run-to-run noise has been measured on that family,
+# because a band narrower than the noise fails honest runs at random. Listing
+# them explicitly means adding one is a deliberate edit to this table rather
+# than something that slips in with a config change.
+CALIBRATED_BANDS = {
+    # DEEP, 2026-08-10: three-seed sweep, docs/datasets/deep_seed_sweep_summary.json.
+    # hubness_skew and ivf_gini stay unset because the ladder already matches
+    # real within noise (0.04 and 0.27 pooled sd), not because they are noisy.
+    "deep": {"lid_median", "relative_contrast_median"},
+}
+
+
 @pytest.mark.parametrize(
     "dataset", ["sift", "deep", "gist", "glove", "nytimes", "openai"]
 )
-def test_every_shipped_gate_file_parses_and_declares_all_four_bands_unset(dataset: str):
+def test_every_shipped_gate_file_parses_with_all_four_statistics(dataset: str):
     gate = check_gate.load_gate(check_gate.GATES_DIR / f"{dataset}.yaml")
 
     assert gate["dataset"] == dataset
     assert gate["canonical"] == CANONICAL
+    assert set(gate["statistics"]) == set(check_gate.GATE_STATISTICS)
+
+
+@pytest.mark.parametrize(
+    "dataset", ["sift", "deep", "gist", "glove", "nytimes", "openai"]
+)
+def test_bands_are_set_only_where_a_seed_sweep_has_calibrated_them(dataset: str):
+    """A band that appears without an entry above is a band fitted to noise."""
+    gate = check_gate.load_gate(check_gate.GATES_DIR / f"{dataset}.yaml")
+    expected = CALIBRATED_BANDS.get(dataset, set())
+
     for name in check_gate.GATE_STATISTICS:
-        assert check_gate.band_bounds(gate["statistics"][name]) == (None, None), (
-            f"{dataset}.{name} has a band; these are unset until a trained "
-            "ladder shows what is achievable"
-        )
+        bounds = check_gate.band_bounds(gate["statistics"][name])
+        if name in expected:
+            assert bounds != (None, None), (
+                f"{dataset}.{name} is listed as calibrated but ships no band"
+            )
+        else:
+            assert bounds == (None, None), (
+                f"{dataset}.{name} has a band but no measured noise floor "
+                "justifies one; add it to CALIBRATED_BANDS with the sweep it "
+                "came from, or remove the band"
+            )
+
+
+def test_the_calibrated_deep_bands_admit_every_cell_of_the_sweep_they_came_from():
+    """The bands must not reject the runs they were calibrated from.
+
+    Guards the arithmetic behind `best rung mean +/- 3 pooled sd`: a band that
+    excludes one of its own nine cells was mis-derived.
+    """
+    summary = json.loads(
+        (
+            Path(__file__).resolve().parents[1]
+            / "docs"
+            / "datasets"
+            / "deep_seed_sweep_summary.json"
+        ).read_text(encoding="utf-8")
+    )
+    by_name = {entry["name"]: entry for entry in summary["stats"]}
+    gate = check_gate.load_gate(check_gate.GATES_DIR / "deep.yaml")
+    cells = [f"{rung}_s{seed}" for rung in ("v0", "v1", "v2") for seed in (42, 43, 44)]
+
+    for name in CALIBRATED_BANDS["deep"]:
+        low, high = check_gate.band_bounds(gate["statistics"][name])
+        for cell in cells:
+            value = by_name[cell][name]
+            assert low <= value <= high, (
+                f"deep.{name} band [{low}, {high}] excludes {cell} ({value}), "
+                "which it was calibrated from"
+            )
 
 
 def test_check_gate_main_exits_non_zero_on_an_unset_shipped_gate(

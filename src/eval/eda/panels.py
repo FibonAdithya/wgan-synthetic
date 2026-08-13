@@ -3,9 +3,10 @@
 Each panel is a title, a prose note explaining what a reader should conclude
 from it, and a builder that returns its figure. `build` returning None means
 "this panel does not apply to this run" -- the report simply omits it. That
-one mechanism covers all three cases: the glyph panel needs 128-dimensional
-data, the norms panel needs unnormalized vectors, and the mismatch panel
-needs something to compare against.
+one mechanism covers every case: the glyph panel needs 128-dimensional data,
+the norms panel needs unnormalized vectors, the mismatch panel needs
+something to compare against, and the two per-dimension panels need a width
+small enough for them to be worth drawing.
 
 To add a panel: append a Panel here and add its builder to figures.py. To
 change what a panel claims, edit its note here. Nothing else in the package
@@ -167,7 +168,20 @@ def _build_value_distribution(ctx: Context) -> go.Figure:
     return figures.fig_value_distribution(ctx.series, ctx.config.bins)
 
 
-def _build_per_dim_marginals(ctx: Context) -> go.Figure:
+def _too_wide(ctx: Context) -> bool:
+    """Whether the per-dimension panels would cost more than they say.
+
+    Both panels below scale with the square of the width, and both lose their
+    point long before they get slow: nobody pages through a 1536-entry
+    dropdown, and a 1536x1536 heatmap resolves to a smear. See
+    MAX_PANEL_DIM_DEFAULT for where the threshold comes from.
+    """
+    return ctx.series[0].x.shape[1] > ctx.config.max_panel_dim
+
+
+def _build_per_dim_marginals(ctx: Context) -> go.Figure | None:
+    if _too_wide(ctx):
+        return None
     return figures.fig_per_dim_marginals(ctx.series, ctx.config.bins)
 
 
@@ -226,7 +240,9 @@ def _build_pca(ctx: Context) -> go.Figure:
     return figures.fig_pca_spectrum(ctx.series)
 
 
-def _build_correlation(ctx: Context) -> go.Figure:
+def _build_correlation(ctx: Context) -> go.Figure | None:
+    if _too_wide(ctx):
+        return None
     return figures.fig_correlation(ctx.series)
 
 

@@ -28,15 +28,16 @@ AI working notes, kept for provenance and **not** authoritative:
 ## Datasets
 
 Each family gets its own ladder of variants and its own gate. SIFT and DEEP
-have trained ladders; the other four have a `v0` baseline config and a
-documented profile waiting to be measured.
+have trained ladders; GloVe has a trained `v0` and no rung above it; the other
+three have a `v0` baseline config and a documented profile waiting to be
+measured.
 
 | Family | Dim | Metric | Ladder | Page |
 |---|---|---|---|---|
 | `sift` | 128 | `l2` | `v0`–`v2` trained | `docs/datasets/sift.md` |
 | `gist` | 960 | `l2` | `v0` defined, not trained | `docs/datasets/gist.md` |
 | `deep` | 96 | `angular` | `v0`–`v2` trained | `docs/datasets/deep.md` |
-| `glove` | 100 | `angular` | `v0` defined, not trained | `docs/datasets/glove.md` |
+| `glove` | 100 | `angular` | `v0` trained (5 seeds) | `docs/datasets/glove.md` |
 | `nytimes` | 256 | `angular` | `v0` defined, not trained | `docs/datasets/nytimes.md` |
 | `openai` | 1536 | `angular` | `v0` defined, not trained | `docs/datasets/openai.md` |
 

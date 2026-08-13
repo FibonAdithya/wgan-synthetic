@@ -61,28 +61,44 @@ locked here so a gate result stays readable against an older one.
 | Canonical N | `20000` |
 | Canonical k | `100` (`10` for hubness) |
 
-| Statistic | Real | Synthetic (closest rung) |
-|---|---|---|
-| LID median | 17.561218 | 16.935708 (`v2`) |
-| Relative contrast | 1.832256 | 1.864716 (`v2`) |
-| Hubness skew | 1.940139 | 1.939737 (`v1`) |
-| IVF cell-balance Gini | 0.304576 | 0.302923 (`v0`) |
+Synthetic is quoted as the mean over three seeds, not a single run, and
+without naming a "closest rung": the seed sweep below shows the rungs are
+indistinguishable on all four of these statistics, so attributing a column to
+one of them reports noise.
 
-Measured over 50,000 vectors per set at `preprocess: l2`, `seed: 42`,
-`nlist: 256`. The full report output these came from is committed as
-`docs/datasets/deep_ladder_summary.json`, so every figure on this page is
-checkable without access to the training box. Reproduce the real column with:
+| Statistic | Real | Synthetic (3-seed mean, spread across rungs) |
+|---|---|---|
+| LID median | 17.561218 | 16.78 – 16.85 |
+| Relative contrast | 1.832256 | 1.868 – 1.873 |
+| Hubness skew | 1.940139 | 1.890 – 1.942 |
+| IVF cell-balance Gini | 0.304576 | 0.307 – 0.314 |
+
+Measured over 50,000 vectors per set at `preprocess: l2`, `nlist: 256`, seeds
+42/43/44. Two report outputs are committed, so every figure on this page is
+checkable without access to the training box:
+`docs/datasets/deep_ladder_summary.json` (the original single-seed ladder) and
+`docs/datasets/deep_seed_sweep_summary.json` (the three-seed sweep these
+numbers come from). Reproduce the real column with:
 
     python -m src.eval.eda_report \
         --real-path data/deep_1m.npy \
         --output-dir runs/deep/profile \
-        --ann-max-rows 20000 --ann-k 100 --ann-hub-k 10
+        --ann-max-rows 20000 --ann-k 100 --ann-hub-k 10 --metric angular
 
 Read the four values out of runs/deep/profile/summary.json (written by the command above).
 
-`ann_difficulty.py` currently measures everything under L2, including this
-family's `angular` corpus, so these numbers will need re-measuring once
-angular distance support lands (phase (c)).
+`ann_difficulty.py` measures this family under its `data.metric`, which is
+`angular`: L2 between unit-norm rows. On the unit sphere Euclidean distance
+is a strictly increasing function of cosine distance, so it ranks neighbours
+identically -- the corpus is measured under the distance it is searched with.
+Measuring requires `--preprocess l2`, and `ann_difficulty.compute` refuses
+rows that are neither unit-norm nor exactly zero rather than normalizing
+them itself -- an exact zero is what `maybe_l2_normalize` leaves behind, so
+it is accepted rather than treated as a caller mistake.
+
+The figures above were measured at `preprocess: l2`, as
+`deep_ladder_summary.json` records, so they were already measured under this
+geometry and stand unchanged.
 
 ## Model family
 
@@ -131,38 +147,60 @@ vectors (RTX 4060, ~35 min each). Gap to real, primary statistics:
 
 ### How much of this is noise
 
-An earlier draft of this ladder ran the same three configs at
-`latent_dim: 128`, inherited from the SIFT ladder. Correcting that to 96 gave
-a near-replicate: three runs, same seed, same data, same everything except a
-latent width the target's effective rank of 65 says should barely bind. The
-two sets can therefore be read as two draws, which is the only variance
-estimate this family has.
+**Measured, 2026-08-10.** The whole ladder was re-run at seeds 42, 43 and 44 —
+nine runs, 30,000 steps each, everything else identical — which replaces the
+two-draw guess this section used to carry. Committed as
+`docs/datasets/deep_seed_sweep_summary.json`.
 
-Gap to real, 128 → 96:
+Per-rung mean and the spread across seeds:
 
-| rung | ΔLID | Δhubness skew | ΔIVF gini |
-|---|---|---|---|
-| `v0` | 0.709 → 0.836 | 0.022 → 0.045 | 0.017 → 0.002 |
-| `v1` | 0.757 → 0.748 | 0.000022 → 0.000402 | 0.0075 → 0.0080 |
-| `v2` | 0.652 → 0.626 | 0.100 → 0.042 | 0.0054 → 0.0065 |
+| statistic | v0 | v1 | v2 | worst seed range | pooled sd |
+|---|---:|---:|---:|---:|---:|
+| LID median | 16.7829 | 16.8319 | 16.8505 | 0.1625 | 0.0640 |
+| relative contrast | 1.8734 | 1.8709 | 1.8683 | 0.0168 | 0.0063 |
+| hubness skew | 1.8903 | 1.9422 | 1.9111 | 0.1617 | 0.0570 |
+| IVF gini | 0.3088 | 0.3069 | 0.3144 | 0.0236 | 0.0087 |
+| effective rank | 63.3108 | 63.3228 | 64.0460 | 0.1614 | 0.3704 |
 
-**Some of these swings are larger than the differences between rungs.** `v0`'s
-IVF gini improved tenfold and its hubness gap doubled; `v2`'s hubness gap
-halved. Nothing about the change should have produced that, which puts a
-floor under how finely these numbers can be read.
+**Both claims this page previously reported as surviving are withdrawn.** The
+single-seed numbers that supported them are inside one run-to-run swing:
 
-What survives both draws:
+- *"`v2` is closest on LID."* The v2−v0 difference is **0.0676** against a seed
+  range of **0.1625**. Not supported.
+- *"`v1` is closest on hubness skew, by two orders of magnitude."* v1's gap of
+  0.000402 was where seed 42 happened to land; across three seeds the rung's
+  gap swings by ±0.16, some four hundred times that. Not supported.
 
-- **`v2` is closest on LID** in both (0.652, 0.626). Holds.
-- **`v1` is closest on hubness skew** in both, by two orders of magnitude
-  (0.000022, 0.000402). Holds, and is the one result the spectrum regularizer
-  can plausibly claim.
-- **IVF gini reorders completely** — `v0` went from worst (0.017) to best
-  (0.002), `v2` from best to middle. No ordering here is supported.
+Only **effective rank** separates the rungs at all: its spread across rung
+means (0.7353) exceeds the worst seed range (0.1614), and it orders them
+`v2` closer than `v1` closer than `v0`. Whitening is the one rung delta this
+ladder can demonstrate does something.
 
-So the honest reading is narrower than "v2 wins two of three": `v2` helps LID,
-`v1` helps hubness skew, and the IVF gini column should not be used to rank
-rungs at all. Two draws is still two, and neither is a seed sweep.
+For the other four statistics the practical reading is that **v0, v1 and v2
+are indistinguishable**. A one-key ladder is still the right shape — it just
+turns out these three keys do not move these four numbers by more than noise.
+
+### Does the spectrum regularizer bind?
+
+`v1`'s `spectrum_reg_alpha: 0.1` was suspected of being too small to act. Two
+extra runs at seed 42 settle it, read on effective rank — the property the
+term actually targets:
+
+| α | effective rank | vs shipped 0.1 |
+|---|---:|---:|
+| 0.1 (shipped `v1`) | 63.3809 | — |
+| 1.0 | 63.3694 | −0.0115 |
+| 5.0 | **63.7668** | **+0.3860** |
+
+Seed noise on that rung is 0.0912, so α=5.0 clears it roughly fourfold while
+α=1.0 does nothing at all. **The term works, but only above roughly fifty
+times the shipped value** — the response is a threshold, not a slope, which is
+why `test_enabling_the_regularizer_changes_the_generator` needed `alpha: 5.0`
+to see any effect.
+
+It is still the weaker lever. α=5.0 buys +0.39 of effective rank; whitening
+buys +0.74 with no penalty term, and real DEEP is 1.99 above `v0` — so even
+both together leave most of the gap open.
 
 ## Gate
 
@@ -177,14 +215,34 @@ naming it. The gate file also pins the measurement conditions the bands were
 set under, since these statistics are not comparable across different N, k or
 nlist.
 
-Every band is currently null. Bands are set once this family has a trained
-ladder to show what is achievable; until then the gate file records that they
-are unset, and the checker says so instead of passing. The two draws above show
-why that caution is warranted here: the IVF gini gap moved tenfold for `v0`
-under a change that should barely have bound, so a band set from either draw
-alone would be fitted to noise. Setting them needs a real seed sweep, and the
-numbers move again when phase (c) re-measures this family under angular
-distance.
+**Two of the four bands are now set**, calibrated from the seed sweep above:
+`lid_median` and `relative_contrast_median`. They encode what the ladder
+achieves *today* — best rung mean ± 3 pooled standard deviations, so all nine
+sweep cells sit inside — which makes them a regression guard, not a
+certificate that the synthetic set resembles real DEEP. It does not: LID is
+still 0.71 short, and that gap is the open modelling problem.
+
+`hubness_skew` and `ivf_gini` stay null, and the reason is worth stating
+because it is the opposite of the usual one. They are not too noisy to
+measure; **the ladder already reproduces both to within run-to-run noise** —
+gaps to real of 0.04 and 0.27 pooled standard deviations respectively. There
+is no gap left to gate, so any band loose enough to admit an honest run would
+also admit one that missed.
+
+`check_gate` therefore still exits 2 with verdict `unset` while those two are
+null, which is correct: a partially calibrated gate must not report a pass.
+Pass `--allow-unset` to get the report alone.
+
+The most discriminating statistic of all, **effective rank**, cannot go in the
+gate at present: `check_gate.GATE_STATISTICS` is a fixed four-name tuple and
+rejects anything else, and widening it would require every other family's gate
+file to grow the key too. Tracked as issue #44 rather than done here, since it
+is a schema change to shared code.
+
+These numbers do not move under the metric-aware `ann_difficulty`: they were
+measured at `preprocess: l2`, which on unit-norm rows is the `angular`
+geometry this family is searched with, exactly as the profile section above
+records.
 
 Check a run against it:
 

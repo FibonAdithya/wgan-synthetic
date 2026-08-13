@@ -159,16 +159,50 @@ direction is consistent: at matched recall they are cheaper to search
 (IVF-Flat, 1.76x and 3.08x), at matched cost they reach higher recall (CAGRA,
 0.997/0.999 against 0.963), and they are the only corpora a quantized index can
 push to 0.90 at all (IVF-PQ). `v0`, `v1` and `v1_5` track real closely on every
-index — 0.98–1.02x on IVF-Flat, within 0.003 recall on CAGRA, and failing to
-reach 0.90 on IVF-PQ exactly as real does. `v4` sits between the two groups.
+index — within noise on IVF-Flat, within 0.003 recall on CAGRA, and failing to
+reach 0.90 on IVF-PQ exactly as real does. `v4` sits between the two groups: it
+separates from real on the partitioning indexes (1.20x on IVF-Flat, seven times
+the noise floor) but, like real, never reaches 0.90 under IVF-PQ.
 
 What this does and does not say: an index finding a corpus easier at matched
 recall, or reaching higher recall at matched cost, is a measured difference in
 search behaviour between that corpus and real SIFT. It is **not** a gate
 verdict, **not** a statement that any variant is a better or worse stand-in
-overall, and it is measured on normalized corpora. One benchmark on one card is
-also one sample; nothing here is a seed-noise study, and the differences among
-`v0`/`v1`/`v1_5` are well inside the range a repeat run could move.
+overall, and it is measured on normalized corpora.
+
+### Which of these differences survive the noise floor
+
+The grid was run a second time, identically — same commit, same parameters,
+same cached corpora, so the only thing re-measured is the search itself (job
+`wgan-synthetic-20260813T084709Z-30d589`). `ann_benchmark_repeat.json` holds
+that run in full. Cell by cell against the published run:
+
+| Quantity | Run-to-run movement |
+|---|---|
+| `flat` recall | **0.000** — bit-identical, as exact search must be |
+| recall, any approximate cell | ≤ 0.005 (mean 0.001) |
+| QPS at a fixed operating point | ≤ 4.6% |
+| exact-search ceiling QPS | ≤ 0.4% |
+| ratio-to-real @ 0.90 (IVF-Flat) | ≤ 0.074 |
+
+Applying that floor to the results above:
+
+- **The IVF-PQ pattern is exactly reproducible.** All seven null/non-null
+  verdicts agree between runs, and peak recalls move by at most 0.001. `real`,
+  `v0`, `v1`, `v1_5` and `v4` fail to reach 0.90 in both runs; `v2` and `v3`
+  reach it in both. This is the most robust finding in the table.
+- **`v2`, `v3` and `v4` separate from real for real.** Their IVF-Flat ratios
+  moved 1.76→1.70, 3.08→3.00 and 1.20→1.17 between runs — movement of 0.03–0.07
+  against separations of 0.17–2.00. The separations are 7–27x the noise.
+- **`v0`, `v1` and `v1_5` are *not* distinguishable from real, or from each
+  other.** Their ratios moved 0.98→0.98, 1.02→1.00 and 1.01→0.98. The spread
+  within that group is the same size as the run-to-run movement, so the
+  earlier-looking "v1 is 1.02x, v0 is 0.98x" ordering does not survive a second
+  sample. Read those three as: indistinguishable from real under IVF-Flat.
+
+Two samples bound run-to-run variation on one card; they do not bound
+generator-seed variation, since both runs reuse the same cached corpora.
+A seed-noise study remains separate work.
 
 ## Cost
 
@@ -202,7 +236,9 @@ slower than CAGRA at its floor.
 ## How to read the files
 
 `ann_benchmark.json` is every cell, unaggregated, plus the environment block.
-`ann_benchmark.md` is the headline table. `report.html` is self-contained and
+`ann_benchmark_repeat.json` is the identical second run used for the noise
+floor above; it is evidence for that section and is not otherwise part of the
+result. `ann_benchmark.md` is the headline table. `report.html` is self-contained and
 carries the recall-vs-QPS curve per cell — the curve, not the headline, is
 where "faster" becomes a meaningful claim, and it is the right place to look at
 the five null IVF-PQ cells. `gpuq_job_spec.json` pins the command, commit,

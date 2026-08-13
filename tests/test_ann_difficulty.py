@@ -330,3 +330,62 @@ def test_exclude_self_drops_the_farthest_when_the_query_did_not_come_back():
 
     np.testing.assert_array_equal(kept_idx, [[7, 8]])
     np.testing.assert_allclose(kept_dist, [[0.5, 1.0]])
+
+
+def test_torch_backend_returns_the_same_neighbours_as_sklearn():
+    rng = np.random.default_rng(0)
+    x = rng.standard_normal((300, 16)).astype(np.float32)
+
+    d_sk, i_sk, k_sk = ann_difficulty.knn(x, 10)
+    d_t, i_t, k_t = ann_difficulty.knn(x, 10, backend="torch")
+
+    assert k_t == k_sk
+    np.testing.assert_allclose(d_t, d_sk, rtol=1e-4, atol=1e-4)
+    # Indices are allowed to differ only where the two candidates are
+    # indistinguishable at that tolerance -- a genuine tie, not a wrong
+    # neighbour.
+    differing = i_t != i_sk
+    assert np.all(np.abs(d_t[differing] - d_sk[differing]) <= 1e-4)
+
+
+def test_torch_backend_excludes_self_when_every_row_is_a_duplicate():
+    # Every distance is 0.0, so nothing about the sort order can be relied
+    # on. This is the case the index-based exclusion exists for.
+    x = np.zeros((6, 4), dtype=np.float32)
+
+    _, idx, k_eff = ann_difficulty.knn(x, 3, backend="torch")
+
+    assert k_eff == 3
+    assert not np.any(idx == np.arange(6)[:, None])
+
+
+def test_torch_backend_agrees_with_sklearn_on_every_summary_statistic():
+    rng = np.random.default_rng(1)
+    x = rng.standard_normal((500, 12)).astype(np.float32)
+
+    sk = ann_difficulty.summary(
+        ann_difficulty.compute(x, k=20, k_hub=5, nlist=8, max_rows=0)
+    )
+    torch_ = ann_difficulty.summary(
+        ann_difficulty.compute(x, k=20, k_hub=5, nlist=8, max_rows=0, backend="torch")
+    )
+
+    for name in ("lid_median", "relative_contrast_median", "hubness_skew", "ivf_gini"):
+        assert sk[name] == pytest.approx(torch_[name], rel=1e-4, abs=1e-6), name
+
+
+def test_knn_rejects_an_unknown_backend():
+    x = np.zeros((4, 2), dtype=np.float32)
+    with pytest.raises(ValueError, match="backend"):
+        ann_difficulty.knn(x, 2, backend="faiss")
+
+
+def test_torch_backend_is_unaffected_by_chunk_width():
+    rng = np.random.default_rng(2)
+    x = rng.standard_normal((257, 8)).astype(np.float32)
+
+    wide = ann_difficulty.knn(x, 5, backend="torch", chunk_rows=1024)
+    narrow = ann_difficulty.knn(x, 5, backend="torch", chunk_rows=7)
+
+    np.testing.assert_array_equal(wide[1], narrow[1])
+    np.testing.assert_allclose(wide[0], narrow[0], rtol=1e-5, atol=1e-6)

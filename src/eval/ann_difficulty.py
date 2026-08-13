@@ -72,25 +72,69 @@ def _exclude_self(
     return dist[selected].reshape(n, k_eff), idx[selected].reshape(n, k_eff)
 
 
-def knn(x: np.ndarray, k: int) -> tuple[np.ndarray, np.ndarray, int]:
+def _knn_torch(
+    x: np.ndarray, want: int, chunk_rows: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """Brute-force neighbours on the GPU when there is one, else on CPU torch.
+
+    Chunked over query rows because the distance block is the memory cost:
+    chunk_rows x n floats. At the default 1024 and n = 250,000 that is 1 GB,
+    which sits comfortably beside a 100 MB corpus on an 8 GB card.
+
+    Returns the raw (n, want) arrays including each row's own index; the
+    caller drops it via `_exclude_self`.
+
+    torch is imported here rather than at module scope so the default
+    sklearn path -- what every figure under docs/datasets/ was measured
+    with -- does not pay torch's import cost to have this backend exist.
+    """
+    import torch
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    corpus = torch.from_numpy(np.ascontiguousarray(x, dtype=np.float32)).to(device)
+    n = corpus.shape[0]
+
+    dist = np.empty((n, want), dtype=np.float64)
+    idx = np.empty((n, want), dtype=np.int64)
+    for start in range(0, n, chunk_rows):
+        stop = min(start + chunk_rows, n)
+        block = torch.cdist(corpus[start:stop], corpus)
+        values, columns = torch.topk(block, want, dim=1, largest=False, sorted=True)
+        dist[start:stop] = values.to(torch.float64).cpu().numpy()
+        idx[start:stop] = columns.cpu().numpy()
+    return dist, idx
+
+
+def knn(
+    x: np.ndarray, k: int, *, backend: str = "sklearn", chunk_rows: int = 1024
+) -> tuple[np.ndarray, np.ndarray, int]:
     """Nearest neighbours of every row among the *other* rows.
 
     Returns (distances, indices, k_eff). k is clamped to n-1 when the set is
     smaller than requested, and k_eff reports what was actually used.
 
-    Self-exclusion is by index, not by dropping the first column. Exact
-    duplicate rows tie with the query at distance 0 and sklearn does not
-    promise the query sorts first, so column-dropping can silently leave a
-    point in its own neighbour list -- which would drag its k-occurrence up
-    and its LID down.
+    `backend` selects the neighbour search. "sklearn" is the default and is
+    what every figure committed under docs/datasets/ was measured with;
+    "torch" runs the same search on the GPU when one is available. The two
+    agree to the tolerance asserted in tests/test_ann_difficulty.py --
+    sklearn's brute euclidean uses the ||x||^2 + ||y||^2 - 2xy expansion,
+    which is the numerically worse form, so the difference is not all in
+    torch's column.
+
+    Self-exclusion is deferred to `_exclude_self`.
     """
     n = x.shape[0]
     if n < 2:
         raise ValueError(f"need at least 2 rows to compute neighbours, got {n}")
     k_eff = min(k, n - 1)
 
-    nn = NearestNeighbors(n_neighbors=k_eff + 1, algorithm="brute").fit(x)
-    dist, idx = nn.kneighbors(x)
+    if backend == "sklearn":
+        nn = NearestNeighbors(n_neighbors=k_eff + 1, algorithm="brute").fit(x)
+        dist, idx = nn.kneighbors(x)
+    elif backend == "torch":
+        dist, idx = _knn_torch(x, k_eff + 1, chunk_rows)
+    else:
+        raise ValueError(f"unknown knn backend: {backend!r}")
 
     dist, idx = _exclude_self(dist, idx, k_eff)
     return dist, idx, k_eff
@@ -263,6 +307,8 @@ def compute(
     nlist: int = 256,
     max_rows: int = 20000,
     seed: int = 42,
+    backend: str = "sklearn",
+    chunk_rows: int = 1024,
 ) -> AnnMetrics:
     """Measure every difficulty metric for one set off a single k-NN pass.
 
@@ -273,7 +319,7 @@ def compute(
     x = np.ascontiguousarray(_subsample(x, max_rows, seed), dtype=np.float32)
     n = x.shape[0]
 
-    dist, idx, k_eff = knn(x, k)
+    dist, idx, k_eff = knn(x, k, backend=backend, chunk_rows=chunk_rows)
     survivors = survivor_mask(dist)
 
     lid = lid_mle(dist[survivors])

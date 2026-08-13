@@ -20,6 +20,8 @@ from __future__ import annotations
 
 import numpy as np
 
+from src.eval import ann_difficulty
+
 
 class HubStabilityError(Exception):
     """The sweep could not run as asked -- bad grid, bad corpus, bad series."""
@@ -53,3 +55,62 @@ def allocate_draws(
     return [
         np.sort(rng.choice(pool_size, size=n, replace=False)) for _ in range(draws)
     ], False
+
+
+# Report order: the four incumbents first, then the two candidates. The
+# incumbents are carried along as a control -- they re-measure the committed
+# eight-draw table at more draws and at larger N for the price of the k-NN
+# pass that was happening anyway.
+STATISTICS = (
+    "lid_median",
+    "relative_contrast_median",
+    "hubness_skew",
+    "ivf_gini",
+    "hubness_gini",
+    "hub_share_top1pct",
+)
+
+
+def measure_draw(
+    x: np.ndarray,
+    *,
+    k: int,
+    k_hub: int,
+    nlist: int,
+    seed: int,
+    backend: str,
+    chunk_rows: int,
+) -> dict[str, float]:
+    """Every statistic for one already-drawn subsample, off a single k-NN pass.
+
+    `max_rows=0` is not optional: the caller drew these rows deliberately, and
+    letting `compute` subsample again would measure a smaller set than the one
+    the grid says was measured.
+    """
+    metrics = ann_difficulty.compute(
+        x,
+        k=k,
+        k_hub=k_hub,
+        nlist=nlist,
+        max_rows=0,
+        seed=seed,
+        backend=backend,
+        chunk_rows=chunk_rows,
+    )
+    reported = ann_difficulty.summary(metrics)
+
+    for name in ("lid_median", "relative_contrast_median"):
+        if reported[name] is None:
+            raise HubStabilityError(
+                f"{name} was not measurable on this draw: every query was "
+                "discarded, which means the draw is degenerate"
+            )
+
+    return {
+        "lid_median": float(reported["lid_median"]),
+        "relative_contrast_median": float(reported["relative_contrast_median"]),
+        "hubness_skew": float(reported["hubness_skew"]),
+        "ivf_gini": float(reported["ivf_gini"]),
+        "hubness_gini": ann_difficulty.hubness_gini(metrics.k_occurrence),
+        "hub_share_top1pct": ann_difficulty.hub_share_top1pct(metrics.k_occurrence),
+    }

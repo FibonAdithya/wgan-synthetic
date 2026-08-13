@@ -46,3 +46,45 @@ def test_allocation_is_reproducible_under_the_same_seed():
 def test_a_draw_larger_than_the_pool_is_an_error():
     with pytest.raises(hub_stability.HubStabilityError, match="pool"):
         hub_stability.allocate_draws(50, 100, 2, seed=42)
+
+
+def _draw(rows: int = 300, dim: int = 8, seed: int = 0) -> np.ndarray:
+    return np.random.default_rng(seed).standard_normal((rows, dim)).astype(np.float32)
+
+
+def test_measure_draw_returns_every_statistic_as_a_finite_number():
+    values = hub_stability.measure_draw(
+        _draw(), k=10, k_hub=5, nlist=4, seed=42, backend="sklearn", chunk_rows=1024
+    )
+
+    assert sorted(values) == sorted(hub_stability.STATISTICS)
+    assert all(np.isfinite(v) for v in values.values())
+
+
+def test_measure_draw_measures_every_row_it_is_given():
+    # max_rows must be disabled inside: the caller has already drawn the
+    # rows, and a second subsample would silently shrink the draw.
+    big = hub_stability.measure_draw(
+        _draw(rows=400), k=10, k_hub=5, nlist=4, seed=42,
+        backend="sklearn", chunk_rows=1024,
+    )
+    small = hub_stability.measure_draw(
+        _draw(rows=400)[:200], k=10, k_hub=5, nlist=4, seed=42,
+        backend="sklearn", chunk_rows=1024,
+    )
+    assert big["lid_median"] != small["lid_median"]
+
+
+def test_measure_draw_is_deterministic():
+    kwargs = dict(k=10, k_hub=5, nlist=4, seed=42, backend="sklearn", chunk_rows=1024)
+    first = hub_stability.measure_draw(_draw(), **kwargs)
+    second = hub_stability.measure_draw(_draw(), **kwargs)
+    assert first == second
+
+
+def test_measure_draw_agrees_between_backends():
+    kwargs = dict(k=10, k_hub=5, nlist=4, seed=42, chunk_rows=1024)
+    sk = hub_stability.measure_draw(_draw(), backend="sklearn", **kwargs)
+    torch_ = hub_stability.measure_draw(_draw(), backend="torch", **kwargs)
+    for name in hub_stability.STATISTICS:
+        assert sk[name] == pytest.approx(torch_[name], rel=1e-4, abs=1e-6), name

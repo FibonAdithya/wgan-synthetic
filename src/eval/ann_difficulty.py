@@ -45,6 +45,33 @@ def gini(occupancy: np.ndarray) -> float:
     return float(2.0 * np.sum(index * x) / (n * total) - (n + 1.0) / n)
 
 
+def _exclude_self(
+    dist: np.ndarray, idx: np.ndarray, k_eff: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """Drop each row's own index from its neighbour list.
+
+    Self-exclusion is by index, not by dropping the first column. Exact
+    duplicate rows tie with the query at distance 0 and neither backend
+    promises the query sorts first, so column-dropping can silently leave a
+    point in its own neighbour list -- which would drag its k-occurrence up
+    and its LID down.
+
+    Callers pass the raw (n, k_eff + 1) arrays. A row whose own index did not
+    come back has k_eff + 1 keepers; its farthest is dropped so every row
+    yields exactly k_eff.
+    """
+    n = idx.shape[0]
+    rows = np.arange(n)[:, None]
+    keep = idx != rows
+    surplus = keep.sum(axis=1) > k_eff
+    if np.any(surplus):
+        last_true = (keep.shape[1] - 1) - np.argmax(keep[:, ::-1], axis=1)
+        keep[surplus, last_true[surplus]] = False
+
+    selected = np.where(keep)
+    return dist[selected].reshape(n, k_eff), idx[selected].reshape(n, k_eff)
+
+
 def knn(x: np.ndarray, k: int) -> tuple[np.ndarray, np.ndarray, int]:
     """Nearest neighbours of every row among the *other* rows.
 
@@ -65,21 +92,8 @@ def knn(x: np.ndarray, k: int) -> tuple[np.ndarray, np.ndarray, int]:
     nn = NearestNeighbors(n_neighbors=k_eff + 1, algorithm="brute").fit(x)
     dist, idx = nn.kneighbors(x)
 
-    rows = np.arange(n)[:, None]
-    keep = idx != rows
-    # A row whose own index did not come back has k_eff+1 keepers; drop its
-    # farthest so every row yields exactly k_eff.
-    surplus = keep.sum(axis=1) > k_eff
-    if np.any(surplus):
-        last_true = (keep.shape[1] - 1) - np.argmax(keep[:, ::-1], axis=1)
-        keep[surplus, last_true[surplus]] = False
-
-    selected = np.where(keep)
-    return (
-        dist[selected].reshape(n, k_eff),
-        idx[selected].reshape(n, k_eff),
-        k_eff,
-    )
+    dist, idx = _exclude_self(dist, idx, k_eff)
+    return dist, idx, k_eff
 
 
 def survivor_mask(dist: np.ndarray) -> np.ndarray:

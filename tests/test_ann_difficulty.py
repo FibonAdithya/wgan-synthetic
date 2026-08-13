@@ -1,5 +1,7 @@
 import numpy as np
+import pytest
 
+from src.eval import ann_difficulty
 from src.eval.ann_difficulty import (
     cell_occupancy,
     compute,
@@ -304,3 +306,27 @@ def test_compute_discards_every_query_when_k_clamps_to_one():
     assert metrics.k == 1
     assert metrics.discarded_queries == metrics.num_rows
     assert summary(metrics)["lid_median"] is None
+
+
+def test_exclude_self_drops_the_query_from_its_own_row():
+    # Row 1 came back as its own nearest neighbour, which is what the
+    # +1 column exists to absorb.
+    dist = np.array([[0.0, 1.0, 2.0], [0.0, 1.5, 2.5]])
+    idx = np.array([[0, 1, 2], [1, 0, 2]])
+
+    kept_dist, kept_idx = ann_difficulty._exclude_self(dist, idx, 2)
+
+    np.testing.assert_array_equal(kept_idx, [[1, 2], [0, 2]])
+    np.testing.assert_allclose(kept_dist, [[1.0, 2.0], [1.5, 2.5]])
+
+
+def test_exclude_self_drops_the_farthest_when_the_query_did_not_come_back():
+    # Row 0's own index is absent, so it has three keepers for two slots
+    # and the farthest must go -- not an arbitrary one.
+    dist = np.array([[0.5, 1.0, 2.0]])
+    idx = np.array([[7, 8, 9]])
+
+    kept_dist, kept_idx = ann_difficulty._exclude_self(dist, idx, 2)
+
+    np.testing.assert_array_equal(kept_idx, [[7, 8]])
+    np.testing.assert_allclose(kept_dist, [[0.5, 1.0]])

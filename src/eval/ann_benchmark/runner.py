@@ -1,0 +1,238 @@
+"""The benchmark grid: every corpus against every index against every knob.
+
+Nothing here names cuVS. The runner reaches indexes only through
+`IndexAdapter`, which is what makes the whole loop -- timing, fencing, failure
+handling, incremental output -- testable on a CPU-only box with fake adapters.
+
+Timing discipline: `adapter.sync()` is called immediately before the clock
+starts and immediately before it stops. cuVS calls are asynchronous, so an
+unfenced region times the launch queue rather than the work and every number
+in the table would be fiction. This is the single most important correctness
+property in the harness.
+
+Warmup: each cell issues one untimed, discarded search before its timed
+repeats. Measured on the box, CAGRA's first search over 1M vectors costs
+126.2 ms against an 82.2 ms steady state, and the very first cuVS search in a
+process pays seconds of one-time initialization on top of that. Without a
+warmup, that cold call would inflate every summary statistic -- including
+`min` -- with a cost that has nothing to do with steady-state throughput. The
+warmup is fenced the same way the timed repeats are, so its (discarded) work
+has fully landed before the first timed region's clock starts.
+"""
+
+from __future__ import annotations
+
+import json
+import time
+from collections.abc import Sequence
+from dataclasses import asdict, dataclass
+from pathlib import Path
+
+import numpy as np
+
+from src.eval.ann_benchmark import metrics
+from src.eval.ann_benchmark.corpora import Corpus
+from src.eval.ann_benchmark.indexes import IndexAdapter
+
+
+@dataclass(frozen=True)
+class BuildRecord:
+    corpus: str
+    index: str
+    train_seconds: float | None
+    add_seconds: float | None
+    index_bytes_estimated: int | None
+    params: dict[str, object]
+    peak_vram_bytes: int | None = None
+    failed: str | None = None
+
+
+@dataclass(frozen=True)
+class SearchRecord:
+    corpus: str
+    index: str
+    param_name: str
+    param_value: int | None
+    recall: float | None
+    qps_min: float | None
+    qps_median: float | None
+    qps_p95: float | None
+    num_queries: int
+    failed: str | None = None
+
+
+def _flush(
+    records_path: Path,
+    builds: Sequence[BuildRecord],
+    searches: Sequence[SearchRecord],
+) -> None:
+    """Rewrite the records file after every cell.
+
+    Rewriting rather than appending keeps the file valid JSON at all times, so
+    a job killed mid-grid leaves something readable rather than a truncated
+    array. The grid is a few hundred small records; the write cost is noise
+    next to a CAGRA build.
+    """
+    payload = {
+        "builds": [asdict(b) for b in builds],
+        "searches": [asdict(s) for s in searches],
+    }
+    records_path.parent.mkdir(parents=True, exist_ok=True)
+    records_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def _time_search(
+    adapter: IndexAdapter,
+    built,
+    queries: np.ndarray,
+    k: int,
+    param: int | None,
+    repeats: int,
+) -> tuple[np.ndarray, list[float]]:
+    """Run one untimed warmup, then `repeats` timed searches.
+
+    The whole query set goes in one call per repeat. GPU indexes are
+    throughput devices; issuing one query at a time would measure launch
+    latency rather than the index.
+
+    The warmup's result is discarded and never timed. It is fenced with
+    `sync()` on both sides regardless -- once before it runs, so it does not
+    race whatever fenced the previous cell, and once after, so its (async,
+    on-device) work has actually finished before the first timed clock
+    starts. Skipping that second fence would let the warmup's tail overlap
+    the first timed call and corrupt exactly the number this exists to fix.
+
+    Returns the *ids* from the last timed repeat, not the distances the
+    adapter reported alongside them: recall is scored from distances
+    recomputed against the stored vectors (see `metrics.
+    recompute_exact_distances`), never from what the index itself claims a
+    distance is -- that recomputation happens in the caller, after this
+    function returns, so it never falls inside a timed region.
+    """
+    adapter.sync()
+    adapter.search(built, queries, k, param)  # warmup: discarded, untimed
+    adapter.sync()
+
+    seconds: list[float] = []
+    ids = None
+    for _ in range(repeats):
+        adapter.sync()
+        started = time.perf_counter()
+        _, ids = adapter.search(built, queries, k, param)
+        adapter.sync()
+        seconds.append(time.perf_counter() - started)
+    return ids, seconds
+
+
+def run_grid(
+    corpora_list: Sequence[Corpus],
+    adapters: Sequence[IndexAdapter],
+    *,
+    k: int,
+    repeats: int,
+    records_path: Path,
+) -> tuple[list[BuildRecord], list[SearchRecord]]:
+    """Build every index over every corpus and sweep its search knob."""
+    records_path = Path(records_path)
+    builds: list[BuildRecord] = []
+    searches: list[SearchRecord] = []
+
+    for corpus in corpora_list:
+        vectors = np.load(corpus.vectors_path)
+        queries = np.load(corpus.queries_path)
+        # Recomputed from `truth_ids`, not loaded from `truth_distances.npy`.
+        # cuVS brute_force computes ground-truth distances via the
+        # ||x||^2 + ||q||^2 - 2 q.x expansion; `recompute_exact_distances`
+        # (used below for every adapter's found distances too) computes
+        # ((q - x)**2).sum(-1) in plain numpy. Both are exact squared L2
+        # mathematically, but they round differently in float32 -- measured
+        # on the box, a max relative difference of 4.6e-5 against
+        # `recall_at_k`'s 1e-6 tie tolerance, which alone was enough to
+        # score the `flat` exact index at ~0.97 recall instead of 1.0.
+        # Recomputing the truth side with the identical function used for
+        # the found side makes the two arithmetically identical, which is
+        # what an exact index scoring exactly 1.0 against exact ground
+        # truth depends on. `truth_distances.npy` is still written and
+        # cached (see `corpora._write_truth`) as the exact-kNN record; only
+        # scoring uses this recomputation instead.
+        truth_ids = np.load(corpus.truth_ids_path)
+        truth = metrics.recompute_exact_distances(vectors, queries, truth_ids)
+
+        for adapter in adapters:
+            try:
+                built = adapter.build(vectors)
+            except Exception as exc:  # noqa: BLE001 - one bad cell, not the grid
+                builds.append(
+                    BuildRecord(
+                        corpus=corpus.name,
+                        index=adapter.name,
+                        train_seconds=None,
+                        add_seconds=None,
+                        index_bytes_estimated=None,
+                        params=adapter.describe(),
+                        failed=f"{type(exc).__name__}: {exc}",
+                    )
+                )
+                _flush(records_path, builds, searches)
+                continue
+
+            builds.append(
+                BuildRecord(
+                    corpus=corpus.name,
+                    index=adapter.name,
+                    train_seconds=built.train_seconds,
+                    add_seconds=built.add_seconds,
+                    index_bytes_estimated=built.index_bytes_estimated,
+                    params=adapter.describe(),
+                    peak_vram_bytes=built.peak_vram_bytes,
+                )
+            )
+            _flush(records_path, builds, searches)
+
+            for param in adapter.sweep_params():
+                try:
+                    ids, seconds = _time_search(
+                        adapter, built, queries, k, param, repeats
+                    )
+                    # Scoring, not search: recomputed from the stored
+                    # vectors and the returned ids, outside every timed
+                    # region, so an adapter's own reported distances (e.g.
+                    # IVF-PQ's asymmetric, quantized ones) never enter the
+                    # recall figure.
+                    exact_distances = metrics.recompute_exact_distances(
+                        vectors, queries, ids
+                    )
+                    recall = metrics.recall_at_k(exact_distances, truth)
+                    throughput = [metrics.qps(queries.shape[0], s) for s in seconds]
+                    summary = metrics.summarize(throughput)
+                    searches.append(
+                        SearchRecord(
+                            corpus=corpus.name,
+                            index=adapter.name,
+                            param_name=adapter.param_name,
+                            param_value=param,
+                            recall=recall,
+                            qps_min=summary["min"],
+                            qps_median=summary["median"],
+                            qps_p95=summary["p95"],
+                            num_queries=int(queries.shape[0]),
+                        )
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    searches.append(
+                        SearchRecord(
+                            corpus=corpus.name,
+                            index=adapter.name,
+                            param_name=adapter.param_name,
+                            param_value=param,
+                            recall=None,
+                            qps_min=None,
+                            qps_median=None,
+                            qps_p95=None,
+                            num_queries=int(queries.shape[0]),
+                            failed=f"{type(exc).__name__}: {exc}",
+                        )
+                    )
+                _flush(records_path, builds, searches)
+
+    return builds, searches

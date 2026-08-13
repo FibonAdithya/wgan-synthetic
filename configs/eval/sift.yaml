@@ -36,3 +36,9 @@ variants:
   - name: v2
     config: configs/sift/v2.yaml
     run_dir: runs/x100k_sparse_clamp4
+  - name: v3
+    config: configs/sift/v3.yaml
+    run_dir: runs/sift_gan_v3
+  - name: v4
+    config: configs/sift/v4.yaml
+    run_dir: runs/x100k_structured

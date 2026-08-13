@@ -21,10 +21,13 @@ from src.eval.evaluate_distribution import covariance_fro, mmd_rbf, pairwise_his
 OUT = Path("/workspace/keep/sift-v0-v1-v4/distribution.json")
 CORPUS = "/workspace/data-cache/sift_1m.npy"
 LADDER = "/workspace/keep/sift-ladder"
+BASE = "/workspace/keep/sift-v0-v1-v4"
+# All three arms at 100k generator steps. v1's draw is the ladder's, which was
+# already sampled from the 100k x100k_ema_only checkpoint at this seed.
 RUNGS = {
-    "v0": f"{LADDER}/samples_v0.npy",
+    "v0": f"{BASE}/samples_v0_100k.npy",
     "v1": f"{LADDER}/samples_v1.npy",
-    "v4": f"{LADDER}/samples_v4.npy",
+    "v4": f"{BASE}/samples_v4_100k.npy",
 }
 N = 20000  # equal-N with the eda_report run
 SEED = 42

@@ -88,14 +88,24 @@ run-to-run noise. Its LID is not evidence: `lid_reg` fits LID's sufficient
 statistic directly. Neither rung's checkpoints are in this repo — they are on
 the training box, listed in each result page.
 
-That pair is `v3` against `v4`. Read further down the ladder and it stops being
-a story of progress: `docs/results/sift-v0-v1-v4/` measures `v0`, `v1` and `v4`
-against real `sift_1m.npy` in one invocation, and **`v0` — plain WGAN-GP — is
-closer to real than `v4` on all four gated statistics**, while emitting 11.8%
-negative components and no exact zeros at all. The four statistics constrain
-neighbourhood geometry and not support, so a rung can win them while producing
-vectors that are not plausible descriptors. That page argues for a support check
-beside the gate; setting one is a human's call.
+That pair is `v3` against `v4`, both at 30k steps.
+`docs/results/sift-v0-v1-v4/` reads `v0`, `v1` and `v4` against real
+`sift_1m.npy` **at a matched 100k steps**, and finds two things the 30k
+comparisons could not.
+
+First, **30k is not long enough to evaluate a regularized rung.** From 30k to
+100k, `v4` closes 38–98% of each gate gap while `v0` closes 15–28%; at 30k `v0`
+looks closer to real on all four statistics, and at 100k it is closer on one. A
+ladder comparison short enough to leave the regularized rung undertrained will
+systematically favour the simpler rung.
+
+Second, at 100k the ladder does progress — `v4` takes hubness skew and IVF Gini
+(the latter near-exactly, 0.3035 against 0.3040) and the per-dimension marginals,
+and it is the only rung on SIFT's support at all. But **`v0` stays closest on
+relative contrast, at 0.11x the seed floor, while emitting 12.3% negative
+components and no exact zeros.** Four statistics measuring neighbourhood geometry
+do not constrain support, so that page argues for a support check beside the
+gate; setting one is a human's call.
 
 Train `v0` (or any rung, by swapping the config):
 
@@ -158,6 +168,10 @@ gap -- one lands above the real value, the other below. Neither statistic can
 carry a meaningful band at this ladder's current distance from real, and neither
 should be used to attribute a rung-to-rung improvement. LID median is the one
 comfortably usable statistic; hubness skew is marginal.
+
+**This floor is measured at 30k steps.** `docs/results/sift-v0-v1-v4/` divides
+100k gaps by it for want of anything better, and says so; a 100k floor needs a
+second-seed 100k run and does not exist yet.
 
 **This is n=2.** A single paired difference has one degree of freedom: it
 establishes the floor's order of magnitude and nothing more, and the true spread

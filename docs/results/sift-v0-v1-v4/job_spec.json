@@ -1,15 +1,26 @@
 {
-  "state": "done",
-  "id": "wgan-synthetic-20260813T112648Z-e8d92a",
-  "lane": "cpu",
-  "project": "wgan-synthetic",
-  "commit": "2bf36ebb9d158b624e238c9dbce4ef931169c544",
-  "branch": "benchmark-algos",
-  "cmd": ["bash", "/workspace/keep/sift-v0-v1-v4/run_eda3.sh"],
-  "artifacts": [],
-  "timeout_s": 3600,
-  "attempts": 0,
-  "submitted_at": "2026-08-13T11:26:48Z",
-  "exit_code": 0,
-  "error": null
+  "training": {
+    "state": "done",
+    "id": "wgan-synthetic-20260813T114818Z-99681d",
+    "lane": "gpu",
+    "commit": "2bf36ebb9d158b624e238c9dbce4ef931169c544",
+    "branch": "benchmark-algos",
+    "cmd": ["python", "-m", "src.train.train_wgan_gp", "--config",
+            "/workspace/keep/sift-v0-v1-v4/v0_x100k_sift1m.yaml"],
+    "timeout_s": 14400,
+    "submitted_at": "2026-08-13T11:48:18Z",
+    "exit_code": 0,
+    "wall_clock_min": 112
+  },
+  "measurement": {
+    "state": "done",
+    "id": "wgan-synthetic-20260813T134527Z-46c59b",
+    "lane": "cpu",
+    "commit": "2bf36ebb9d158b624e238c9dbce4ef931169c544",
+    "branch": "benchmark-algos",
+    "cmd": ["bash", "/workspace/keep/sift-v0-v1-v4/run_100k.sh"],
+    "timeout_s": 7200,
+    "submitted_at": "2026-08-13T13:45:27Z",
+    "exit_code": 0
+  }
 }

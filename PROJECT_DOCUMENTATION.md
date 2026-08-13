@@ -228,10 +228,9 @@ is exactly one config change from the one above it, so a difference visible
 in an EDA overlay attributes to a single cause. Because the ladders are
 independent, a variant number means nothing across families: SIFT's `v2` and
 a future GIST `v2` are unrelated, and only ever compare within one dataset.
-Each family's ladder and its status live in its page under `docs/datasets/`;
-SIFT
-is the only family with trained rungs today, and the other five have a `v0`
-baseline config only.
+Each family's ladder and its status live in its page under `docs/datasets/`.
+SIFT and DEEP have trained rungs above `v0`; GloVe has a trained `v0` and
+nothing above it; the other three have a `v0` baseline config only.
 
 The SIFT ladder:
 

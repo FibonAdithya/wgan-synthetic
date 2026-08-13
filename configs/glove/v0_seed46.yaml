@@ -1,0 +1,67 @@
+# GloVe v0 seed sweep, run 46. Identical to configs/glove/v0.yaml in every
+# training hyperparameter -- that is the point of the exercise. Three things
+# differ, and each is listed here so a reader can confirm nothing else moved:
+#
+#   1. seed        42 -> 46   (the only difference from run 42)
+#   2. output_dir  runs/glove/v0 -> runs/glove/v0_seed46
+#   3. real_path   data/glove_250k.npy -> an absolute path (see below)
+#
+# Why this file exists rather than an edit to v0.yaml: v0 is a ladder rung,
+# and a rung is a historical record of a run that happened. Changing what it
+# points at would redefine what GloVe v0 reproduces, which AGENTS.md reserves
+# for a human decision. This config is a measurement instrument, not a rung.
+#
+# Why an absolute real_path: the gpuq runner executes each job in a fresh
+# detached git worktree cut from the pinned commit, and data/ is gitignored,
+# so a relative data/... path does not exist at run time. That makes this
+# config box-specific by construction, which is acceptable for an instrument
+# and would not be for a rung.
+#
+# Why five of these: GloVe v0 has never been trained, and a single run would
+# give the ladder a baseline with no variance estimate -- the defect
+# docs/datasets/deep.md documents in its own ladder, where a reseed moved a
+# gap tenfold. docs/datasets/sift.md puts the number at three to five seeds.
+seed: 46
+device: auto
+output_dir: runs/glove/v0_seed46
+
+data:
+  real_path: /workspace/data-cache/glove_250k.npy
+  format: npy
+  metric: angular
+  descriptor_dim: 100
+  holdout_fraction: 0.05
+  synthetic_if_missing: false
+  synthetic_num_vectors: 100000
+  preprocess:
+    center: false
+    whiten: false
+    l2_normalize: true
+
+model:
+  # 128 over a 100-dimensional corpus is deliberate. GloVe's measured
+  # effective rank is 94.6 of 100, so there is no bottleneck to discover and a
+  # latent at or below the corpus rank would impose one. configs/deep/v0.yaml
+  # corrected the same sift-inherited 128 down to its descriptor_dim, but that
+  # was driven by deep's effective rank of 65 of 96 and does not transfer.
+  latent_dim: 128
+  generator_hidden_dims: [512, 1024, 1024]
+  critic_hidden_dims: [1024, 512, 256]
+  negative_slope: 0.2
+  generator_type: mlp
+
+training:
+  batch_size: 512
+  num_gen_steps: 30000
+  n_critic: 3
+  lr_g: 1.0e-4
+  lr_d: 1.0e-4
+  betas: [0.0, 0.9]
+  lambda_gp: 5.0
+  distance_reg_alpha: 0.0
+  distance_reg_max_points: 256
+  num_workers: 0
+  amp: false
+  log_every: 250
+  eval_every: 1000
+  save_every: 2000

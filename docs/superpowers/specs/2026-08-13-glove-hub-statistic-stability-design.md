@@ -307,27 +307,38 @@ artifacts are committed (`glove_hub_stability_provenance.json`,
 the GPU path agrees with sklearn on real data at scale — the unit tests can
 only compare the two on CPU, since the development machine has no card.
 
-**It is the draws, and the cause is a two-stage subsample.** `eda_report`
-reduces a corpus in two steps: `subsample` to `--max-vectors` (default 50,000,
-seed 42) in `eda/series.py`, and then `_subsample` again to `--ann-max-rows`
-(default 20,000) inside `ann_difficulty.compute`. Every draw behind
-`glove_noise_floor.json` is therefore 20,000 rows taken from the *same*
-50,000-row slice of the corpus — 40% of that slice per draw, all eight
-confined to it. This sweep draws from the whole file.
+**It is the draws, and `eda_report` reduces a corpus twice.** Verified in the
+code: `subsample` cuts to `--max-vectors` (default 50,000, at `cfg.seed`) in
+`eda/series.py`, and then `_subsample` cuts again to `--ann-max-rows` (default
+20,000) inside `ann_difficulty.compute`. What the ANN pass measures on that
+path is a subsample of a subsample. This sweep draws once, from the whole file.
 
-So the two numbers estimate different things. The committed mean estimates LID
-for one particular 50,000-row subset; this sweep's estimates it for the corpus.
-A 0.28% gap between those is unremarkable, and no verdict in this study turns
-on it: LID's own draw-to-draw range here is 0.63%, and `v0` sits at 16.4
-against real's 35.2, a factor of two away.
+**How far that explains the committed figures cannot be checked from this
+tree.** Issue #29 already records that the script which produced
+`glove_noise_floor.json` is absent, so the measurement is recorded rather than
+reproducible, and the JSON stores only `n`, `k`, `seeds: 8` and the per-draw
+values. Whether those eight draws varied the ANN seed inside one fixed
+50,000-row pool — in which case they share about 40% of their rows pairwise —
+or varied both stages, is not recoverable. Both readings are consistent with
+what is committed; they differ in how much less than fully independent the
+eight draws were.
+
+What is certain either way is that the committed figures and this sweep's do
+not sample the same population, so they are not required to agree beyond
+sampling error, and a 0.28% gap on the statistic most sensitive to distance
+magnitudes is unremarkable. No verdict in this study turns on it: LID's own
+draw-to-draw range here is 0.63%, and `v0` sits at 16.4 against real's 35.2, a
+factor of two away.
 
 **The consequence for issue #29 is the part worth keeping.** #29's headline —
-hubness skew's range being 108% of its mean — was measured in the overlapping,
-single-slice regime described above, which understates spread for exactly the
-reason `allocate_draws` flags. Measured with eight disjoint draws from the full
-250,000, the range is 95.62%. The qualitative claim survives; it is now
-measured on a wider pool with independent draws, and the sweep proper measures
-it wider still.
+hubness skew's range being 108% of its mean — rests on those eight draws, whose
+independence cannot now be established and whose most likely construction makes
+them overlapping. Eight *disjoint* draws from the full 250,000 give 95.62%.
+Same order, and the qualitative claim survives; but the sweep proper is the
+first measurement of it whose draw allocation is recorded in the artifact,
+which is what `draws_disjoint` exists for. Recovering the original procedure is
+not worth a job: the study's conclusions rest on measurements it made itself,
+under conditions its own JSON records.
 
 ## Success criteria
 

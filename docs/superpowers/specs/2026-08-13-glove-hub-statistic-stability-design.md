@@ -286,11 +286,56 @@ decision point in the plan, not an automatic branch.
   are inclusive.
 - **Harness smoke test** on a small random array, one N, three draws.
 
+## What the provenance cell found
+
+Recorded here because it changes how the committed floor should be read, and
+because the strict form of the check did not pass.
+
+**Three of four statistics reproduced; LID median missed by 0.28%.** Against
+`glove_noise_floor.json`, relative contrast (−1.46 SE), hubness skew (+0.42 SE)
+and IVF Gini (−0.36 SE) all landed inside the committed ranges. LID median came
+in at 35.2206 against a committed mean of 35.1238 and a committed max of
+35.2086 — outside by 0.012, which is 3.06 standard errors and 0.28% of the
+mean.
+
+**It is not the torch backend.** The same cell was re-run with
+`--backend sklearn` and the two agree to 0.000% on every one of the six
+statistics; `hub_share_top1pct` is bit-identical across all eight draws, and
+the worst per-draw disagreement anywhere is 8.7e-05 on LID median. Both
+artifacts are committed (`glove_hub_stability_provenance.json`,
+`glove_hub_stability_sklearn_control.json`). This is also the only check that
+the GPU path agrees with sklearn on real data at scale — the unit tests can
+only compare the two on CPU, since the development machine has no card.
+
+**It is the draws, and the cause is a two-stage subsample.** `eda_report`
+reduces a corpus in two steps: `subsample` to `--max-vectors` (default 50,000,
+seed 42) in `eda/series.py`, and then `_subsample` again to `--ann-max-rows`
+(default 20,000) inside `ann_difficulty.compute`. Every draw behind
+`glove_noise_floor.json` is therefore 20,000 rows taken from the *same*
+50,000-row slice of the corpus — 40% of that slice per draw, all eight
+confined to it. This sweep draws from the whole file.
+
+So the two numbers estimate different things. The committed mean estimates LID
+for one particular 50,000-row subset; this sweep's estimates it for the corpus.
+A 0.28% gap between those is unremarkable, and no verdict in this study turns
+on it: LID's own draw-to-draw range here is 0.63%, and `v0` sits at 16.4
+against real's 35.2, a factor of two away.
+
+**The consequence for issue #29 is the part worth keeping.** #29's headline —
+hubness skew's range being 108% of its mean — was measured in the overlapping,
+single-slice regime described above, which understates spread for exactly the
+reason `allocate_draws` flags. Measured with eight disjoint draws from the full
+250,000, the range is 95.62%. The qualitative claim survives; it is now
+measured on a wider pool with independent draws, and the sweep proper measures
+it wider still.
+
 ## Success criteria
 
 - The provenance cell at N=20,000 from `glove_250k.npy` reproduces
   `glove_noise_floor.json`'s ranges. If it does not, the sweep stops and the
-  discrepancy is the finding.
+  discrepancy is the finding. **Outcome: three of four reproduced, LID median
+  missed by 0.28%, diagnosed as a two-stage-subsample difference rather than a
+  code defect — see `## What the provenance cell found`.**
 - `docs/datasets/glove_hub_stability.json` and
   `docs/datasets/deep_hub_stability.json` are committed, hold every raw draw,
   and their verdicts can be recomputed from their own contents.

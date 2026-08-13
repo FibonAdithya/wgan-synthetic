@@ -1,6 +1,15 @@
 > **AI-generated working note.** Written by Claude during development and kept
 > for provenance. It is not the source of truth: where this file disagrees with
 > `PROJECT_DOCUMENTATION.md`, the latter wins.
+>
+> **The API below is out of date.** A 2026-08-13 code review found three
+> measurement bugs in the shipped harness, and fixing them changed its shape:
+> `benchmark_cell` was replaced by `run_repeat` plus an interleaved scheduler
+> in `run_grid`, and `throughput_vectors_per_second` was split into
+> `generate_vectors_per_second` and `end_to_end_vectors_per_second`. See
+> `PROJECT_DOCUMENTATION.md` § "4b) Benchmark sampling cost" for the current
+> interface and `docs/results/generation-timing/README.md` for which of this
+> design's conclusions were withdrawn.
 
 # Generation-Timing Benchmark
 

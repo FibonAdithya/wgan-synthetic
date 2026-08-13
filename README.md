@@ -18,6 +18,10 @@ Human-maintained, and the source of truth:
   on disk.
 - `docs/datasets/` — one page per benchmark family: structure, source,
   canonical N and k, measured profile, model family, ladder and gate bands.
+- `docs/results/` — curated measurement records, each with the queue job spec
+  that produced it. `generation-timing/` holds the sampling cost benchmark;
+  `sift-generator-report/index.html` is the standalone team briefing built
+  from those records.
 
 AI working notes, kept for provenance and **not** authoritative:
 
@@ -100,6 +104,18 @@ fetcher does not produce") for why the SIFT configs still point at
      `python -m src.eval.compare_variants --dataset <family>` instead, which
      inverts the fitted transform. `src.sample.generate` does not, and would
      emit vectors in the transformed space.
+6. Benchmark what sampling costs:
+   - `python -m src.sample.benchmark --device cuda:0 --num-samples 100000 --num-samples 1000000 --output-dir benchmark-output`
+   - Times device-side generation, the device-to-host copy, and optional
+     `.npy` writes for each config at each corpus size, and records model
+     parameter bytes and peak sampling VRAM. Defaults to the matched SIFT
+     v1/v2/v4 configs with randomly initialized weights, so it measures
+     architecture cost, not checkpoint quality; pass `--checkpoint` with a
+     single `--config` to time real weights.
+   - Repeats are interleaved across all config/N cells rather than run
+     back-to-back, so machine state cannot alias onto the corpus-size axis.
+   - Submit it to the GPU queue rather than running it directly. Measured
+     results and analysis live in `docs/results/generation-timing/`.
 
 ## Notes
 

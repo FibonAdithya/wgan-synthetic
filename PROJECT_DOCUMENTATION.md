@@ -774,6 +774,48 @@ produce").
   --output-path runs/wgan_sift1m_real_default/synthetic_1m.npy
 ```
 
+## 4b) Benchmark sampling cost
+
+```bash
+.venv/bin/python -m src.sample.benchmark \
+  --device cuda:0 \
+  --num-samples 100000 \
+  --num-samples 1000000 \
+  --output-dir benchmark-output
+```
+
+Writes `generation_benchmark.json` (full phase-level record) and
+`generation_benchmark.md` (budgeting table) into `--output-dir`. For each
+config/N cell it reports min, median, and p95 over `--repeats` passes for
+device-side generation, the device-to-host copy plus array assembly, and
+optional `.npy` writes, along with exact model parameter bytes, peak sampling
+VRAM above the repeat's starting allocation, and both generate-only and
+end-to-end throughput.
+
+Defaults to `configs/sift/{v1,v2,v4}.yaml` with randomly initialized weights:
+it measures architecture cost, not checkpoint quality. Pass `--checkpoint`
+together with exactly one `--config` to time trained weights.
+
+Measurement properties that the numbers depend on:
+
+- The warmup runs the same `normalize_l2(generator(z))` expression the timed
+  region runs, so no kernel initializes inside the first measured cell.
+- Batches are copied directly into the preallocated host array; there is no
+  intermediate pageable tensor.
+- Repeats are interleaved as re-randomized rounds over every config/N cell
+  instead of running a cell's repeats back-to-back, so slow-varying machine
+  state cannot alias onto the corpus-size axis.
+- All configs are held resident so their cells can interleave. Peak *reserved*
+  VRAM is therefore not attributable per architecture; peak *allocated* above
+  baseline is.
+- `--save-dir` writes one corpus per cell under `<slug>/<N>/samples.npy`,
+  where the slug is the config's family and stem, so `configs/sift/v1.yaml`
+  and `configs/deep/v1.yaml` do not collide.
+
+Run it through the GPU queue rather than directly. Curated results, linearity
+fits, and the caveats attached to them are in
+`docs/results/generation-timing/README.md`.
+
 ## 5) Run file-to-file evaluation
 
 ```bash

@@ -1368,6 +1368,153 @@ a *random* sample rather than a prefix, so `glove_1m.npy` is not a superset of
 
 ---
 
+### Task 7b: Preprocess every series the way the committed figures were measured
+
+**Added mid-execution.** The first provenance run (job `…T114343Z-335ea5`) came back nothing like `docs/datasets/glove_noise_floor.json` — hubness skew 37.0 against a committed 4.4976, relative contrast 1.536 against 1.3895. The cause is that `hub_stability` loads `.npy` files and measures them raw, while every committed figure for this family was measured at `preprocess: l2`. Verified on the box: `glove_250k.npy` has row norms spanning 2.1658–11.3325, and the `v0` samples come out at exactly 1.0.
+
+That asymmetry is the serious half. Left alone, the sweep would compare raw real vectors against unit-norm synthetic ones and read the difference as a generator deficit — condition 2 would have been measuring the normalisation.
+
+**Files:**
+- Modify: `src/eval/hub_stability.py`
+- Test: `tests/test_hub_stability.py`
+
+**Interfaces:**
+- Consumes: `src.eval.eda.series.maybe_l2_normalize(x, mode, eps=1.0e-8) -> np.ndarray` — the shared rule, already imported this way by `evaluate_file_to_file.py`, `plot_embedding_clusters.py`, `plot_distance_cdf.py` and `plot_distance_cdf_pillow.py`. It returns `x` unchanged for `mode="none"`, and divides by the row norm clipped at `eps` otherwise. Importing it does **not** pull plotly (checked).
+- Produces: `sweep(..., preprocess: str)` and a `--preprocess` CLI flag.
+
+- [ ] **Step 1: Write the failing tests**
+
+Add to `tests/test_hub_stability.py`:
+
+```python
+def test_sweep_l2_normalizes_every_series_by_default():
+    # Real is raw with big norms; the synthetic series is already unit-norm.
+    # Under the default the two become comparable; under "none" they do not.
+    rng = np.random.default_rng(5)
+    raw = (rng.standard_normal((400, 8)) * 7.0).astype(np.float32)
+    unit = rng.standard_normal((400, 8)).astype(np.float32)
+    unit /= np.linalg.norm(unit, axis=1, keepdims=True)
+
+    normalized = hub_stability.sweep(
+        raw, {"a": unit, "b": unit}, **_sweep_kwargs(preprocess="l2")
+    )
+    untouched = hub_stability.sweep(
+        raw, {"a": unit, "b": unit}, **_sweep_kwargs(preprocess="none")
+    )
+
+    assert normalized != untouched
+    assert normalized["conditions"]["preprocess"] == "l2"
+    assert untouched["conditions"]["preprocess"] == "none"
+
+
+def test_sweep_leaves_already_normalized_input_alone():
+    rng = np.random.default_rng(6)
+    unit = rng.standard_normal((400, 8)).astype(np.float32)
+    unit /= np.linalg.norm(unit, axis=1, keepdims=True)
+
+    normalized = hub_stability.sweep(unit, {}, **_sweep_kwargs(preprocess="l2"))
+    untouched = hub_stability.sweep(unit, {}, **_sweep_kwargs(preprocess="none"))
+
+    for name in hub_stability.STATISTICS:
+        a = normalized["cells"][0]["real"]["spread"][name]["mean"]
+        b = untouched["cells"][0]["real"]["spread"][name]["mean"]
+        assert a == pytest.approx(b, rel=1e-6), name
+
+
+def test_cli_defaults_to_l2_and_records_it(tmp_path, monkeypatch, capsys):
+    real_path = tmp_path / "real.npy"
+    np.save(real_path, (_draw(rows=400, seed=1) * 5.0).astype(np.float32))
+    output = tmp_path / "out.json"
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "hub_stability",
+            "--real-path", str(real_path),
+            "--n", "60", "--draws", "3",
+            "--k", "8", "--k-hub", "4", "--nlist", "4",
+            "--output", str(output),
+        ],
+    )
+    hub_stability.main()
+
+    written = json.loads(output.read_text(encoding="utf-8"))
+    assert written["conditions"]["preprocess"] == "l2"
+```
+
+`_sweep_kwargs` must gain `preprocess="l2"` in its default dict so the existing sweep tests keep passing unchanged.
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/python -m pytest tests/test_hub_stability.py -k preprocess -v`
+Expected: FAIL with `TypeError: sweep() got an unexpected keyword argument 'preprocess'`
+
+- [ ] **Step 3: Apply the preprocessing**
+
+Import the shared rule at the top of `src/eval/hub_stability.py`:
+
+```python
+from src.eval.eda.series import maybe_l2_normalize
+```
+
+Add `preprocess: str` to `sweep`'s keyword-only parameters, and normalise both sides once, before any draw is allocated — the rule is per-row, so doing it up front rather than per-draw is equivalent and cheaper:
+
+```python
+    real = maybe_l2_normalize(real, preprocess)
+    synthetic = {
+        label: maybe_l2_normalize(x, preprocess) for label, x in synthetic.items()
+    }
+```
+
+Record it in the `measure` conditions dict that already reaches the output:
+
+```python
+        "preprocess": preprocess,
+```
+
+Note `measure` is also splatted into `measure_draw`, which does not take a `preprocess` argument — so build the recorded conditions separately from the kwargs passed to `measure_draw`, rather than adding a parameter `measure_draw` would reject.
+
+Add the CLI flag:
+
+```python
+    parser.add_argument(
+        "--preprocess",
+        type=str,
+        default="l2",
+        choices=("l2", "none"),
+        help=(
+            "Row normalisation applied to every series before measuring. "
+            "Default l2, which is what every figure committed under "
+            "docs/datasets/ for these families was measured at. Passing "
+            "'none' measures the vectors as stored, which is not comparable "
+            "with those figures."
+        ),
+    )
+```
+
+and thread `preprocess=args.preprocess` through `main`'s `sweep` call.
+
+Give `sweep`'s docstring a paragraph saying why this is not optional: the corpora on disk are raw while generator samples are already unit-norm, so measuring as-stored compares a raw corpus against a normalised one and reads the difference as a generator deficit.
+
+- [ ] **Step 4: Run the tests**
+
+Run: `/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/python -m pytest tests/test_hub_stability.py -v`
+Expected: PASS, including the pre-existing sweep tests.
+
+- [ ] **Step 5: Full check**
+
+Run: `cd /home/fibonadithya/.herdr/worktrees/wgan-synthetic/glove-v1-design && make check`
+Expected: clean.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/eval/hub_stability.py tests/test_hub_stability.py
+git commit -m "fix(eval): measure every series under the same normalisation"
+```
+
+---
+
 ### Task 7a: Write the two 1M corpora
 
 **Files:**
@@ -1476,7 +1623,9 @@ Nothing in the repository changed. Record the job id in the eventual PR descript
 
 ### Task 9: Run the provenance cell and check it against the committed floor
 
-Before any sweep number is believed, the new code must reproduce the measurement already in the tree. This runs the exact conditions `docs/datasets/glove_noise_floor.json` was measured under — N=20,000 drawn from `glove_250k.npy` — and its ranges must sit inside the committed ones.
+Before any sweep number is believed, the new code must reproduce the measurement already in the tree. This runs the exact conditions `docs/datasets/glove_noise_floor.json` was measured under — N=20,000 drawn from `glove_250k.npy`, at `preprocess: l2` — and its ranges must sit inside the committed ones.
+
+**Eight draws here, not sixteen.** This cell is a like-for-like check against a committed eight-draw measurement, so it matches it. Eight also keeps the draws disjoint: 8 × 20,000 fits a 250,000-row pool where 16 × 20,000 does not, and comparing an overlapping spread against a disjoint one would confound the check with the very overlap effect Task 4 exists to flag.
 
 **Files:**
 - Create: `docs/datasets/glove_hub_stability_provenance.json`
@@ -1489,7 +1638,7 @@ ssh tig-gpu '/venv/main/bin/gpuq submit --project wgan-synthetic \
   --artifact docs/datasets/glove_hub_stability_provenance.json \
   -- python -m src.eval.hub_stability \
       --real-path /workspace/data-cache/glove_250k.npy \
-      --n 20000 --draws 16 \
+      --n 20000 --draws 8 \
       --k 100 --k-hub 10 --nlist 256 --seed 42 \
       --backend torch \
       --output docs/datasets/glove_hub_stability_provenance.json'

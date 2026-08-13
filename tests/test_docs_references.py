@@ -69,18 +69,64 @@ REFERENCE = re.compile(
 # and doc prose naming a path on the GPU box will recur.
 
 # Paths that are correctly absent from a clean checkout. runs/ and the .npy
-# corpora are gitignored build products. The eval/ entries appear in
-# PROJECT_DOCUMENTATION.md's "Run artifact structure" list, where they are
-# relative to a run directory rather than to the repo root.
+# corpora are gitignored build products -- the corpora with or without their
+# data/ prefix, since AGENTS.md and data/README.md name several of them by
+# basename. The eval/ entries appear in PROJECT_DOCUMENTATION.md's "Run
+# artifact structure" list, where they are relative to a run directory rather
+# than to the repo root.
 GENERATED = (
     re.compile(r"^runs/"),
     re.compile(r"^data/.*\.(?:npy|fvecs)$"),
+    re.compile(r"^[^/]*\.(?:npy|fvecs)$"),
     re.compile(r"^eval(?:_file_to_file|_embeddings)?/"),
 )
 
 
 def is_generated(path: str) -> bool:
     return any(pattern.match(path) for pattern in GENERATED)
+
+
+# Bare filenames that name a *kind* of file rather than a path. Each is either
+# an artifact that exists once per run directory, or a module or config named
+# by basename in prose. None of them can resolve, and none of them should:
+# they are not citations of a place in this repo.
+#
+# Keep this list short. Anything added here is a reference this module has
+# agreed to stop checking, so a name that really does identify one file --
+# a document, a script -- belongs in the docs as a path, not in here.
+GENERIC_BASENAMES = frozenset(
+    {
+        # Per-run artifacts, described in "Run artifact structure".
+        "summary.json",
+        "run_config.yaml",
+        "run_metadata.json",
+        # Written once per --output-dir by src/eval/openai_structure.py, and
+        # named alongside summary.json for the same reason.
+        "structure.json",
+        # A module named by basename in prose. Citations that need to be
+        # checked are written as `src/eval/ann_difficulty.py::compute` and
+        # are covered by test_symbol_references_resolve.
+        "ann_difficulty.py",
+        # A rung, generically: every dataset family has its own v0.yaml.
+        "v0.yaml",
+        "v2.yaml",
+    }
+)
+
+
+def is_broken_reference(path: str, doc) -> bool:
+    """Does this reference name a place that should exist, and not exist?
+
+    Slash-bearing paths resolve from the repo root, as they always have. A
+    bare filename resolves from the citing document's directory as well --
+    that is what makes it a working relative link on GitHub, and it is how
+    docs/datasets/deep.md cites its sibling deep_ladder_summary.json.
+    """
+    if is_generated(path) or path in GENERIC_BASENAMES:
+        return False
+    if "/" in path:
+        return not (REPO_ROOT / path).exists()
+    return not (doc.parent / path).exists() and not (REPO_ROOT / path).exists()
 
 
 def iter_refs(doc):
@@ -100,14 +146,48 @@ def rel(doc) -> str:
     return str(doc.relative_to(REPO_ROOT))
 
 
+def test_is_broken_reference_sees_bare_root_level_filenames():
+    """Pin the predicate directly, the way slug and module_symbols are pinned.
+
+    The case this exists for: PR #38 accepted main's deletion of FOLLOWUPS.md
+    while PROJECT_DOCUMENTATION.md still cited it, and this module stayed
+    green throughout, because the check it has for exactly that skipped any
+    reference without a slash in it. A human reviewer caught the dangling
+    citation instead.
+
+    The distinctions below are the whole difficulty of the check, so they are
+    asserted here rather than left to whichever documents happen to exist.
+    """
+    root_doc = REPO_ROOT / "PROJECT_DOCUMENTATION.md"
+    dataset_doc = REPO_ROOT / "docs" / "datasets" / "deep.md"
+
+    # The regression itself: a root-level document that is gone.
+    assert is_broken_reference("FOLLOWUPS.md", root_doc)
+    assert not is_broken_reference("AGENTS.md", root_doc)
+
+    # A bare name resolves against the citing document's own directory too,
+    # which is what makes it a working relative link on GitHub. deep.md cites
+    # its sibling summary this way.
+    assert not is_broken_reference("deep_ladder_summary.json", dataset_doc)
+    assert is_broken_reference("deep_ladder_summary.json", root_doc)
+
+    # Generic basenames name a kind of file, not a path, and must stay exempt
+    # or the check is unusable.
+    assert not is_broken_reference("run_config.yaml", root_doc)
+    assert not is_broken_reference("ann_difficulty.py", root_doc)
+
+    # Slash-bearing paths keep the behaviour they already had.
+    assert is_broken_reference("src/train/no_such_module.py", root_doc)
+    assert not is_broken_reference("src/train/gpu_lock.py", root_doc)
+    assert not is_broken_reference("data/sift_1m.npy", root_doc)
+
+
 @pytest.mark.parametrize("doc", AUTHORITATIVE_DOCS, ids=rel)
 def test_path_references_resolve(doc):
     broken = [
         f"{rel(doc)}:{lineno} -> {match.group('path')}"
         for lineno, match in iter_refs(doc)
-        if "/" in match.group("path")
-        and not is_generated(match.group("path"))
-        and not (REPO_ROOT / match.group("path")).exists()
+        if is_broken_reference(match.group("path"), doc)
     ]
     assert not broken, "references to paths that do not exist: " + "; ".join(broken)
 

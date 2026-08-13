@@ -109,9 +109,23 @@ at 16 draws and at larger N for free.
 
 | axis | values |
 |---|---|
-| corpus | `data/glove_1m.npy`, `data/deep_1m.npy` |
+| corpus | `glove_1m.npy`, `deep_1m.npy` |
 | N | 20,000 / 50,000 / 100,000 / 250,000 |
 | draws per cell | 16 |
+| preprocess | `l2`, applied identically to every series |
+
+**The normalisation is a condition, not a detail.** Every figure committed
+under `docs/datasets/` for these families was measured at `preprocess: l2`,
+and a measurement taken at any other setting is not comparable with them. It
+also has to be applied to *every* series or the study measures the wrong
+thing: the real corpora are stored raw — `glove_250k.npy`'s row norms span
+2.1658 to 11.3325 — while generator samples come out at exactly 1.0. Comparing
+those two as stored would put a units mismatch into condition 2 and read it as
+a generator deficit.
+
+This was found the hard way. The first provenance run measured the vectors as
+stored and returned a hubness skew of 37.0 against the committed 4.4976, which
+is what the provenance cell exists to catch.
 
 Two corpora, because one cannot separate "this statistic is unstable" from
 "this corpus is pathological". GloVe's hubness skew is ~4.5; DEEP's is 1.94, a
@@ -124,9 +138,13 @@ spread only exists when the pool exceeds N: 16 "draws" of 250,000 rows from a
 250,000-row file are one draw repeated, with a spread of zero by construction.
 
 **One extra cell, for provenance.** N=20,000 from `glove_250k.npy`, the pool
-and size the committed eight draws used. Its numbers must land inside
-`glove_noise_floor.json`'s ranges before anything else in the sweep is
-believed. It doubles as a measurement of whether the pool change matters.
+and size the committed eight draws used — and at eight draws, not sixteen, so
+the comparison is like-for-like and the draws stay disjoint inside a 250,000
+row pool. Its numbers must land inside `glove_noise_floor.json`'s ranges
+before anything else in the sweep is believed. It doubles as a measurement of
+whether the pool change matters, and as the only check that the torch backend
+agrees with the sklearn path on real data at scale — the unit tests can only
+compare the two on CPU, since the development machine has no card.
 
 Sixteen draws rather than eight because the card makes it cheap and because
 #29's own complaint is that eight is thin for estimating a spread.

@@ -71,6 +71,83 @@ STATISTICS = (
 )
 
 
+# Pre-registered in the design spec before any number existed, and not to be
+# edited afterwards. Both constants come from precedent in the tree: GloVe's
+# three usable statistics sit at 0.32-3.68% range-of-mean against hubness
+# skew's 108.2%, and docs/datasets/sift.md already bolds "noise exceeds
+# signal" below 1x.
+STABLE_MAX_RANGE_PCT = 10.0
+MIN_SEPARATION_IN_RANGES = 1.0
+
+
+def evaluate_rule(
+    real_spread: dict,
+    synthetic_mean: float | None,
+    *,
+    draws_disjoint: bool,
+) -> dict:
+    """Apply the pre-registered rule to one (statistic, N) cell.
+
+    Two conditions. Stable: the real-side range is at most
+    STABLE_MAX_RANGE_PCT of the real-side mean. Discriminating: the synthetic
+    mean sits at least MIN_SEPARATION_IN_RANGES real-side ranges away, so a
+    band drawn around real would reject that generator. Both bounds are
+    inclusive.
+
+    Overlapping draws downgrade a pass to "provisional" rather than granting
+    it. Their spread is a lower bound on the true subsample spread, so a cell
+    that passes only there has not been shown to pass. Since draws are
+    disjoint at every N the pool can afford, this is exactly the spec's rule
+    that a statistic qualifying only at the largest N is provisional.
+
+    A corpus measured without a synthetic series -- DEEP, here -- can only be
+    judged on condition 1, and gets "stable" or "unstable" instead. It is
+    evidence about whether an instability generalises, not a vote on GloVe's
+    gate.
+    """
+    range_pct = float(real_spread["range_pct_of_mean"])
+    # Add small tolerance for floating point precision
+    stable = range_pct <= STABLE_MAX_RANGE_PCT + 1e-9
+
+    if synthetic_mean is None:
+        return {
+            "stable": stable,
+            "range_pct_of_mean": range_pct,
+            "separation_in_ranges": None,
+            "discriminating": None,
+            "draws_disjoint": draws_disjoint,
+            "verdict": "stable" if stable else "unstable",
+        }
+
+    real_range = float(real_spread["max"]) - float(real_spread["min"])
+    if real_range == 0.0:
+        # Every draw returned the same number. That is not a spread, and
+        # dividing by it would report infinite separation from a measurement
+        # that has not shown it can vary at all.
+        separation = None
+        discriminating = False
+    else:
+        separation = abs(float(real_spread["mean"]) - synthetic_mean) / real_range
+        # Add small tolerance for floating point precision
+        discriminating = separation >= MIN_SEPARATION_IN_RANGES - 1e-9
+
+    if not (stable and discriminating):
+        verdict = "rejected"
+    elif draws_disjoint:
+        verdict = "qualified"
+    else:
+        verdict = "provisional"
+
+    return {
+        "stable": stable,
+        "range_pct_of_mean": range_pct,
+        "separation_in_ranges": separation,
+        "discriminating": discriminating,
+        "draws_disjoint": draws_disjoint,
+        "verdict": verdict,
+    }
+
+
 def measure_draw(
     x: np.ndarray,
     *,

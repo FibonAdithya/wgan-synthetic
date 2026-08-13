@@ -88,3 +88,85 @@ def test_measure_draw_agrees_between_backends():
     torch_ = hub_stability.measure_draw(_draw(), backend="torch", **kwargs)
     for name in hub_stability.STATISTICS:
         assert sk[name] == pytest.approx(torch_[name], rel=1e-4, abs=1e-6), name
+
+
+def _spread(mean: float, low: float, high: float) -> dict:
+    return {
+        "mean": mean,
+        "std": 0.0,
+        "min": low,
+        "max": high,
+        "range_pct_of_mean": (high - low) / mean * 100.0,
+        "cv_pct": 0.0,
+    }
+
+
+def test_a_stable_and_discriminating_statistic_qualifies():
+    # 5% range, and the synthetic mean sits two ranges away.
+    verdict = hub_stability.evaluate_rule(
+        _spread(1.0, 0.975, 1.025), synthetic_mean=1.1, draws_disjoint=True
+    )
+    assert verdict["stable"] is True
+    assert verdict["discriminating"] is True
+    assert verdict["verdict"] == "qualified"
+
+
+def test_hubness_skews_measured_instability_is_rejected():
+    # The real numbers from docs/datasets/glove_noise_floor.json.
+    verdict = hub_stability.evaluate_rule(
+        _spread(4.4976, 3.4630, 8.3308), synthetic_mean=1.695891, draws_disjoint=True
+    )
+    assert verdict["stable"] is False
+    assert verdict["verdict"] == "rejected"
+
+
+def test_a_stable_statistic_that_cannot_separate_is_rejected():
+    verdict = hub_stability.evaluate_rule(
+        _spread(1.0, 0.95, 1.05), synthetic_mean=1.02, draws_disjoint=True
+    )
+    assert verdict["stable"] is True
+    assert verdict["discriminating"] is False
+    assert verdict["verdict"] == "rejected"
+
+
+def test_overlapping_draws_downgrade_a_pass_to_provisional():
+    verdict = hub_stability.evaluate_rule(
+        _spread(1.0, 0.975, 1.025), synthetic_mean=1.1, draws_disjoint=False
+    )
+    assert verdict["verdict"] == "provisional"
+
+
+def test_exactly_ten_percent_range_is_stable_because_the_bound_is_inclusive():
+    verdict = hub_stability.evaluate_rule(
+        _spread(1.0, 0.95, 1.05), synthetic_mean=2.0, draws_disjoint=True
+    )
+    assert verdict["range_pct_of_mean"] == pytest.approx(10.0)
+    assert verdict["stable"] is True
+    assert verdict["verdict"] == "qualified"
+
+
+def test_exactly_one_range_of_separation_discriminates():
+    spread = _spread(1.0, 0.975, 1.025)
+    verdict = hub_stability.evaluate_rule(
+        spread, synthetic_mean=1.05, draws_disjoint=True
+    )
+    assert verdict["separation_in_ranges"] == pytest.approx(1.0)
+    assert verdict["discriminating"] is True
+    assert verdict["verdict"] == "qualified"
+
+
+def test_a_corpus_with_no_synthetic_series_gets_a_stability_only_verdict():
+    verdict = hub_stability.evaluate_rule(
+        _spread(1.0, 0.975, 1.025), synthetic_mean=None, draws_disjoint=True
+    )
+    assert verdict["separation_in_ranges"] is None
+    assert verdict["discriminating"] is None
+    assert verdict["verdict"] == "stable"
+
+
+def test_a_zero_range_cannot_be_divided_into_and_does_not_discriminate():
+    verdict = hub_stability.evaluate_rule(
+        _spread(1.0, 1.0, 1.0), synthetic_mean=5.0, draws_disjoint=True
+    )
+    assert verdict["separation_in_ranges"] is None
+    assert verdict["verdict"] == "rejected"

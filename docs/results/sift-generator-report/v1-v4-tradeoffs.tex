@@ -1,0 +1,87 @@
+\documentclass[10pt]{article}
+
+\usepackage[margin=0.8in]{geometry}
+\usepackage{booktabs}
+\usepackage{microtype}
+\usepackage{siunitx}
+
+\sisetup{round-mode=places,round-precision=3}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.5em}
+
+\title{What Should Our SIFT GAN Reproduce?}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+\vspace{-2em}
+
+We trained several GANs on SIFT and looked at two kinds of similarity.  The
+first is the structure of the original data, measured component by component.
+The second is the distribution of nearest-neighbour relationships, which helps
+determine how difficult the data is for approximate nearest-neighbour (ANN)
+search.
+
+Here we compare two models.  The \textbf{Dense GAN} is a simple neural network
+trained with WGAN-GP.  The \textbf{Structured GAN}, our favourite model so far,
+was designed for SIFT: it can produce exact zeros, model relationships between
+SIFT components, and learn from local neighbourhoods.
+
+\section*{Where the results differ}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{ll S[table-format=2.3] S[table-format=2.3] S[table-format=2.3]}
+\toprule
+& {Measure} & {Real SIFT} & {Dense GAN} & {Structured GAN} \\
+\midrule
+ANN & LID median             & 17.738 & 17.450 & 16.336 \\
+    & Relative contrast      &  2.267 &  2.253 &  2.327 \\
+    & Hubness skew           &  1.884 &  2.096 &  1.777 \\
+    & IVF cell balance       &  0.304 &  0.284 &  0.300 \\
+\midrule
+Data & Exact zeros           &  0.230 &  0.000 &  0.232 \\
+     & Negative values       &  0.000 &  0.098 &  0.000 \\
+     & Effective rank        & 27.994 & 27.499 & 28.109 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The Dense GAN gives the closest match for LID.  This is surprising because it
+was not trained to match that measure.  It is less convincing as SIFT data: it
+produces no exact zeros, and almost 10\% of its values are negative.  Real SIFT
+values are non-negative and about 23\% are exactly zero.
+
+The Structured GAN closely matches these basic properties of real SIFT.  It is
+also closer on hubness and IVF cell balance.  However, it is further away on
+LID.  Its LID result also needs care: the model was trained using a closely
+related neighbourhood measure, while the Dense GAN's result was not fitted in
+this way.
+
+Relative contrast does not separate the two models.  The Dense GAN sits
+0.015 from real and the Structured GAN 0.059, but the 0.044 between them is
+smaller than the 0.048 that this statistic moves when only the training seed
+changes (\texttt{docs/datasets/sift.md}).
+The other three ANN gaps above are larger than their respective floors.  All
+figures are a single seed-7 draw with no error bars.
+
+The two models therefore tell different stories.  The Dense GAN produces less
+plausible SIFT vectors, but their local neighbourhood dimensionality is much
+closer to real SIFT.  The Structured GAN produces much more plausible SIFT
+vectors and is closer on hubness and IVF cell balance, but does not match
+every measure of ANN difficulty as closely.
+
+\section*{The question}
+
+What matters more for this project: reproducing the original SIFT distribution,
+or reproducing how difficult SIFT is for ANN search?
+
+If the goal is to create realistic SIFT-like data, the Structured GAN is the
+clearer choice.  If the goal is to create a realistic ANN workload, the Dense
+GAN cannot be dismissed simply because its values look less like SIFT.  We may
+instead want two separate tests: one for data fidelity and one for ANN
+difficulty.
+
+\end{document}

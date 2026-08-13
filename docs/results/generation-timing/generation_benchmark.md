@@ -1,14 +1,38 @@
-| Config | Architecture | N | Generate median (s) | To host median (s) | Budget p95 (s) | Vectors/s | Peak VRAM |
-|---|---|---:|---:|---:|---:|---:|---:|
-| configs/sift/v1.yaml | mlp | 1,000 | 0.000633 | 0.000922 | 0.052922 | 1579444.4 | 23.7 MiB |
-| configs/sift/v1.yaml | mlp | 10,000 | 0.005003 | 0.005200 | 0.013445 | 1998969.3 | 50.9 MiB |
-| configs/sift/v1.yaml | mlp | 100,000 | 0.048325 | 0.058765 | 0.112176 | 2069330.7 | 50.9 MiB |
-| configs/sift/v1.yaml | mlp | 1,000,000 | 0.482204 | 0.602553 | 1.127813 | 2073809.5 | 50.9 MiB |
-| configs/sift/v2.yaml | gated | 1,000 | 0.001077 | 0.000610 | 0.002756 | 928134.5 | 25.2 MiB |
-| configs/sift/v2.yaml | gated | 10,000 | 0.005744 | 0.005144 | 0.014835 | 1741073.1 | 55.4 MiB |
-| configs/sift/v2.yaml | gated | 100,000 | 0.055555 | 0.058383 | 0.121601 | 1800016.2 | 55.4 MiB |
-| configs/sift/v2.yaml | gated | 1,000,000 | 0.553515 | 0.596974 | 1.202580 | 1806634.4 | 55.4 MiB |
-| configs/sift/v4.yaml | structured_gated | 1,000 | 0.001571 | 0.000940 | 0.003848 | 636423.4 | 24.7 MiB |
-| configs/sift/v4.yaml | structured_gated | 10,000 | 0.007942 | 0.005085 | 0.017413 | 1259051.9 | 53.9 MiB |
-| configs/sift/v4.yaml | structured_gated | 100,000 | 0.077960 | 0.058768 | 0.145741 | 1282705.8 | 53.9 MiB |
-| configs/sift/v4.yaml | structured_gated | 1,000,000 | 0.778514 | 0.589870 | 1.441359 | 1284498.7 | 53.9 MiB |
+| Config | Architecture | N | Generate median (s) | To host median (s) | Budget p95 (s) | Generate vectors/s | End-to-end vectors/s | Model params | Incremental peak VRAM | Host output |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| configs/sift/v1.yaml | mlp | 1,000 | 0.000719 | 0.000218 | 0.000965 | 1391430.0 | 1067380.2 | 6.76 MiB | 8.3 MiB | 0.5 MiB |
+| configs/sift/v1.yaml | mlp | 10,000 | 0.005466 | 0.001432 | 0.006918 | 1829571.1 | 1449759.1 | 6.76 MiB | 36.0 MiB | 4.9 MiB |
+| configs/sift/v1.yaml | mlp | 100,000 | 0.052674 | 0.012633 | 0.089132 | 1898452.0 | 1531211.1 | 6.76 MiB | 36.0 MiB | 48.8 MiB |
+| configs/sift/v1.yaml | mlp | 200,000 | 0.107024 | 0.025381 | 0.137548 | 1868732.6 | 1510511.4 | 6.76 MiB | 36.0 MiB | 97.7 MiB |
+| configs/sift/v1.yaml | mlp | 300,000 | 0.160208 | 0.038602 | 0.228505 | 1872570.4 | 1508982.6 | 6.76 MiB | 36.0 MiB | 146.5 MiB |
+| configs/sift/v1.yaml | mlp | 400,000 | 0.217738 | 0.050466 | 0.365380 | 1837066.3 | 1491402.1 | 6.76 MiB | 36.0 MiB | 195.3 MiB |
+| configs/sift/v1.yaml | mlp | 500,000 | 0.268347 | 0.063424 | 0.447752 | 1863262.4 | 1507064.3 | 6.76 MiB | 36.0 MiB | 244.1 MiB |
+| configs/sift/v1.yaml | mlp | 600,000 | 0.320039 | 0.075335 | 0.400582 | 1874769.9 | 1517550.4 | 6.76 MiB | 36.0 MiB | 293.0 MiB |
+| configs/sift/v1.yaml | mlp | 700,000 | 0.375356 | 0.091981 | 0.497905 | 1864894.0 | 1497847.8 | 6.76 MiB | 36.0 MiB | 341.8 MiB |
+| configs/sift/v1.yaml | mlp | 800,000 | 0.429332 | 0.101742 | 0.533939 | 1863361.0 | 1506382.9 | 6.76 MiB | 36.0 MiB | 390.6 MiB |
+| configs/sift/v1.yaml | mlp | 900,000 | 0.483930 | 0.114714 | 0.602231 | 1859772.9 | 1503397.5 | 6.76 MiB | 36.0 MiB | 439.5 MiB |
+| configs/sift/v1.yaml | mlp | 1,000,000 | 0.533145 | 0.127606 | 0.895371 | 1875662.5 | 1513430.3 | 6.76 MiB | 36.0 MiB | 488.3 MiB |
+| configs/sift/v2.yaml | gated | 1,000 | 0.001434 | 0.000216 | 0.002032 | 697514.1 | 606072.4 | 7.26 MiB | 9.3 MiB | 0.5 MiB |
+| configs/sift/v2.yaml | gated | 10,000 | 0.006483 | 0.001459 | 0.008130 | 1542436.6 | 1259048.0 | 7.26 MiB | 40.0 MiB | 4.9 MiB |
+| configs/sift/v2.yaml | gated | 100,000 | 0.061213 | 0.012621 | 0.074549 | 1633651.0 | 1354402.5 | 7.26 MiB | 40.0 MiB | 48.8 MiB |
+| configs/sift/v2.yaml | gated | 200,000 | 0.121993 | 0.025451 | 0.150548 | 1639437.0 | 1356449.9 | 7.26 MiB | 40.0 MiB | 97.7 MiB |
+| configs/sift/v2.yaml | gated | 300,000 | 0.183874 | 0.038016 | 0.224739 | 1631550.3 | 1352017.6 | 7.26 MiB | 40.0 MiB | 146.5 MiB |
+| configs/sift/v2.yaml | gated | 400,000 | 0.244133 | 0.050512 | 0.299483 | 1638448.8 | 1357566.1 | 7.26 MiB | 40.0 MiB | 195.3 MiB |
+| configs/sift/v2.yaml | gated | 500,000 | 0.281913 | 0.204033 | 0.553169 | 1773596.8 | 1028920.1 | 7.26 MiB | 40.0 MiB | 244.1 MiB |
+| configs/sift/v2.yaml | gated | 600,000 | 0.368684 | 0.075559 | 0.588547 | 1627410.3 | 1350612.6 | 7.26 MiB | 40.0 MiB | 293.0 MiB |
+| configs/sift/v2.yaml | gated | 700,000 | 0.431652 | 0.089550 | 0.526007 | 1621675.0 | 1343048.6 | 7.26 MiB | 40.0 MiB | 341.8 MiB |
+| configs/sift/v2.yaml | gated | 800,000 | 0.491858 | 0.101871 | 0.595477 | 1626486.5 | 1347417.3 | 7.26 MiB | 40.0 MiB | 390.6 MiB |
+| configs/sift/v2.yaml | gated | 900,000 | 0.554251 | 0.114154 | 0.730796 | 1623813.9 | 1346489.7 | 7.26 MiB | 40.0 MiB | 439.5 MiB |
+| configs/sift/v2.yaml | gated | 1,000,000 | 0.615993 | 0.126498 | 0.822192 | 1623394.1 | 1346817.0 | 7.26 MiB | 40.0 MiB | 488.3 MiB |
+| configs/sift/v4.yaml | structured_gated | 1,000 | 0.001990 | 0.000215 | 0.003678 | 502414.3 | 453367.5 | 7.27 MiB | 9.5 MiB | 0.5 MiB |
+| configs/sift/v4.yaml | structured_gated | 10,000 | 0.009149 | 0.001450 | 0.014027 | 1093053.5 | 943509.3 | 7.27 MiB | 38.5 MiB | 4.9 MiB |
+| configs/sift/v4.yaml | structured_gated | 100,000 | 0.086607 | 0.012641 | 0.124874 | 1154645.8 | 1007576.5 | 7.27 MiB | 38.5 MiB | 48.8 MiB |
+| configs/sift/v4.yaml | structured_gated | 200,000 | 0.171514 | 0.025439 | 0.269500 | 1166083.4 | 1015471.6 | 7.27 MiB | 38.5 MiB | 97.7 MiB |
+| configs/sift/v4.yaml | structured_gated | 300,000 | 0.260543 | 0.038038 | 0.300112 | 1151439.2 | 1004750.8 | 7.27 MiB | 38.5 MiB | 146.5 MiB |
+| configs/sift/v4.yaml | structured_gated | 400,000 | 0.346319 | 0.050659 | 0.398611 | 1155005.9 | 1007613.8 | 7.27 MiB | 38.5 MiB | 195.3 MiB |
+| configs/sift/v4.yaml | structured_gated | 500,000 | 0.434105 | 0.063444 | 0.610923 | 1151794.8 | 1004926.0 | 7.27 MiB | 38.5 MiB | 244.1 MiB |
+| configs/sift/v4.yaml | structured_gated | 600,000 | 0.519300 | 0.075823 | 0.597233 | 1155401.1 | 1008194.8 | 7.27 MiB | 38.5 MiB | 293.0 MiB |
+| configs/sift/v4.yaml | structured_gated | 700,000 | 0.604539 | 0.089341 | 0.857905 | 1157906.6 | 1008819.5 | 7.27 MiB | 38.5 MiB | 341.8 MiB |
+| configs/sift/v4.yaml | structured_gated | 800,000 | 0.691601 | 0.101718 | 0.795602 | 1156736.2 | 1008421.5 | 7.27 MiB | 38.5 MiB | 390.6 MiB |
+| configs/sift/v4.yaml | structured_gated | 900,000 | 0.777595 | 0.114089 | 0.894615 | 1157415.5 | 1009326.7 | 7.27 MiB | 38.5 MiB | 439.5 MiB |
+| configs/sift/v4.yaml | structured_gated | 1,000,000 | 0.867554 | 0.128971 | 1.041117 | 1152665.7 | 1003486.7 | 7.27 MiB | 38.5 MiB | 488.3 MiB |

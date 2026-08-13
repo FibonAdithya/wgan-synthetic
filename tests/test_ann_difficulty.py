@@ -389,3 +389,40 @@ def test_torch_backend_is_unaffected_by_chunk_width():
 
     np.testing.assert_array_equal(wide[1], narrow[1])
     np.testing.assert_allclose(wide[0], narrow[0], rtol=1e-5, atol=1e-6)
+
+
+def test_hubness_gini_is_zero_when_every_point_is_drawn_on_equally():
+    counts = np.full(100, 7)
+    assert ann_difficulty.hubness_gini(counts) == pytest.approx(0.0, abs=1e-12)
+
+
+def test_hubness_gini_approaches_one_when_a_single_hub_takes_everything():
+    counts = np.zeros(100)
+    counts[0] = 100.0
+    # (n - 1) / n for n = 100.
+    assert ann_difficulty.hubness_gini(counts) == pytest.approx(0.99)
+
+
+def test_hub_share_top1pct_is_one_percent_under_a_flat_distribution():
+    counts = np.full(100, 7)
+    assert ann_difficulty.hub_share_top1pct(counts) == pytest.approx(0.01)
+
+
+def test_hub_share_top1pct_is_one_when_a_single_hub_takes_everything():
+    counts = np.zeros(100)
+    counts[0] = 100.0
+    assert ann_difficulty.hub_share_top1pct(counts) == pytest.approx(1.0)
+
+
+def test_hub_share_top1pct_rounds_the_top_slice_up_to_at_least_one_point():
+    # 1% of 10 points is 0.1; taking zero points would make the statistic
+    # meaningless on small sets.
+    counts = np.array([5, 1, 1, 1, 1, 1, 1, 1, 1, 1])
+    assert ann_difficulty.hub_share_top1pct(counts) == pytest.approx(5.0 / 14.0)
+
+
+def test_hub_statistics_are_zero_on_an_empty_neighbour_budget():
+    # Every count zero means no neighbour slots were handed out at all.
+    counts = np.zeros(50)
+    assert ann_difficulty.hubness_gini(counts) == 0.0
+    assert ann_difficulty.hub_share_top1pct(counts) == 0.0

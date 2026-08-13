@@ -22,6 +22,7 @@ usable and testable without plotly or argparse.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import numpy as np
@@ -242,6 +243,42 @@ def hubness_skew(counts: np.ndarray) -> float:
     if spread <= 0.0:
         return 0.0
     return float(np.mean(((x - x.mean()) / spread) ** 3))
+
+
+def hubness_gini(counts: np.ndarray) -> float:
+    """Gini coefficient of the k-occurrence distribution.
+
+    A candidate replacement for `hubness_skew`, which is a third moment and
+    is therefore set by whichever handful of tail hubs happened to land in
+    the draw -- 108% of its own mean across eight draws of real GloVe. The
+    Gini reads the whole distribution rather than its tail, so no small set
+    of points can move it far.
+
+    0.0 means every point is drawn on equally; (n - 1) / n means one point
+    takes every neighbour slot. Same helper the IVF cell balance uses, which
+    is deliberate: two lopsidedness measures should not disagree about what
+    lopsided means.
+    """
+    return gini(np.asarray(counts, dtype=np.float64))
+
+
+def hub_share_top1pct(counts: np.ndarray) -> float:
+    """Fraction of all neighbour slots taken by the top 1% of points.
+
+    The other candidate replacement for `hubness_skew`, and the one that
+    reads most directly as the thing that hurts a graph index: how much of
+    the neighbour traffic funnels into hubs. Bounded in [0.01, 1] -- 0.01
+    when every point is drawn on equally, 1.0 when the top 1% take
+    everything.
+
+    The top slice rounds up, so it is never empty on a small set.
+    """
+    x = np.asarray(counts, dtype=np.float64)
+    total = x.sum()
+    if total <= 0.0:
+        return 0.0
+    top = max(1, math.ceil(0.01 * x.size))
+    return float(np.sort(x)[-top:].sum() / total)
 
 
 def cell_occupancy(x: np.ndarray, nlist: int, seed: int) -> tuple[np.ndarray, int]:

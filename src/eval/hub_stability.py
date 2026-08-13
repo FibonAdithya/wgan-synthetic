@@ -18,9 +18,16 @@ and without the report.
 
 from __future__ import annotations
 
+import argparse
+import json
+import sys
+from collections.abc import Sequence
+from pathlib import Path
+
 import numpy as np
 
 from src.eval import ann_difficulty
+from src.eval.noise_floor import summarize_spread
 
 
 class HubStabilityError(Exception):
@@ -85,10 +92,10 @@ MIN_SEPARATION_IN_RANGES = 1.0
 # Concretely: _spread(1.0, 0.95, 1.05)["range_pct_of_mean"] evaluates to
 # 10.000000000000009 (IEEE 754: 1.05 - 0.95 is not exactly 0.1), so a
 # literal "<=" would reject the very boundary the rule calls inclusive.
-# Applied to both stability and discrimination comparisons for symmetry,
-# though only the stability side has a demonstrated need. At 1e-9 against
-# bounds of 10.0 and 1.0, this cannot move any verdict at the scale of
-# the spreads measured in this study (0.32% to 108%).
+# Applied to the stability comparison only -- the discrimination side needs
+# no tolerance because its boundary already satisfies a plain ">=". At 1e-9
+# against a bound of 10.0, this cannot move any verdict at the scale of the
+# spreads measured in this study (0.32% to 108%).
 BOUNDARY_EPSILON = 1e-9
 
 
@@ -203,3 +210,195 @@ def measure_draw(
         "hubness_gini": ann_difficulty.hubness_gini(metrics.k_occurrence),
         "hub_share_top1pct": ann_difficulty.hub_share_top1pct(metrics.k_occurrence),
     }
+
+
+def sweep(
+    real: np.ndarray,
+    synthetic: dict[str, np.ndarray],
+    *,
+    ns: Sequence[int],
+    draws: int,
+    k: int,
+    k_hub: int,
+    nlist: int,
+    seed: int,
+    backend: str,
+    chunk_rows: int,
+) -> dict:
+    """Measure every statistic across repeated draws, at every N in the grid.
+
+    The real corpus gets `draws` subsamples per N -- that is the subsample
+    noise the gate band is judged against. Each synthetic series gets exactly
+    one, mirroring the v0 noise floor where each training seed is one
+    measurement; their mean feeds condition 2 and their spread is reported
+    beside it as the training-seed floor at that N.
+    """
+    measure = {
+        "k": k,
+        "k_hub": k_hub,
+        "nlist": nlist,
+        "seed": seed,
+        "backend": backend,
+        "chunk_rows": chunk_rows,
+    }
+    cells = []
+
+    for n in ns:
+        indices, disjoint = allocate_draws(real.shape[0], n, draws, seed)
+        per_draw = [measure_draw(real[rows], **measure) for rows in indices]
+        real_spread = {
+            name: summarize_spread([d[name] for d in per_draw]) for name in STATISTICS
+        }
+
+        per_series: dict[str, dict[str, float]] = {}
+        for label in sorted(synthetic):
+            series = synthetic[label]
+            rows, _ = allocate_draws(series.shape[0], n, 2, seed)
+            per_series[label] = measure_draw(series[rows[0]], **measure)
+
+        synthetic_mean: dict[str, float] | None = None
+        synthetic_spread: dict[str, dict[str, float]] | None = None
+        if len(per_series) >= 2:
+            synthetic_mean = {
+                name: float(np.mean([v[name] for v in per_series.values()]))
+                for name in STATISTICS
+            }
+            synthetic_spread = {
+                name: summarize_spread([v[name] for v in per_series.values()])
+                for name in STATISTICS
+            }
+        elif len(per_series) == 1:
+            only = next(iter(per_series.values()))
+            synthetic_mean = {name: only[name] for name in STATISTICS}
+
+        cells.append(
+            {
+                "n": n,
+                "draws": draws,
+                "draws_disjoint": disjoint,
+                "pool_to_n": real.shape[0] / n,
+                "real": {"per_draw": per_draw, "spread": real_spread},
+                "synthetic": {
+                    "series": sorted(per_series),
+                    "per_series": per_series,
+                    "mean": synthetic_mean,
+                    "spread": synthetic_spread,
+                },
+                "verdicts": {
+                    name: evaluate_rule(
+                        real_spread[name],
+                        None if synthetic_mean is None else synthetic_mean[name],
+                        draws_disjoint=disjoint,
+                    )
+                    for name in STATISTICS
+                },
+            }
+        )
+
+    return {
+        "pool_rows": int(real.shape[0]),
+        "conditions": measure,
+        "rule": {
+            "stable_max_range_pct": STABLE_MAX_RANGE_PCT,
+            "min_separation_in_ranges": MIN_SEPARATION_IN_RANGES,
+        },
+        "statistics": list(STATISTICS),
+        "cells": cells,
+    }
+
+
+def _load_series(specs: Sequence[str] | None) -> dict[str, np.ndarray]:
+    """Parse repeatable LABEL=PATH arguments into loaded arrays."""
+    loaded: dict[str, np.ndarray] = {}
+    for spec in specs or []:
+        label, sep, path = spec.partition("=")
+        if not sep or not label or not path:
+            raise HubStabilityError(f"--synthetic-path wants LABEL=PATH, got {spec!r}")
+        if label in loaded:
+            raise HubStabilityError(f"--synthetic-path {label!r} given twice")
+        loaded[label] = np.load(path)
+    return loaded
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--real-path", type=str, required=True, help="Real corpus .npy to draw from."
+    )
+    parser.add_argument(
+        "--synthetic-path",
+        type=str,
+        action="append",
+        metavar="LABEL=PATH",
+        help=(
+            "Repeatable. One per generator seed. Each is measured once per N; "
+            "their mean is what the rule's second condition judges. Omit "
+            "entirely to measure real-side stability alone."
+        ),
+    )
+    parser.add_argument(
+        "--n",
+        type=int,
+        action="append",
+        required=True,
+        dest="ns",
+        help="Repeatable. Subsample size to measure at.",
+    )
+    parser.add_argument("--draws", type=int, default=16)
+    parser.add_argument("--k", type=int, default=100)
+    parser.add_argument("--k-hub", type=int, default=10)
+    parser.add_argument("--nlist", type=int, default=256)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--backend",
+        type=str,
+        default="sklearn",
+        choices=("sklearn", "torch"),
+        help=(
+            "Neighbour search. Default sklearn, which every committed figure "
+            "was measured with; torch uses the GPU when there is one."
+        ),
+    )
+    parser.add_argument("--chunk-rows", type=int, default=1024)
+    parser.add_argument(
+        "--output", type=str, default=None, help="Also write the JSON here."
+    )
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    try:
+        real = np.load(args.real_path)
+        synthetic = _load_series(args.synthetic_path)
+        result = sweep(
+            real,
+            synthetic,
+            ns=args.ns,
+            draws=args.draws,
+            k=args.k,
+            k_hub=args.k_hub,
+            nlist=args.nlist,
+            seed=args.seed,
+            backend=args.backend,
+            chunk_rows=args.chunk_rows,
+        )
+    except (HubStabilityError, OSError, ValueError) as exc:
+        # stderr, so stdout stays parseable as JSON or empty, never half a
+        # report -- the same contract noise_floor.py keeps.
+        print(f"hub_stability: {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
+
+    result["real_path"] = args.real_path
+    if args.output is not None:
+        output_path = Path(args.output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(json.dumps(result, indent=2), encoding="utf-8")
+
+    print(json.dumps(result, indent=2))
+
+
+if __name__ == "__main__":
+    main()

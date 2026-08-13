@@ -1,3 +1,5 @@
+import json
+
 import numpy as np
 import pytest
 
@@ -65,12 +67,22 @@ def test_measure_draw_measures_every_row_it_is_given():
     # max_rows must be disabled inside: the caller has already drawn the
     # rows, and a second subsample would silently shrink the draw.
     big = hub_stability.measure_draw(
-        _draw(rows=400), k=10, k_hub=5, nlist=4, seed=42,
-        backend="sklearn", chunk_rows=1024,
+        _draw(rows=400),
+        k=10,
+        k_hub=5,
+        nlist=4,
+        seed=42,
+        backend="sklearn",
+        chunk_rows=1024,
     )
     small = hub_stability.measure_draw(
-        _draw(rows=400)[:200], k=10, k_hub=5, nlist=4, seed=42,
-        backend="sklearn", chunk_rows=1024,
+        _draw(rows=400)[:200],
+        k=10,
+        k_hub=5,
+        nlist=4,
+        seed=42,
+        backend="sklearn",
+        chunk_rows=1024,
     )
     assert big["lid_median"] != small["lid_median"]
 
@@ -170,3 +182,141 @@ def test_a_zero_range_cannot_be_divided_into_and_does_not_discriminate():
     )
     assert verdict["separation_in_ranges"] is None
     assert verdict["verdict"] == "rejected"
+
+
+def _sweep_kwargs(**overrides):
+    kwargs = dict(
+        ns=[60],
+        draws=3,
+        k=8,
+        k_hub=4,
+        nlist=4,
+        seed=42,
+        backend="sklearn",
+        chunk_rows=1024,
+    )
+    kwargs.update(overrides)
+    return kwargs
+
+
+def test_sweep_reports_one_cell_per_n_with_every_raw_draw():
+    real = _draw(rows=400, seed=1)
+
+    result = hub_stability.sweep(real, {}, **_sweep_kwargs(ns=[60, 100]))
+
+    assert [c["n"] for c in result["cells"]] == [60, 100]
+    for cell in result["cells"]:
+        assert len(cell["real"]["per_draw"]) == 3
+        assert sorted(cell["real"]["spread"]) == sorted(hub_stability.STATISTICS)
+
+
+def test_sweep_records_the_pool_and_whether_the_draws_were_disjoint():
+    real = _draw(rows=400, seed=1)
+
+    result = hub_stability.sweep(real, {}, **_sweep_kwargs(ns=[60, 200]))
+
+    assert result["pool_rows"] == 400
+    disjoint = {c["n"]: c["draws_disjoint"] for c in result["cells"]}
+    assert disjoint[60] is True  # 3 x 60 = 180 <= 400
+    assert disjoint[200] is False  # 3 x 200 = 600 > 400
+    assert result["cells"][0]["pool_to_n"] == pytest.approx(400 / 60)
+
+
+def test_sweep_without_synthetic_series_gives_stability_only_verdicts():
+    result = hub_stability.sweep(_draw(rows=400, seed=1), {}, **_sweep_kwargs())
+
+    verdicts = result["cells"][0]["verdicts"]
+    assert sorted(verdicts) == sorted(hub_stability.STATISTICS)
+    assert all(v["verdict"] in {"stable", "unstable"} for v in verdicts.values())
+
+
+def test_sweep_with_synthetic_series_measures_each_once_and_judges_the_mean():
+    real = _draw(rows=400, seed=1)
+    synthetic = {
+        "v0_seed42": _draw(rows=400, seed=2),
+        "v0_seed43": _draw(rows=400, seed=3),
+    }
+
+    result = hub_stability.sweep(real, synthetic, **_sweep_kwargs())
+
+    cell = result["cells"][0]
+    assert sorted(cell["synthetic"]["per_series"]) == ["v0_seed42", "v0_seed43"]
+    assert sorted(cell["synthetic"]["mean"]) == sorted(hub_stability.STATISTICS)
+    assert all(
+        v["verdict"] in {"qualified", "provisional", "rejected"}
+        for v in cell["verdicts"].values()
+    )
+
+
+def test_sweep_refuses_an_n_larger_than_the_corpus():
+    with pytest.raises(hub_stability.HubStabilityError, match="pool"):
+        hub_stability.sweep(_draw(rows=100, seed=1), {}, **_sweep_kwargs(ns=[500]))
+
+
+def test_sweep_is_reproducible():
+    real = _draw(rows=400, seed=1)
+    first = hub_stability.sweep(real, {}, **_sweep_kwargs())
+    second = hub_stability.sweep(real, {}, **_sweep_kwargs())
+    assert first == second
+
+
+def test_cli_writes_a_json_that_holds_its_own_evidence(tmp_path, monkeypatch, capsys):
+    real_path = tmp_path / "real.npy"
+    np.save(real_path, _draw(rows=400, seed=1))
+    output = tmp_path / "out.json"
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "hub_stability",
+            "--real-path",
+            str(real_path),
+            "--n",
+            "60",
+            "--draws",
+            "3",
+            "--k",
+            "8",
+            "--k-hub",
+            "4",
+            "--nlist",
+            "4",
+            "--output",
+            str(output),
+        ],
+    )
+    hub_stability.main()
+
+    written = json.loads(output.read_text(encoding="utf-8"))
+    assert written["real_path"] == str(real_path)
+    assert written["rule"]["stable_max_range_pct"] == 10.0
+    assert len(written["cells"][0]["real"]["per_draw"]) == 3
+    assert json.loads(capsys.readouterr().out) == written
+
+
+def test_cli_rejects_a_malformed_synthetic_path(tmp_path, monkeypatch):
+    real_path = tmp_path / "real.npy"
+    np.save(real_path, _draw(rows=200, seed=1))
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "hub_stability",
+            "--real-path",
+            str(real_path),
+            "--synthetic-path",
+            "no-equals-sign",
+            "--n",
+            "50",
+            "--draws",
+            "2",
+            "--k",
+            "8",
+            "--k-hub",
+            "4",
+            "--nlist",
+            "4",
+        ],
+    )
+    with pytest.raises(SystemExit):
+        hub_stability.main()

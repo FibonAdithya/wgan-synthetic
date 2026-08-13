@@ -1347,6 +1347,79 @@ git commit -m "feat(eval): sweep hub-statistic stability across N and commit the
 
 ---
 
+## Box layout, verified 2026-08-13
+
+Checked before execution, and not what the plan first assumed:
+
+| What | Where | State |
+|---|---|---|
+| `glove_250k.npy` | `/workspace/data-cache/` | present — the pool the committed eight draws used |
+| `glove_1m.npy` | — | **absent.** Must be written from the cached HDF5. |
+| `deep_1m.npy` | — | **absent.** Must be written from the cached HDF5. |
+| `glove-100-angular.hdf5`, `deep-image-96-angular.hdf5` | `/workspace/data-cache/` | present, so no download is needed |
+| the five `v0` checkpoints | `/workspace/glove-sweep/v0_seed4{2..6}/best_generator.pt` | present — **not** under `runs/glove/` |
+
+Two consequences the tasks below apply. The runner gives every job a fresh
+checkout whose `data/` holds only a README, so each job stages what it needs
+by absolute path into `/workspace/data-cache`. And `fetch.write_subset` takes
+a *random* sample rather than a prefix, so `glove_1m.npy` is not a superset of
+`glove_250k.npy` — which is exactly why the provenance cell keeps using the
+250k file rather than being folded into the main grid.
+
+---
+
+### Task 7a: Write the two 1M corpora
+
+**Files:**
+- No repository files change. This task produces `/workspace/data-cache/glove_1m.npy` and `/workspace/data-cache/deep_1m.npy` on the box.
+
+- [ ] **Step 1: Push the branch so the runner can check out this commit**
+
+```bash
+git push -u origin glove-v1-design
+```
+
+- [ ] **Step 2: Submit the staging job**
+
+The HDF5 sources are already cached, so `fetch` skips the download and only
+writes the subset. CPU lane: this is data preparation, not GPU work.
+
+```bash
+ssh tig-gpu '/venv/main/bin/gpuq submit --project wgan-synthetic \
+  --commit "'"$(git rev-parse HEAD)"'" --branch glove-v1-design --lane cpu \
+  -- bash -c "python -m src.data.fetch glove \
+        --cache-dir /workspace/data-cache --out-dir /workspace/data-cache \
+        --rows 1000000 && \
+      python -m src.data.fetch deep \
+        --cache-dir /workspace/data-cache --out-dir /workspace/data-cache \
+        --rows 1000000"'
+```
+
+- [ ] **Step 3: Wait and check the shapes**
+
+```bash
+ssh tig-gpu '/venv/main/bin/gpuq wait <id>'
+ssh tig-gpu 'python -c "
+import numpy as np
+for name in (\"glove_1m\", \"deep_1m\"):
+    a = np.load(f\"/workspace/data-cache/{name}.npy\", mmap_mode=\"r\")
+    print(name, a.shape, a.dtype)
+"'
+```
+
+Expected: `glove_1m (1000000, 100) float32` and `deep_1m (1000000, 96) float32`.
+
+GloVe's upstream corpus holds ~1.18M vectors, so a 1M request is satisfiable;
+if `fetch` prints its "corpus only has N rows" note for either family, record
+the actual row count — it changes the pool-to-N ratios in Task 10 and the
+disjointness of the large-N cells.
+
+- [ ] **Step 4: No commit**
+
+Nothing in the repository changed. Record the job id for the PR description.
+
+---
+
 ### Task 8: Re-sample the five v0 checkpoints to 250k vectors
 
 Condition 2 needs `v0` at every N in the grid, and `v0`'s committed samples are 50,000 vectors per seed. This is a **new measurement of `v0`**, not the one behind `docs/datasets/glove_v0_noise_floor.json`.
@@ -1355,41 +1428,26 @@ Condition 2 needs `v0` at every N in the grid, and `v0`'s committed samples are 
 - No repository files change. This task produces run artifacts on the box.
 
 **Interfaces:**
-- Consumes: `runs/glove/v0_seed{42..46}/best_generator.pt`, plus `configs/glove/v0_seed{42..46}.yaml` from the pinned checkout — the same pairing `docs/datasets/glove.md#noise-floor` documents.
-- Produces: `runs/glove/v0_seed{42..46}/samples_250k.npy`, 250,000 × 100 float32 each.
+- Consumes: `/workspace/glove-sweep/v0_seed{42..46}/best_generator.pt`, plus `configs/glove/v0_seed{42..46}.yaml` from the pinned checkout — the same pairing `docs/datasets/glove.md#noise-floor` documents.
+- Produces: `/workspace/glove-sweep/v0_seed{42..46}/samples_250k.npy`, 250,000 × 100 float32 each.
 
-- [ ] **Step 1: Confirm the checkpoints are on the box**
+- [ ] **Step 1: Submit the sampling job**
 
-```bash
-ssh tig-gpu 'ls -la ~/wgan-synthetic/runs/glove/v0_seed4{2,3,4,5,6}/best_generator.pt'
-```
-
-Expected: five files. If any is missing, stop — the sweep cannot judge condition 2 and the finding is that `v0`'s artifacts did not survive (see issue #36).
-
-- [ ] **Step 2: Push the branch so the runner can check out this commit**
-
-```bash
-git push -u origin glove-v1-design
-```
-
-- [ ] **Step 3: Submit the sampling job**
+The checkpoints live outside any checkout, so both the checkpoint and the output path are absolute. Nothing is declared as an artifact: the samples are an input to Task 10, not a result worth committing.
 
 ```bash
 ssh tig-gpu '/venv/main/bin/gpuq submit --project wgan-synthetic \
   --commit "'"$(git rev-parse HEAD)"'" --branch glove-v1-design --lane gpu \
-  --artifact docs/datasets/.keep \
   -- bash -c "for seed in 42 43 44 45 46; do \
       python -m src.sample.generate \
-        --checkpoint runs/glove/v0_seed\${seed}/best_generator.pt \
+        --checkpoint /workspace/glove-sweep/v0_seed\${seed}/best_generator.pt \
         --config configs/glove/v0_seed\${seed}.yaml \
         --num-samples 250000 --seed 42 \
-        --output-path runs/glove/v0_seed\${seed}/samples_250k.npy; \
+        --output-path /workspace/glove-sweep/v0_seed\${seed}/samples_250k.npy; \
     done"'
 ```
 
-Note: `runs/` is never declared as an artifact — the samples stay on the box and are read by the next job, which runs in the same checkout tree.
-
-- [ ] **Step 4: Wait for it**
+- [ ] **Step 2: Wait for it**
 
 ```bash
 ssh tig-gpu '/venv/main/bin/gpuq wait <id>'
@@ -1397,20 +1455,20 @@ ssh tig-gpu '/venv/main/bin/gpuq wait <id>'
 
 Expected: exit 0. On failure, `gpuq show <id>` carries the stderr tail.
 
-- [ ] **Step 5: Check the shapes**
+- [ ] **Step 3: Check the shapes**
 
 ```bash
 ssh tig-gpu 'python -c "
 import numpy as np
 for s in range(42, 47):
-    a = np.load(f\"runs/glove/v0_seed{s}/samples_250k.npy\")
+    a = np.load(f\"/workspace/glove-sweep/v0_seed{s}/samples_250k.npy\")
     print(s, a.shape, a.dtype)
 "'
 ```
 
 Expected: five lines reading `(250000, 100) float32`.
 
-- [ ] **Step 6: No commit**
+- [ ] **Step 4: No commit**
 
 Nothing in the repository changed. Record the job id in the eventual PR description so the artifacts can be traced.
 
@@ -1430,7 +1488,7 @@ ssh tig-gpu '/venv/main/bin/gpuq submit --project wgan-synthetic \
   --commit "'"$(git rev-parse HEAD)"'" --branch glove-v1-design --lane gpu \
   --artifact docs/datasets/glove_hub_stability_provenance.json \
   -- python -m src.eval.hub_stability \
-      --real-path data/glove_250k.npy \
+      --real-path /workspace/data-cache/glove_250k.npy \
       --n 20000 --draws 16 \
       --k 100 --k-hub 10 --nlist 256 --seed 42 \
       --backend torch \
@@ -1479,12 +1537,12 @@ ssh tig-gpu '/venv/main/bin/gpuq submit --project wgan-synthetic \
   --commit "'"$(git rev-parse HEAD)"'" --branch glove-v1-design --lane gpu \
   --artifact docs/datasets/glove_hub_stability.json \
   -- python -m src.eval.hub_stability \
-      --real-path data/glove_1m.npy \
-      --synthetic-path v0_seed42=runs/glove/v0_seed42/samples_250k.npy \
-      --synthetic-path v0_seed43=runs/glove/v0_seed43/samples_250k.npy \
-      --synthetic-path v0_seed44=runs/glove/v0_seed44/samples_250k.npy \
-      --synthetic-path v0_seed45=runs/glove/v0_seed45/samples_250k.npy \
-      --synthetic-path v0_seed46=runs/glove/v0_seed46/samples_250k.npy \
+      --real-path /workspace/data-cache/glove_1m.npy \
+      --synthetic-path v0_seed42=/workspace/glove-sweep/v0_seed42/samples_250k.npy \
+      --synthetic-path v0_seed43=/workspace/glove-sweep/v0_seed43/samples_250k.npy \
+      --synthetic-path v0_seed44=/workspace/glove-sweep/v0_seed44/samples_250k.npy \
+      --synthetic-path v0_seed45=/workspace/glove-sweep/v0_seed45/samples_250k.npy \
+      --synthetic-path v0_seed46=/workspace/glove-sweep/v0_seed46/samples_250k.npy \
       --n 20000 --n 50000 --n 100000 --n 250000 \
       --draws 16 --k 100 --k-hub 10 --nlist 256 --seed 42 \
       --backend torch \
@@ -1500,7 +1558,7 @@ ssh tig-gpu '/venv/main/bin/gpuq submit --project wgan-synthetic \
   --commit "'"$(git rev-parse HEAD)"'" --branch glove-v1-design --lane gpu \
   --artifact docs/datasets/deep_hub_stability.json \
   -- python -m src.eval.hub_stability \
-      --real-path data/deep_1m.npy \
+      --real-path /workspace/data-cache/deep_1m.npy \
       --n 20000 --n 50000 --n 100000 --n 250000 \
       --draws 16 --k 100 --k-hub 10 --nlist 256 --seed 42 \
       --backend torch \
@@ -1598,7 +1656,7 @@ git commit -m "docs(glove): report which hub statistic can carry a band"
 - [ ] **Step 1: Push and open the PR**
 
 ```bash
-git push -u origin glove-v1-design
+git push
 gh pr create --base glove-gan-v1 \
   --title "Measure which hub statistic GloVe can be gated on (#29)" \
   --body "$(cat <<'EOF'

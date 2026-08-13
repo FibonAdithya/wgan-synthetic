@@ -129,6 +129,59 @@ real queries divide by almost zero. Six real queries were dropped outright by
 produces a single exact duplicate or fully tied neighbourhood. The median the
 gate uses is unaffected; only the histogram is. Worth an issue against the panel.
 
+## Distribution diagnostics
+
+Not the gate (`AGENTS.md` invariant 1). Reported here because measuring them shows
+why that rule exists.
+
+A distribution diagnostic is unreadable without knowing how far real is from
+itself, so the corpus was split into two disjoint 20000-row halves: one is the
+reference, the other is scored against it the same way and is the **floor**.
+Computed by `dist_diag.py`, equal-N at 20000, seed 42, same L2 preprocessing.
+
+| Diagnostic | real vs real | v0 | v1 | v1_30k | v4 |
+|---|---|---|---|---|---|
+| Per-dimension W1, mean | 0.000678 | 0.004303 | 0.002285 | 0.003363 | 0.003558 |
+| Per-dimension W1, worst dim | 0.001777 | 0.007808 | 0.003765 | 0.005233 | 0.007309 |
+| Covariance Frobenius | 0.006382 | 0.020765 | 0.005804 | 0.005953 | 0.006588 |
+| MMD (RBF, γ=1) | 0.000430 | 0.001244 | 0.000284 | 0.000457 | 0.000234 |
+| Pairwise-distance hist L1 | 0.4050 | 0.7893 | 0.4100 | 0.4112 | 0.5365 |
+
+As a multiple of the floor:
+
+| Diagnostic | v0 | v1 | v1_30k | v4 |
+|---|---|---|---|---|
+| Per-dimension W1, mean | 6.3x | 3.4x | 5.0x | 5.2x |
+| Per-dimension W1, worst dim | 4.4x | 2.1x | 2.9x | 4.1x |
+| Covariance Frobenius | 3.3x | **0.9x** | **0.9x** | **1.0x** |
+| MMD (RBF, γ=1) | 2.9x | **0.7x** | **1.1x** | **0.5x** |
+| Pairwise-distance hist L1 | 1.9x | **1.0x** | **1.0x** | **1.3x** |
+
+**Three of the five are saturated.** Covariance Frobenius, MMD and the
+pairwise-distance histogram cannot separate v1, v1_30k or v4 from a disjoint
+sample of real SIFT. On MMD, v1 and v4 score *better than real does against
+itself*.
+
+**MMD ranks v4 first; the gate ranks it last.** Both are correct — they measure
+different things, and only one is the project's question. This is the "MMD
+improved, looks good" trap from `AGENTS.md`, made concrete.
+
+Only the per-dimension marginals retain resolution: every rung clears the floor,
+and they rank **v1 best, v0 worst**. The correlation-structure panel agrees — real
+SIFT's 4x4 grid of 8-bin histograms correlates at lags of 8 and 32, v0's residual
+against it is heavily structured, v1's is close to flat noise, v4 recovers most of
+it but leaves visible diagonal bands.
+
+### Three lenses, three winners
+
+| Question | Instrument | Winner |
+|---|---|---|
+| Neighbourhood geometry | the four gated statistics | v0 |
+| Support | exact zeros, negatives, glyphs | v4, uniquely |
+| Distribution | per-dimension marginals, correlation structure | v1 |
+
+No rung wins two. Any single scalar would have reported progress that is not there.
+
 ## What this does not say
 
 - **Not an argument for v0.** It is a finding about what four aggregate
@@ -137,9 +190,13 @@ gate uses is unaffected; only the histogram is. Worth an issue against the panel
   is still null. Choosing a number is reserved for a human.
 - **IVF Gini ranks nothing.** The architecture-matched floor makes it the weakest
   of the four, as `docs/results/v4-logratio/` already found.
-- **n=1 per rung.** Both floors are themselves n=2 and are lower bounds: two runs
-  at identical seed still diverge 1–8% per loss column by step 250 from
+- **n=1 per rung.** Both gate floors are themselves n=2 and are lower bounds: two
+  runs at identical seed still diverge 1–8% per loss column by step 250 from
   nondeterministic CUDA reduction order.
+- **The real-vs-real floor is one split.** It resolves "saturated" from "clearly
+  above", which is all it is used for. It does not support fine distinctions near
+  1x, and the ordering of v1, v1_30k and v4 on the three saturated diagnostics
+  should not be read at all.
 
 ## Suggested follow-up
 

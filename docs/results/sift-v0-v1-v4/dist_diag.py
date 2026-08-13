@@ -24,7 +24,6 @@ LADDER = "/workspace/keep/sift-ladder"
 RUNGS = {
     "v0": f"{LADDER}/samples_v0.npy",
     "v1": f"{LADDER}/samples_v1.npy",
-    "v1_30k": "/workspace/keep/sift-v0-v1-v4/samples_v1_30k.npy",
     "v4": f"{LADDER}/samples_v4.npy",
 }
 N = 20000  # equal-N with the eda_report run

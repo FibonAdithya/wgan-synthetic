@@ -3,7 +3,6 @@
   "synthetic_paths": [
     "v0=/workspace/keep/sift-ladder/samples_v0.npy",
     "v1=/workspace/keep/sift-ladder/samples_v1.npy",
-    "v1_30k=/workspace/keep/sift-v0-v1-v4/samples_v1_30k.npy",
     "v4=/workspace/keep/sift-ladder/samples_v4.npy"
   ],
   "preprocess": "l2",
@@ -89,31 +88,6 @@
       "relative_contrast_median": 2.2526491171298044,
       "hubness_skew": 2.095806680604937,
       "ivf_gini": 0.284236328125,
-      "lid_discarded_queries": 0,
-      "ann_measured_rows": 20000,
-      "ann_measured_k": 100,
-      "ann_measured_nlist": 256
-    },
-    {
-      "name": "v1_30k",
-      "num_vectors": 20000,
-      "dim": 128,
-      "value_mean": 0.05249028280377388,
-      "value_std": 0.07111448794603348,
-      "value_min": -0.1940707564353943,
-      "value_max": 0.481076717376709,
-      "exact_zero_fraction": 0.0,
-      "negative_fraction": 0.117968359375,
-      "norm_mean": 1.0,
-      "norm_std": 2.179036862060002e-08,
-      "duplicate_row_fraction": 0.0,
-      "median_pairwise_distance": 1.092199444770813,
-      "median_5nn_distance": 0.5105938613414764,
-      "effective_rank": 27.47701072692871,
-      "lid_median": 17.036395036803796,
-      "relative_contrast_median": 2.2786503588046374,
-      "hubness_skew": 1.9673507128884786,
-      "ivf_gini": 0.271901953125,
       "lid_discarded_queries": 0,
       "ann_measured_rows": 20000,
       "ann_measured_k": 100,
@@ -278,72 +252,6 @@
         "wasserstein1": 0.0020710947476819267
       }
     ],
-    "v1_30k": [
-      {
-        "dim": 107,
-        "wasserstein1": 0.003301452585304639
-      },
-      {
-        "dim": 88,
-        "wasserstein1": 0.0031871454279106598
-      },
-      {
-        "dim": 32,
-        "wasserstein1": 0.0028275858470698705
-      },
-      {
-        "dim": 95,
-        "wasserstein1": 0.002406039035258543
-      },
-      {
-        "dim": 56,
-        "wasserstein1": 0.002796236494823614
-      },
-      {
-        "dim": 44,
-        "wasserstein1": 0.004188147046868379
-      },
-      {
-        "dim": 64,
-        "wasserstein1": 0.0028995192585224315
-      },
-      {
-        "dim": 115,
-        "wasserstein1": 0.0037945023850706056
-      },
-      {
-        "dim": 91,
-        "wasserstein1": 0.0029599150412383387
-      },
-      {
-        "dim": 93,
-        "wasserstein1": 0.004090858654995307
-      },
-      {
-        "dim": 112,
-        "wasserstein1": 0.004519627811842565
-      },
-      {
-        "dim": 43,
-        "wasserstein1": 0.0026966685981644626
-      },
-      {
-        "dim": 61,
-        "wasserstein1": 0.003336588850249022
-      },
-      {
-        "dim": 0,
-        "wasserstein1": 0.004021528465090024
-      },
-      {
-        "dim": 104,
-        "wasserstein1": 0.0051100049787648014
-      },
-      {
-        "dim": 19,
-        "wasserstein1": 0.003545326106213298
-      }
-    ],
     "v4": [
       {
         "dim": 107,
@@ -411,19 +319,19 @@
       }
     ]
   },
-  "report_html": "/workspace/keep/sift-v0-v1-v4/eda/eda_report.html",
+  "report_html": "/workspace/keep/sift-v0-v1-v4/eda3/eda_report.html",
   "png_files": [
-    "/workspace/keep/sift-v0-v1-v4/eda/png/01_descriptor_glyphs.png",
-    "/workspace/keep/sift-v0-v1-v4/eda/png/02_local_intrinsic_dimensionality.png",
-    "/workspace/keep/sift-v0-v1-v4/eda/png/03_hubness.png",
-    "/workspace/keep/sift-v0-v1-v4/eda/png/04_ivf_cell_balance.png",
-    "/workspace/keep/sift-v0-v1-v4/eda/png/05_pooled_value_distribution.png",
-    "/workspace/keep/sift-v0-v1-v4/eda/png/06_per-dimension_marginals.png",
-    "/workspace/keep/sift-v0-v1-v4/eda/png/07_per-dimension_profiles.png",
-    "/workspace/keep/sift-v0-v1-v4/eda/png/08_pairwise_distances.png",
-    "/workspace/keep/sift-v0-v1-v4/eda/png/09_within-set_5-nn_distances.png",
-    "/workspace/keep/sift-v0-v1-v4/eda/png/10_pca_spectrum.png",
-    "/workspace/keep/sift-v0-v1-v4/eda/png/11_correlation_structure.png",
-    "/workspace/keep/sift-v0-v1-v4/eda/png/12_per-dimension_mismatch.png"
+    "/workspace/keep/sift-v0-v1-v4/eda3/png/01_descriptor_glyphs.png",
+    "/workspace/keep/sift-v0-v1-v4/eda3/png/02_local_intrinsic_dimensionality.png",
+    "/workspace/keep/sift-v0-v1-v4/eda3/png/03_hubness.png",
+    "/workspace/keep/sift-v0-v1-v4/eda3/png/04_ivf_cell_balance.png",
+    "/workspace/keep/sift-v0-v1-v4/eda3/png/05_pooled_value_distribution.png",
+    "/workspace/keep/sift-v0-v1-v4/eda3/png/06_per-dimension_marginals.png",
+    "/workspace/keep/sift-v0-v1-v4/eda3/png/07_per-dimension_profiles.png",
+    "/workspace/keep/sift-v0-v1-v4/eda3/png/08_pairwise_distances.png",
+    "/workspace/keep/sift-v0-v1-v4/eda3/png/09_within-set_5-nn_distances.png",
+    "/workspace/keep/sift-v0-v1-v4/eda3/png/10_pca_spectrum.png",
+    "/workspace/keep/sift-v0-v1-v4/eda3/png/11_correlation_structure.png",
+    "/workspace/keep/sift-v0-v1-v4/eda3/png/12_per-dimension_mismatch.png"
   ]
 }

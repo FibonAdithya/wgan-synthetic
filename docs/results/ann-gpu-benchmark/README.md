@@ -1,9 +1,9 @@
 # GPU ANN benchmark: real SIFT against the variant ladder
 
-Measured 2026-08-12 from commit `159f1ce` on the exclusive `gpuq` GPU lane
-(job `wgan-synthetic-20260812T140307Z-46a363`, exit 0, 8 minutes wall clock).
-The machine had one NVIDIA GeForce RTX 4060 (8188 MiB, driver 580.95.05),
-PyTorch 2.13.0+cu130, CUDA 13.0 and cuVS 26.08.01.
+Measured 2026-08-13 from commit `7c00b45` on the exclusive `gpuq` GPU lane
+(job `wgan-synthetic-20260813T080256Z-3b6ec3`, exit 0). The machine had one
+NVIDIA GeForce RTX 4060 (8188 MiB, driver 580.95.05), PyTorch 2.13.0+cu130,
+CUDA 13.0 and cuVS 26.08.01.
 
 This is a measurement exercise. It reports index build time, recall@10 and QPS
 for real SIFT and each trained SIFT variant. **It does not adjudicate the
@@ -62,21 +62,22 @@ cosine. Each cell issues one untimed, discarded warmup search and then five
 timed repeats; every timed region is fenced with a CUDA stream synchronization
 on both sides. All 10,000 queries are issued in one batched call.
 
-## How to read the files
+### How recall is scored, and why it matters here
 
-`ann_benchmark.json` is every cell, unaggregated, plus the environment block.
-`ann_benchmark.md` is the headline table. `report.html` is self-contained and
-carries the recall-vs-QPS curve per cell — the curve, not the headline, is
-where "faster" becomes a meaningful claim. `gpuq_job_spec.json` pins the
-command, commit, lane, timeout and exit status.
+Recall is computed from **exact squared-L2 distances recomputed from each
+search's returned neighbour ids**, on both the found and the ground-truth side,
+using identical arithmetic.
 
-The headline number is QPS at recall@10 = 0.90, interpolated on the curve. A
-cell whose curve never reaches 0.90 would report null rather than the nearest
-point or an extrapolation. **No cell reported null in this run**, and no cell
-failed: 28 build records and 168 search records, all successful.
+This is not a detail. `ivf_pq.search` returns distances computed from the
+quantized PQ codes, not distances to the stored vectors; scoring recall on
+those inflates it, by a margin that grows with the probe budget (measured on
+this box at +0.006 at 1 probe, +0.031 at 8, +0.137 at 64). Every IVF-PQ
+number below would be optimistic without the recomputation, and the null
+results in the next section would have been hidden behind it.
 
-The Flat row is the exact-search ceiling at recall 1.0 by construction, not an
-interpolated value at the 0.90 target, and is labelled as such.
+Recall remains **distance-based, never id-matching**: cuVS and numpy break ties
+between equidistant neighbours differently, and real SIFT contains duplicate
+vectors, so an id-equality test would depress recall for no real reason.
 
 ## Correctness checks
 
@@ -84,68 +85,133 @@ Run before reading anything into the numbers:
 
 - `flat` reports recall exactly **1.000 on all seven corpora**. Had it not,
   ground truth and search would be in different distance spaces and every
-  figure here would be wrong.
+  figure here would be wrong. This check is what caught a scoring regression
+  during development, when the two sides of the comparison were briefly
+  computed by different float arithmetic.
 - Recall rises monotonically with the swept knob in **21 of 21** sweeps.
-- **Zero failed cells**, so the table is complete rather than filtered.
+- **Zero failed cells**: 28 build records and 168 search records, all
+  successful.
 
 ## What was measured
 
-QPS at recall@10 = 0.90, as a ratio to `real` on the same index:
+### IVF-PQ cannot reach the target recall on five of seven corpora
 
-| Index | v0 | v1 | v1_5 | v2 | v3 | v4 |
-|---|---:|---:|---:|---:|---:|---:|
-| IVF-Flat | 0.93 | 0.93 | 0.93 | **1.50** | **2.58** | 1.11 |
-| IVF-PQ | 1.02 | 1.00 | 1.02 | **1.40** | **2.07** | 1.05 |
-| CAGRA | 0.92 | 0.92 | 0.90 | 1.01 | 1.04 | 0.96 |
+At `pq_dim=64, pq_bits=8` and `n_probes` up to 256, IVF-PQ never reaches
+recall@10 = 0.90 on `real`, `v0`, `v1`, `v1_5` or `v4`. Those cells report
+**null**, which is a result rather than a gap:
 
-The clearest signal is that **the divergence is specific to the partitioning
-indexes.** Under CAGRA, a graph index, all six synthetic corpora sit within
-0.90x–1.04x of real. Under IVF-Flat and IVF-PQ, `v2` and especially `v3` are
-substantially *cheaper* to search than real SIFT at the same recall — IVF-Flat
-serves `v3` at 159,160 QPS against real's 61,695.
+| Corpus | IVF-PQ @ recall 0.90 | Peak recall reached |
+|---|---|---:|
+| real | — never reached | 0.881 |
+| v0 | — never reached | 0.877 |
+| v1 | — never reached | 0.879 |
+| v1_5 | — never reached | 0.879 |
+| v4 | — never reached | 0.894 |
+| **v2** | **42,066 QPS** | 0.906 |
+| **v3** | **129,842 QPS** | 0.916 |
 
-`v3` also reaches the lowest peak recall of any corpus under both partitioning
-indexes (0.958 IVF-Flat, 0.919 IVF-PQ, against real's 0.971 and 0.939), so it
-is both faster and less accurate there: the shape of a corpus whose cell
-occupancy differs from real's, where a probe budget buys more of the true
-neighbours sooner.
+`v2` and `v3` are the only corpora on which this quantized index clears 0.90 at
+all. The separation is qualitative, not a ratio.
 
-`v0`, `v1` and `v1_5` cluster tightly at 0.92–1.02x of real across all three
-approximate indexes. `v4` sits within 1.05–1.11x on the partitioning indexes.
+### IVF-Flat: a genuine matched-recall comparison
+
+Both endpoints bracket 0.90, so these are interpolated at the target and
+directly comparable. QPS at recall@10 = 0.90, and as a ratio to `real`:
+
+| Corpus | QPS @ 0.90 | Ratio to real |
+|---|---:|---:|
+| real | 73,063 | 1.00 |
+| v0 | 71,586 | 0.98 |
+| v1 | 74,450 | 1.02 |
+| v1_5 | 73,744 | 1.01 |
+| v2 | 128,793 | **1.76** |
+| v3 | 224,925 | **3.08** |
+| v4 | 87,644 | 1.20 |
+
+### CAGRA: not a matched-recall comparison, and labelled as such
+
+CAGRA's swept knob cannot reach 0.90. `itopk_size` must be at least k and a
+multiple of 32, so 32 is its floor, and every corpus already exceeds 0.90 there.
+Each CAGRA cell therefore reports its fastest measured point at **the recall
+that point was actually measured at** — marked `floor` in the table — rather
+than an interpolated value at the target or an extrapolation.
+
+| Corpus | QPS (floor) | at recall |
+|---|---:|---:|
+| real | 250,469 | 0.963 |
+| v0 | 231,341 | 0.966 |
+| v1 | 235,762 | 0.963 |
+| v1_5 | 237,524 | 0.963 |
+| v2 | 245,221 | 0.997 |
+| v3 | 269,465 | 0.999 |
+| v4 | 241,336 | 0.989 |
+
+**These QPS figures are not comparable across corpora**, because each is
+measured at a different recall. What is comparable is the recall itself at a
+fixed search cost: at `itopk_size=32`, CAGRA reaches 0.997 on `v2` and 0.999 on
+`v3` against 0.963 on `real`. The graph index saturates on those two corpora at
+a search budget where real SIFT has not.
+
+### The pattern across all three approximate indexes
+
+`v2` and `v3` separate from real under every approximate index, and the
+direction is consistent: at matched recall they are cheaper to search
+(IVF-Flat, 1.76x and 3.08x), at matched cost they reach higher recall (CAGRA,
+0.997/0.999 against 0.963), and they are the only corpora a quantized index can
+push to 0.90 at all (IVF-PQ). `v0`, `v1` and `v1_5` track real closely on every
+index — 0.98–1.02x on IVF-Flat, within 0.003 recall on CAGRA, and failing to
+reach 0.90 on IVF-PQ exactly as real does. `v4` sits between the two groups.
 
 What this does and does not say: an index finding a corpus easier at matched
-recall is a measured difference in search behaviour between that corpus and
-real SIFT. It is **not** a gate verdict, **not** a statement that any variant
-is a better or worse stand-in overall, and it is measured on normalized
-corpora. One benchmark on one card is also one sample; nothing here is a
-seed-noise study.
+recall, or reaching higher recall at matched cost, is a measured difference in
+search behaviour between that corpus and real SIFT. It is **not** a gate
+verdict, **not** a statement that any variant is a better or worse stand-in
+overall, and it is measured on normalized corpora. One benchmark on one card is
+also one sample; nothing here is a seed-noise study, and the differences among
+`v0`/`v1`/`v1_5` are well inside the range a repeat run could move.
 
 ## Cost
 
-| Index | Build (train + add) | Index size | Peak VRAM delta |
-|---|---|---:|---:|
-| Flat (exact) | 0.00 s + 0.09 s | 488.3 MB | 4 MB |
-| IVF-Flat | 1.44–1.65 s | 488.3 MB | 690–1316 MB |
-| IVF-PQ | 3.28–3.53 s | 61.0 MB | 94–98 MB |
-| CAGRA | 6.46–8.54 s | 732.4 MB | 242–248 MB |
+| Index | Train (s) | Add (s) | Index size (est.) | Peak VRAM delta |
+|---|---:|---:|---:|---:|
+| Flat (exact) | 0.00 | 0.09–0.11 | 512.0 MB | 4–496 MB |
+| IVF-Flat | 1.43–1.59 | 0.00 | 512.0 MB | 692–1316 MB |
+| IVF-PQ | 3.18–3.69 | 0.00 | 64.0 MB | 96–102 MB |
+| CAGRA | 7.02–7.57 | 0.00 | 768.0 MB | 242–246 MB |
 
-Build time is reported as train and add phases separately because they scale
-differently in N, and a partitioning index pays them in very different
+Sizes are decimal MB (10^6 bytes); VRAM figures are MiB as reported by the
+driver. Build time is reported as train and add phases separately because they
+scale differently in N, and a partitioning index pays them in very different
 proportions to a graph index.
 
-IVF-PQ is the only index that compresses: 61.0 MB against the corpus's own
-488.3 MB, an 8x reduction, at the cost of the lowest peak recall of the three
-approximate indexes on every corpus.
+**Index size is an analytic estimate, not a measured allocation.** It is
+computed from the corpus and index geometry and omits the IVF coarse centroids
+(4096 x 128) and the PQ codebooks, so IVF-PQ's 64.0 MB understates its true
+footprint. Treat the 8x gap against the corpus as indicative, not measured.
 
 **Peak VRAM figures are card-wide deltas, not per-index allocations.** They are
 sampled around the build and include whatever else the process had resident, so
-treat them as an order-of-magnitude guide rather than an allocation profile.
-The Flat row's 4 MB reflects that brute force builds almost nothing beyond
-referencing the corpus already on the device.
+they are an order-of-magnitude guide. The exact index's wide 4–496 MB range
+reflects that: brute force allocates almost nothing of its own, so the figure
+mostly tracks what else happened to be resident at sample time.
 
-The full grid took 8 minutes, well under the 40–60 minutes budgeted: CAGRA
-graph construction over 1M vectors takes 6–9 seconds on this card, not the 2–3
-minutes assumed when the work was planned.
+The exact-search ceiling is 7,948–7,996 QPS across the seven corpora — the
+price of perfect recall, and roughly 9x slower than IVF-Flat at 0.90 and 30x
+slower than CAGRA at its floor.
+
+## How to read the files
+
+`ann_benchmark.json` is every cell, unaggregated, plus the environment block.
+`ann_benchmark.md` is the headline table. `report.html` is self-contained and
+carries the recall-vs-QPS curve per cell — the curve, not the headline, is
+where "faster" becomes a meaningful claim, and it is the right place to look at
+the five null IVF-PQ cells. `gpuq_job_spec.json` pins the command, commit,
+lane, timeout and exit status.
+
+A cell whose curve never reaches the target reports null rather than the
+nearest point or an extrapolation. A cell whose curve never drops below the
+target reports its fastest measured point, marked `floor`, with the recall it
+was measured at.
 
 ## Reproducing
 
@@ -155,6 +221,11 @@ directory of symlinks reconciles that without changing the manifest format;
 the recipe is in
 `docs/superpowers/plans/2026-08-12-ann-gpu-benchmark-probe.md`, together with
 the measured cuVS API surface and the box paths.
+
+Corpora, query sets and ground truth are cached in the work directory and keyed
+by a `manifest.json` recording the seed, batch size, sizes, k and source, so a
+rerun under different parameters rematerializes rather than silently serving
+the previous draw.
 
 cuVS is **not** in `requirements.txt`: it is CUDA-only and installs from
 NVIDIA's package index, so pinning it would break the CPU-only install CI runs.

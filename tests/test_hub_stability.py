@@ -194,9 +194,85 @@ def _sweep_kwargs(**overrides):
         seed=42,
         backend="sklearn",
         chunk_rows=1024,
+        preprocess="l2",
     )
     kwargs.update(overrides)
     return kwargs
+
+
+def test_sweep_l2_normalizes_every_series_by_default():
+    # Real is raw with big norms; the synthetic series is already unit-norm.
+    # Under the default the two become comparable; under "none" they do not.
+    rng = np.random.default_rng(5)
+    raw = (rng.standard_normal((400, 8)) * 7.0).astype(np.float32)
+    unit = rng.standard_normal((400, 8)).astype(np.float32)
+    unit /= np.linalg.norm(unit, axis=1, keepdims=True)
+
+    normalized = hub_stability.sweep(
+        raw, {"a": unit, "b": unit}, **_sweep_kwargs(preprocess="l2")
+    )
+    untouched = hub_stability.sweep(
+        raw, {"a": unit, "b": unit}, **_sweep_kwargs(preprocess="none")
+    )
+
+    assert normalized != untouched
+    assert normalized["conditions"]["preprocess"] == "l2"
+    assert untouched["conditions"]["preprocess"] == "none"
+
+
+def test_sweep_leaves_already_normalized_input_alone():
+    rng = np.random.default_rng(6)
+    unit = rng.standard_normal((400, 8)).astype(np.float32)
+    unit /= np.linalg.norm(unit, axis=1, keepdims=True)
+
+    normalized = hub_stability.sweep(unit, {}, **_sweep_kwargs(preprocess="l2"))
+    untouched = hub_stability.sweep(unit, {}, **_sweep_kwargs(preprocess="none"))
+
+    # rel=1e-5, not 1e-6: re-dividing an already-unit row by its float32 norm
+    # (~1.0 +/- 1 ULP) still perturbs it at the float32 noise floor, and
+    # sklearn's brute-force backend computes distances via the
+    # ||x||^2 + ||y||^2 - 2xy expansion (see ann_difficulty.knn's
+    # docstring), which is the numerically worse form and amplifies that
+    # noise by roughly an order of magnitude for ratio statistics like
+    # relative_contrast_median. Confirmed by direct comparison of per-draw
+    # values: differences appear only at the 1e-7-1e-6 relative level, far
+    # below the several-percent spread between distinct draws that this
+    # test is not exercising.
+    for name in hub_stability.STATISTICS:
+        a = normalized["cells"][0]["real"]["spread"][name]["mean"]
+        b = untouched["cells"][0]["real"]["spread"][name]["mean"]
+        assert a == pytest.approx(b, rel=1e-5), name
+
+
+def test_cli_defaults_to_l2_and_records_it(tmp_path, monkeypatch, capsys):
+    real_path = tmp_path / "real.npy"
+    np.save(real_path, (_draw(rows=400, seed=1) * 5.0).astype(np.float32))
+    output = tmp_path / "out.json"
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "hub_stability",
+            "--real-path",
+            str(real_path),
+            "--n",
+            "60",
+            "--draws",
+            "3",
+            "--k",
+            "8",
+            "--k-hub",
+            "4",
+            "--nlist",
+            "4",
+            "--output",
+            str(output),
+        ],
+    )
+    hub_stability.main()
+
+    written = json.loads(output.read_text(encoding="utf-8"))
+    assert written["conditions"]["preprocess"] == "l2"
 
 
 def test_sweep_reports_one_cell_per_n_with_every_raw_draw():

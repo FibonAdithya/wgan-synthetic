@@ -27,6 +27,7 @@ from pathlib import Path
 import numpy as np
 
 from src.eval import ann_difficulty
+from src.eval.eda.series import maybe_l2_normalize
 from src.eval.noise_floor import summarize_spread
 
 
@@ -224,6 +225,7 @@ def sweep(
     seed: int,
     backend: str,
     chunk_rows: int,
+    preprocess: str,
 ) -> dict:
     """Measure every statistic across repeated draws, at every N in the grid.
 
@@ -232,7 +234,25 @@ def sweep(
     one, mirroring the v0 noise floor where each training seed is one
     measurement; their mean feeds condition 2 and their spread is reported
     beside it as the training-seed floor at that N.
+
+    `preprocess` is not a convenience knob. The corpora these families load
+    from disk are raw -- `glove_250k.npy` has row norms spanning roughly
+    2.17 to 11.33 -- while the generator samples this study compares them
+    against already come out at exactly unit norm. Measuring both sides as
+    stored would compare a raw corpus against a normalised one, and every
+    statistic here is scale-sensitive enough that the comparison would read
+    as a generator deficit when it is really a units mismatch. Every figure
+    committed under `docs/datasets/` for these families was measured at
+    `preprocess="l2"`, so that is the default here too; `"none"` stays
+    reachable for anyone who explicitly wants the as-stored numbers, and
+    whichever mode was used is recorded in the returned `conditions` block
+    so a downstream reader never has to guess.
     """
+    real = maybe_l2_normalize(real, preprocess)
+    synthetic = {
+        label: maybe_l2_normalize(x, preprocess) for label, x in synthetic.items()
+    }
+
     measure = {
         "k": k,
         "k_hub": k_hub,
@@ -241,6 +261,7 @@ def sweep(
         "backend": backend,
         "chunk_rows": chunk_rows,
     }
+    conditions = {**measure, "preprocess": preprocess}
     cells = []
 
     for n in ns:
@@ -297,7 +318,7 @@ def sweep(
 
     return {
         "pool_rows": int(real.shape[0]),
-        "conditions": measure,
+        "conditions": conditions,
         "rule": {
             "stable_max_range_pct": STABLE_MAX_RANGE_PCT,
             "min_separation_in_ranges": MIN_SEPARATION_IN_RANGES,
@@ -363,6 +384,19 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--chunk-rows", type=int, default=1024)
     parser.add_argument(
+        "--preprocess",
+        type=str,
+        default="l2",
+        choices=("l2", "none"),
+        help=(
+            "Row normalisation applied to every series before measuring. "
+            "Default l2, which is what every figure committed under "
+            "docs/datasets/ for these families was measured at. Passing "
+            "'none' measures the vectors as stored, which is not comparable "
+            "with those figures."
+        ),
+    )
+    parser.add_argument(
         "--output", type=str, default=None, help="Also write the JSON here."
     )
     return parser.parse_args()
@@ -384,6 +418,7 @@ def main() -> None:
             seed=args.seed,
             backend=args.backend,
             chunk_rows=args.chunk_rows,
+            preprocess=args.preprocess,
         )
     except (HubStabilityError, OSError, ValueError) as exc:
         # stderr, so stdout stays parseable as JSON or empty, never half a

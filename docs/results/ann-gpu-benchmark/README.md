@@ -235,10 +235,16 @@ slower than CAGRA at its floor.
 
 ## How to read the files
 
-`ann_benchmark.json` is every cell, unaggregated, plus the environment block.
-`ann_benchmark_repeat.json` is the identical second run used for the noise
-floor above; it is evidence for that section and is not otherwise part of the
-result. `ann_benchmark.md` is the headline table. `report.html` is self-contained and
+`complete_records.html` is the readable view of everything: all 28 build cells
+and all 168 search cells, with the min/median/p95 spread per cell and both runs
+side by side, filterable by corpus and index. Start there if you want the
+numbers rather than the argument.
+
+`ann_benchmark.json` is every cell, unaggregated, plus the environment block,
+and is the source of truth that page renders. `ann_benchmark_repeat.json` is
+the identical second run used for the noise floor above; it is evidence for
+that section and is not otherwise part of the result. `ann_benchmark.md` is the
+headline table. `report.html` is self-contained and
 carries the recall-vs-QPS curve per cell — the curve, not the headline, is
 where "faster" becomes a meaningful claim, and it is the right place to look at
 the five null IVF-PQ cells. `gpuq_job_spec.json` pins the command, commit,

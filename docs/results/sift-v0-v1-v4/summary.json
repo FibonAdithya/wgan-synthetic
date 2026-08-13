@@ -1,0 +1,429 @@
+{
+  "real_path": "/workspace/data-cache/sift_1m.npy",
+  "synthetic_paths": [
+    "v0=/workspace/keep/sift-ladder/samples_v0.npy",
+    "v1=/workspace/keep/sift-ladder/samples_v1.npy",
+    "v1_30k=/workspace/keep/sift-v0-v1-v4/samples_v1_30k.npy",
+    "v4=/workspace/keep/sift-ladder/samples_v4.npy"
+  ],
+  "preprocess": "l2",
+  "seed": 42,
+  "ann_settings": {
+    "k": 100,
+    "k_hub": 10,
+    "max_rows": 20000,
+    "nlist": 256
+  },
+  "knn_settings": {
+    "k": 5,
+    "max_rows": 20000
+  },
+  "stats": [
+    {
+      "name": "real",
+      "num_vectors": 50000,
+      "dim": 128,
+      "value_mean": 0.05232822149991989,
+      "value_std": 0.07123381644487381,
+      "value_min": 0.0,
+      "value_max": 0.4153096377849579,
+      "exact_zero_fraction": 0.22980328125,
+      "negative_fraction": 0.0,
+      "norm_mean": 1.0,
+      "norm_std": 3.108712220978305e-08,
+      "duplicate_row_fraction": 0.0006199999999999539,
+      "median_pairwise_distance": 1.0995333194732666,
+      "median_5nn_distance": 0.5153149664402008,
+      "effective_rank": 27.99394989013672,
+      "lid_median": 17.738288203443098,
+      "relative_contrast_median": 2.267281799988775,
+      "hubness_skew": 1.8839015220354034,
+      "ivf_gini": 0.30403671874999993,
+      "lid_discarded_queries": 6,
+      "ann_measured_rows": 20000,
+      "ann_measured_k": 100,
+      "ann_measured_nlist": 256
+    },
+    {
+      "name": "v0",
+      "num_vectors": 20000,
+      "dim": 128,
+      "value_mean": 0.05272723361849785,
+      "value_std": 0.07093898206949234,
+      "value_min": -0.12214312702417374,
+      "value_max": 0.49734625220298767,
+      "exact_zero_fraction": 0.0,
+      "negative_fraction": 0.1181859375,
+      "norm_mean": 1.0,
+      "norm_std": 2.1818882700586073e-08,
+      "duplicate_row_fraction": 0.0,
+      "median_pairwise_distance": 1.086675763130188,
+      "median_5nn_distance": 0.5091410577297211,
+      "effective_rank": 27.109346389770508,
+      "lid_median": 17.299655884875015,
+      "relative_contrast_median": 2.273407606626452,
+      "hubness_skew": 2.0879883221058044,
+      "ivf_gini": 0.2718121093750001,
+      "lid_discarded_queries": 0,
+      "ann_measured_rows": 20000,
+      "ann_measured_k": 100,
+      "ann_measured_nlist": 256
+    },
+    {
+      "name": "v1",
+      "num_vectors": 20000,
+      "dim": 128,
+      "value_mean": 0.05254442244768143,
+      "value_std": 0.07107450067996979,
+      "value_min": -0.0973968505859375,
+      "value_max": 0.4571272134780884,
+      "exact_zero_fraction": 0.0,
+      "negative_fraction": 0.098309375,
+      "norm_mean": 1.0,
+      "norm_std": 2.2484464068384113e-08,
+      "duplicate_row_fraction": 0.0,
+      "median_pairwise_distance": 1.0958621501922607,
+      "median_5nn_distance": 0.5140051245689392,
+      "effective_rank": 27.499122619628906,
+      "lid_median": 17.449712736785933,
+      "relative_contrast_median": 2.2526491171298044,
+      "hubness_skew": 2.095806680604937,
+      "ivf_gini": 0.284236328125,
+      "lid_discarded_queries": 0,
+      "ann_measured_rows": 20000,
+      "ann_measured_k": 100,
+      "ann_measured_nlist": 256
+    },
+    {
+      "name": "v1_30k",
+      "num_vectors": 20000,
+      "dim": 128,
+      "value_mean": 0.05249028280377388,
+      "value_std": 0.07111448794603348,
+      "value_min": -0.1940707564353943,
+      "value_max": 0.481076717376709,
+      "exact_zero_fraction": 0.0,
+      "negative_fraction": 0.117968359375,
+      "norm_mean": 1.0,
+      "norm_std": 2.179036862060002e-08,
+      "duplicate_row_fraction": 0.0,
+      "median_pairwise_distance": 1.092199444770813,
+      "median_5nn_distance": 0.5105938613414764,
+      "effective_rank": 27.47701072692871,
+      "lid_median": 17.036395036803796,
+      "relative_contrast_median": 2.2786503588046374,
+      "hubness_skew": 1.9673507128884786,
+      "ivf_gini": 0.271901953125,
+      "lid_discarded_queries": 0,
+      "ann_measured_rows": 20000,
+      "ann_measured_k": 100,
+      "ann_measured_nlist": 256
+    },
+    {
+      "name": "v4",
+      "num_vectors": 20000,
+      "dim": 128,
+      "value_mean": 0.05252346768975258,
+      "value_std": 0.0710899829864502,
+      "value_min": 0.0,
+      "value_max": 0.49485498666763306,
+      "exact_zero_fraction": 0.2440859375,
+      "negative_fraction": 0.0,
+      "norm_mean": 1.0,
+      "norm_std": 1.998756360421794e-08,
+      "duplicate_row_fraction": 0.0,
+      "median_pairwise_distance": 1.0983940362930298,
+      "median_5nn_distance": 0.4893931448459625,
+      "effective_rank": 26.809654235839844,
+      "lid_median": 15.546456641121368,
+      "relative_contrast_median": 2.4140057994823017,
+      "hubness_skew": 1.5984088831923262,
+      "ivf_gini": 0.2681191406250001,
+      "lid_discarded_queries": 0,
+      "ann_measured_rows": 20000,
+      "ann_measured_k": 100,
+      "ann_measured_nlist": 256
+    }
+  ],
+  "worst_dimensions": {
+    "v0": [
+      {
+        "dim": 107,
+        "wasserstein1": 0.00839121574872492
+      },
+      {
+        "dim": 88,
+        "wasserstein1": 0.004524655677393036
+      },
+      {
+        "dim": 32,
+        "wasserstein1": 0.004528272934889057
+      },
+      {
+        "dim": 95,
+        "wasserstein1": 0.006984592763762732
+      },
+      {
+        "dim": 56,
+        "wasserstein1": 0.0025056387574721893
+      },
+      {
+        "dim": 44,
+        "wasserstein1": 0.00672522140448212
+      },
+      {
+        "dim": 64,
+        "wasserstein1": 0.005413518151246584
+      },
+      {
+        "dim": 115,
+        "wasserstein1": 0.0065487970067076495
+      },
+      {
+        "dim": 91,
+        "wasserstein1": 0.006524892038290887
+      },
+      {
+        "dim": 93,
+        "wasserstein1": 0.006337070275469305
+      },
+      {
+        "dim": 112,
+        "wasserstein1": 0.006268289878323473
+      },
+      {
+        "dim": 43,
+        "wasserstein1": 0.006264979493902869
+      },
+      {
+        "dim": 61,
+        "wasserstein1": 0.006237054451837588
+      },
+      {
+        "dim": 0,
+        "wasserstein1": 0.006220414818978431
+      },
+      {
+        "dim": 104,
+        "wasserstein1": 0.005294204428801281
+      },
+      {
+        "dim": 19,
+        "wasserstein1": 0.006114546209854312
+      }
+    ],
+    "v1": [
+      {
+        "dim": 107,
+        "wasserstein1": 0.002194561904190652
+      },
+      {
+        "dim": 88,
+        "wasserstein1": 0.0018162216370966378
+      },
+      {
+        "dim": 32,
+        "wasserstein1": 0.002648158194653499
+      },
+      {
+        "dim": 95,
+        "wasserstein1": 0.0023152692329356525
+      },
+      {
+        "dim": 56,
+        "wasserstein1": 0.0019558724427733995
+      },
+      {
+        "dim": 44,
+        "wasserstein1": 0.0014698274656328866
+      },
+      {
+        "dim": 64,
+        "wasserstein1": 0.0026374455079286
+      },
+      {
+        "dim": 115,
+        "wasserstein1": 0.002600233845902753
+      },
+      {
+        "dim": 91,
+        "wasserstein1": 0.003052746722787986
+      },
+      {
+        "dim": 93,
+        "wasserstein1": 0.0015865064675761327
+      },
+      {
+        "dim": 112,
+        "wasserstein1": 0.001976302960000136
+      },
+      {
+        "dim": 43,
+        "wasserstein1": 0.002733911316142327
+      },
+      {
+        "dim": 61,
+        "wasserstein1": 0.002584762450126254
+      },
+      {
+        "dim": 0,
+        "wasserstein1": 0.003364116158200387
+      },
+      {
+        "dim": 104,
+        "wasserstein1": 0.002299552134886643
+      },
+      {
+        "dim": 19,
+        "wasserstein1": 0.0020710947476819267
+      }
+    ],
+    "v1_30k": [
+      {
+        "dim": 107,
+        "wasserstein1": 0.003301452585304639
+      },
+      {
+        "dim": 88,
+        "wasserstein1": 0.0031871454279106598
+      },
+      {
+        "dim": 32,
+        "wasserstein1": 0.0028275858470698705
+      },
+      {
+        "dim": 95,
+        "wasserstein1": 0.002406039035258543
+      },
+      {
+        "dim": 56,
+        "wasserstein1": 0.002796236494823614
+      },
+      {
+        "dim": 44,
+        "wasserstein1": 0.004188147046868379
+      },
+      {
+        "dim": 64,
+        "wasserstein1": 0.0028995192585224315
+      },
+      {
+        "dim": 115,
+        "wasserstein1": 0.0037945023850706056
+      },
+      {
+        "dim": 91,
+        "wasserstein1": 0.0029599150412383387
+      },
+      {
+        "dim": 93,
+        "wasserstein1": 0.004090858654995307
+      },
+      {
+        "dim": 112,
+        "wasserstein1": 0.004519627811842565
+      },
+      {
+        "dim": 43,
+        "wasserstein1": 0.0026966685981644626
+      },
+      {
+        "dim": 61,
+        "wasserstein1": 0.003336588850249022
+      },
+      {
+        "dim": 0,
+        "wasserstein1": 0.004021528465090024
+      },
+      {
+        "dim": 104,
+        "wasserstein1": 0.0051100049787648014
+      },
+      {
+        "dim": 19,
+        "wasserstein1": 0.003545326106213298
+      }
+    ],
+    "v4": [
+      {
+        "dim": 107,
+        "wasserstein1": 0.00463598485481846
+      },
+      {
+        "dim": 88,
+        "wasserstein1": 0.007407275140742862
+      },
+      {
+        "dim": 32,
+        "wasserstein1": 0.007144404036812075
+      },
+      {
+        "dim": 95,
+        "wasserstein1": 0.0034273664458717287
+      },
+      {
+        "dim": 56,
+        "wasserstein1": 0.006861386665756242
+      },
+      {
+        "dim": 44,
+        "wasserstein1": 0.0037048934086124554
+      },
+      {
+        "dim": 64,
+        "wasserstein1": 0.00655028451856208
+      },
+      {
+        "dim": 115,
+        "wasserstein1": 0.0027968158525617983
+      },
+      {
+        "dim": 91,
+        "wasserstein1": 0.0030462721848828565
+      },
+      {
+        "dim": 93,
+        "wasserstein1": 0.004801084432056676
+      },
+      {
+        "dim": 112,
+        "wasserstein1": 0.00493059396963478
+      },
+      {
+        "dim": 43,
+        "wasserstein1": 0.0025663352689287407
+      },
+      {
+        "dim": 61,
+        "wasserstein1": 0.002872472502937513
+      },
+      {
+        "dim": 0,
+        "wasserstein1": 0.0051872960528706255
+      },
+      {
+        "dim": 104,
+        "wasserstein1": 0.006149613064700903
+      },
+      {
+        "dim": 19,
+        "wasserstein1": 0.004045888430574457
+      }
+    ]
+  },
+  "report_html": "/workspace/keep/sift-v0-v1-v4/eda/eda_report.html",
+  "png_files": [
+    "/workspace/keep/sift-v0-v1-v4/eda/png/01_descriptor_glyphs.png",
+    "/workspace/keep/sift-v0-v1-v4/eda/png/02_local_intrinsic_dimensionality.png",
+    "/workspace/keep/sift-v0-v1-v4/eda/png/03_hubness.png",
+    "/workspace/keep/sift-v0-v1-v4/eda/png/04_ivf_cell_balance.png",
+    "/workspace/keep/sift-v0-v1-v4/eda/png/05_pooled_value_distribution.png",
+    "/workspace/keep/sift-v0-v1-v4/eda/png/06_per-dimension_marginals.png",
+    "/workspace/keep/sift-v0-v1-v4/eda/png/07_per-dimension_profiles.png",
+    "/workspace/keep/sift-v0-v1-v4/eda/png/08_pairwise_distances.png",
+    "/workspace/keep/sift-v0-v1-v4/eda/png/09_within-set_5-nn_distances.png",
+    "/workspace/keep/sift-v0-v1-v4/eda/png/10_pca_spectrum.png",
+    "/workspace/keep/sift-v0-v1-v4/eda/png/11_correlation_structure.png",
+    "/workspace/keep/sift-v0-v1-v4/eda/png/12_per-dimension_mismatch.png"
+  ]
+}

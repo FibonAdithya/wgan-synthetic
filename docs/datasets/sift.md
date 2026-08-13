@@ -88,6 +88,15 @@ run-to-run noise. Its LID is not evidence: `lid_reg` fits LID's sufficient
 statistic directly. Neither rung's checkpoints are in this repo — they are on
 the training box, listed in each result page.
 
+That pair is `v3` against `v4`. Read further down the ladder and it stops being
+a story of progress: `docs/results/sift-v0-v1-v4/` measures `v0`, `v1` and `v4`
+against real `sift_1m.npy` in one invocation, and **`v0` — plain WGAN-GP — is
+closer to real than `v4` on all four gated statistics**, while emitting 11.8%
+negative components and no exact zeros at all. The four statistics constrain
+neighbourhood geometry and not support, so a rung can win them while producing
+vectors that are not plausible descriptors. That page argues for a support check
+beside the gate; setting one is a human's call.
+
 Train `v0` (or any rung, by swapping the config):
 
     python -m src.train.train_wgan_gp --config configs/sift/v0.yaml

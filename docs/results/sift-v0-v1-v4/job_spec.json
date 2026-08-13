@@ -1,0 +1,15 @@
+{
+  "state": "done",
+  "id": "wgan-synthetic-20260813T102700Z-1f6043",
+  "lane": "cpu",
+  "project": "wgan-synthetic",
+  "commit": "2bf36ebb9d158b624e238c9dbce4ef931169c544",
+  "branch": "benchmark-algos",
+  "cmd": ["bash", "/workspace/keep/sift-v0-v1-v4/run.sh"],
+  "artifacts": [],
+  "timeout_s": 3600,
+  "attempts": 0,
+  "submitted_at": "2026-08-13T10:27:00Z",
+  "exit_code": 0,
+  "error": null
+}

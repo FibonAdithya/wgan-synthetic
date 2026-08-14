@@ -20,7 +20,7 @@ from sklearn.decomposition import PCA
 
 from src.eval import ann_difficulty
 from src.eval.eda import metrics
-from src.eval.eda.series import Series
+from src.eval.eda.series import REAL_NAME, Series
 
 
 def shared_edges(arrays: Sequence[np.ndarray], bins: int) -> np.ndarray:
@@ -30,6 +30,70 @@ def shared_edges(arrays: Sequence[np.ndarray], bins: int) -> np.ndarray:
     if hi <= lo:
         hi = lo + 1.0e-6
     return np.linspace(lo, hi, bins + 1)
+
+
+def _rgba(color: str, alpha: float) -> str | None:
+    """'#rgb' or '#rrggbb' -> 'rgba(r, g, b, alpha)', for a fill under a line.
+
+    Returns None for anything else -- a CSS colour name, an existing rgb()
+    string -- so the caller drops the fill rather than raising. A panel is worth
+    more without its fill than not at all.
+    """
+    h = color.lstrip("#")
+    if len(h) == 3:
+        h = "".join(c * 2 for c in h)
+    if len(h) != 6:
+        return None
+    try:
+        r, g, b = (int(h[i : i + 2], 16) for i in (0, 2, 4))
+    except ValueError:
+        return None
+    return f"rgba({r}, {g}, {b}, {alpha})"
+
+
+def density_trace(
+    centers: np.ndarray,
+    hist: np.ndarray,
+    name: str,
+    color: str,
+    *,
+    is_real: bool = False,
+    log_y: bool = False,
+    fill: bool = True,
+    **kwargs: object,
+) -> go.Scatter:
+    """One binned-density curve.
+
+    These panels overlay every set on one axis, and overlaid translucent bars
+    stop being readable at three or four series: the fills multiply together
+    into mud and no single set can be followed across the range. The density is
+    binned exactly as before -- same edges, same `density=True` normalization --
+    and only the mark changes, so the curve reads at any series count.
+
+    `real` is drawn heavier than the synthetics because it is the reference
+    every other curve is being compared against, not one series among equals.
+
+    On a log y-axis the fill is dropped -- there is no zero to fill down to --
+    and empty bins become breaks in the line rather than plunges to the axis
+    floor, which would otherwise read as data.
+    """
+    y = np.asarray(hist, dtype=np.float64)
+    if log_y:
+        y = np.where(y > 0.0, y, np.nan)
+    trace = dict(
+        x=centers,
+        y=y,
+        name=name,
+        mode="lines",
+        line=dict(color=color, width=2.6 if is_real else 1.8),
+        **kwargs,
+    )
+    if fill and not log_y:
+        fillcolor = _rgba(color, 0.30 if is_real else 0.12)
+        if fillcolor is not None:
+            trace["fill"] = "tozeroy"
+            trace["fillcolor"] = fillcolor
+    return go.Scatter(**trace)
 
 
 def overlay_hist_fig(
@@ -44,15 +108,23 @@ def overlay_hist_fig(
     fig = go.Figure()
     for name, values, color in named_values:
         hist, _ = np.histogram(values, bins=edges, density=True)
-        fig.add_bar(x=centers, y=hist, name=name, marker_color=color, opacity=0.55)
+        fig.add_trace(
+            density_trace(
+                centers,
+                hist,
+                name,
+                color,
+                is_real=(name == REAL_NAME),
+                log_y=log_y,
+            )
+        )
     fig.update_layout(
         title=title,
         xaxis_title=xaxis_title,
         yaxis_title="density",
-        barmode="overlay",
-        bargap=0.0,
         template="plotly_white",
         height=440,
+        hovermode="x unified",
     )
     if log_y:
         fig.update_yaxes(type="log")
@@ -81,13 +153,15 @@ def fig_per_dim_marginals(series: Sequence[Series], bins: int) -> go.Figure:
         centers = 0.5 * (edges[:-1] + edges[1:])
         for s in series:
             hist, _ = np.histogram(s.x[:, d], bins=edges, density=True)
-            fig.add_bar(
-                x=centers,
-                y=hist,
-                name=s.name,
-                marker_color=s.color,
-                opacity=0.55,
-                visible=(d == 0),
+            fig.add_trace(
+                density_trace(
+                    centers,
+                    hist,
+                    s.name,
+                    s.color,
+                    is_real=s.is_real,
+                    visible=(d == 0),
+                )
             )
 
     buttons = []
@@ -107,10 +181,9 @@ def fig_per_dim_marginals(series: Sequence[Series], bins: int) -> go.Figure:
         title="Marginal, dimension 0",
         xaxis_title="coordinate value",
         yaxis_title="density",
-        barmode="overlay",
-        bargap=0.0,
         template="plotly_white",
         height=460,
+        hovermode="x unified",
         updatemenus=[
             dict(
                 buttons=buttons,
@@ -276,23 +349,24 @@ def fig_ann_profile(
             if not v.size:
                 continue
             hist, _ = np.histogram(v, bins=edges, density=True)
-            fig.add_bar(
-                x=centers,
-                y=hist,
-                name=s.name,
-                legendgroup=s.name,
-                showlegend=(col == 1),
-                marker_color=s.color,
-                opacity=0.55,
+            fig.add_trace(
+                density_trace(
+                    centers,
+                    hist,
+                    s.name,
+                    s.color,
+                    is_real=s.is_real,
+                    legendgroup=s.name,
+                    showlegend=(col == 1),
+                ),
                 row=1,
                 col=col,
             )
     fig.update_layout(
         title="ANN difficulty profile",
-        barmode="overlay",
-        bargap=0.0,
         template="plotly_white",
         height=440,
+        hovermode="x unified",
     )
     return fig
 

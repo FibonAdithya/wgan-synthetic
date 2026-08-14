@@ -181,14 +181,19 @@ on v4, and the ladder is doing what a ladder should. The dissent worth keeping i
 relative contrast, where the plain baseline is indistinguishable from real and v4 is
 2.4x out — the one statistic on which the structured rung is measurably worse.
 
-## A panel that cannot be read
+## What the lattice does to relative contrast
 
-The relative-contrast histogram renders with its x-axis to ~6.5e7 and every bar in
-the first bin. Relative contrast divides by the nearest-neighbour distance, and
-SIFT's quantized lattice puts near-coincident pairs in the corpus, so a few real
-queries divide by almost zero. Six real queries were dropped by `survivor_mask`;
-**every synthetic rung dropped zero**. The median the gate uses is unaffected; only
-the histogram is. Worth an issue against the panel.
+Relative contrast divides by the nearest-neighbour distance, and SIFT's quantized
+lattice puts near-coincident pairs in the corpus, so a few real queries divide by
+almost zero and reach ~6.5e7. Those points used to set the axis and collapse every
+curve into the first bin; the panel now bins to the 99.5th percentile and states
+what it left out — 130 of 79994 queries, 0.16%.
+
+The tail belongs to the real corpus, not the generators. Six real queries were
+dropped outright by `survivor_mask` as exact duplicates or full ties, and **every
+synthetic rung dropped zero** — no generator here produces a single exact duplicate
+or fully tied neighbourhood. The gated median is computed from the full array and
+was never affected; only the histogram's axis was.
 
 ## What this does not say
 
@@ -219,6 +224,14 @@ contrast with 12.3% negative components and no exact zeros; that combination sho
 not look like a pass on any statistic. `exact_zero_fraction` and `negative_fraction`
 are already computed by `eda_report`. Whether that becomes a fifth gated statistic or
 a precondition is a banding decision, and belongs to a human.
+
+## Figures
+
+The overlay panels draw each set as a binned-density curve rather than overlapping
+translucent bars, with `real` as the filled reference. Four overlapping bar series
+were unreadable — the fills multiplied into mud and no single set could be followed.
+Bins are unchanged, so every number a panel encodes is the same; only the mark
+differs. Shipped in `src/eval/eda/figures.py`, so every family's report gets it.
 
 ## Artifacts on the box
 

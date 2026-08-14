@@ -32,6 +32,37 @@ def shared_edges(arrays: Sequence[np.ndarray], bins: int) -> np.ndarray:
     return np.linspace(lo, hi, bins + 1)
 
 
+# Relative contrast is a ratio with the nearest-neighbour distance in its
+# denominator, so it has no bounded upper tail: on a corpus with near-duplicate
+# pairs a few queries reach 1e7 and up. The contrast subplot bins to this
+# quantile and states what it left out. Not applied to LID, whose Hill estimate
+# is already bounded in practice.
+CONTRAST_UPPER_QUANTILE = 99.5
+
+
+def clipped_edges(
+    arrays: Sequence[np.ndarray], bins: int, upper_quantile: float
+) -> tuple[np.ndarray, int]:
+    """Bin edges bounded above at a quantile, plus how many values fall past it.
+
+    Relative contrast divides by the nearest-neighbour distance, so a corpus
+    containing near-coincident pairs -- SIFT's quantized lattice produces them --
+    sends a handful of queries to enormous values. On min-to-max edges those few
+    points set the axis and every other bin collapses against the left edge, so
+    the panel renders as one spike and reads as a rendering failure.
+
+    Bounding the upper edge at a quantile makes the bulk visible; returning the
+    count past it lets the caller say what is not shown, so the clip is a stated
+    choice rather than a silent truncation.
+    """
+    lo = float(min(float(a.min()) for a in arrays))
+    hi = float(max(float(np.quantile(a, upper_quantile / 100.0)) for a in arrays))
+    if hi <= lo:
+        hi = lo + 1.0e-6
+    dropped = int(sum(int((a > hi).sum()) for a in arrays))
+    return np.linspace(lo, hi, bins + 1), dropped
+
+
 def _rgba(color: str, alpha: float) -> str | None:
     """'#rgb' or '#rrggbb' -> 'rgba(r, g, b, alpha)', for a fill under a line.
 
@@ -344,7 +375,27 @@ def fig_ann_profile(
                 col=col,
             )
             continue
-        edges = shared_edges(populated, bins)
+        if attr == "relative_contrast":
+            edges, dropped = clipped_edges(populated, bins, CONTRAST_UPPER_QUANTILE)
+            if dropped:
+                total = sum(int(v.size) for v in populated)
+                fig.add_annotation(
+                    text=(
+                        f"{dropped} of {total} queries above {edges[-1]:.2f} not shown"
+                    ),
+                    showarrow=False,
+                    xref="x domain",
+                    yref="y domain",
+                    x=1.0,
+                    xanchor="right",
+                    y=1.0,
+                    yanchor="bottom",
+                    font=dict(color="#718096", size=11),
+                    row=1,
+                    col=col,
+                )
+        else:
+            edges = shared_edges(populated, bins)
         centers = 0.5 * (edges[:-1] + edges[1:])
         for s in series:
             v = getattr(metrics[s.name], attr)

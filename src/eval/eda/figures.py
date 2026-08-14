@@ -386,10 +386,12 @@ def fig_ann_profile(
                     showarrow=False,
                     xref="x domain",
                     yref="y domain",
-                    x=1.0,
+                    x=0.98,
                     xanchor="right",
-                    y=1.0,
-                    yanchor="bottom",
+                    # Inside the axes, not above them: y=1.0 with yanchor
+                    # "bottom" lands on the subplot title.
+                    y=0.98,
+                    yanchor="top",
                     font=dict(color="#718096", size=11),
                     row=1,
                     col=col,

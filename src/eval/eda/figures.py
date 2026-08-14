@@ -70,8 +70,10 @@ def density_trace(
     binned exactly as before -- same edges, same `density=True` normalization --
     and only the mark changes, so the curve reads at any series count.
 
-    `real` is drawn heavier than the synthetics because it is the reference
-    every other curve is being compared against, not one series among equals.
+    `real` is drawn heavier, and is the only curve given a fill: it is the
+    reference every other curve is compared against, not one series among
+    equals. Filling all of them reinstates the mud the bars produced -- four
+    translucent fills over each other are unreadable whatever the mark.
 
     On a log y-axis the fill is dropped -- there is no zero to fill down to --
     and empty bins become breaks in the line rather than plunges to the axis
@@ -88,8 +90,8 @@ def density_trace(
         line=dict(color=color, width=2.6 if is_real else 1.8),
         **kwargs,
     )
-    if fill and not log_y:
-        fillcolor = _rgba(color, 0.30 if is_real else 0.12)
+    if fill and is_real and not log_y:
+        fillcolor = _rgba(color, 0.16)
         if fillcolor is not None:
             trace["fill"] = "tozeroy"
             trace["fillcolor"] = fillcolor

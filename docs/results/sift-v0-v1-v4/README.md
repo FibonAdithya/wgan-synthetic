@@ -1,7 +1,7 @@
 # SIFT v0, v1 and v4 at 100k steps
 
 Run 2026-08-13 from commit `2bf36eb` on branch `benchmark-algos`. `job_spec.json`,
-`run_100k.sh` and `dist_diag.py` hold the invocations verbatim.
+`run_100k.sh`, `run_floor100k.sh` and `dist_diag.py` hold the invocations verbatim.
 
 `report.html` is the written report, self-contained, with the figures embedded.
 This file is the metric record.
@@ -69,26 +69,44 @@ Closest to real, by absolute gap:
 | IVF cell-balance Gini | **v4** | v4 0.0005 < v1 0.0198 < v0 0.0231 |
 
 No rung sweeps the gate. **v4 takes hubness skew and IVF Gini**, and its Gini is
-nearly exact — 0.3035 against 0.3040, a gap of 0.0005, which is 0.04x its own noise
-floor. **v0 keeps relative contrast** at 0.11x the floor, indistinguishable from
-real. Discounting LID leaves three usable statistics, split 2–1 for v4.
+nearly exact — 0.3035 against 0.3040, a gap of 0.0005, a fifth of v1's and a
+twentieth of v0's. **v0 keeps relative contrast**, though only just: at 1.30x the
+measured 100k floor it is marginal, not indistinguishable from real as the 30k
+floor suggested. Discounting LID leaves three usable statistics, split 2–1 for v4.
 
 ### In noise-floor units
 
-The MLP rungs take the v0 seed floor from `docs/datasets/sift.md` (LID 0.164,
-contrast 0.048, hubness 0.062, Gini 0.007); v4 takes the architecture-matched
-v3-pair spread from `docs/results/v4-logratio/` (LID 0.0930, contrast 0.0203,
-hubness 0.0382, Gini 0.0131).
+The floor was measured at this run length: two 100k v0 runs identical in every
+hyperparameter except the training seed (42 and 43), both sampled at a fixed seed
+of 42, measured in one `eda_report` invocation. `floor_100k.json` holds it.
+
+**It does not transfer across run length.** The 30k floor this page previously
+divided by was wrong in both directions:
+
+| Statistic | 30k floor | 100k floor | ratio |
+|---|---|---|---|
+| LID median | 0.1640 | 0.1026 | 0.63x |
+| Relative contrast | 0.0480 | 0.0040 | **0.08x** |
+| Hubness skew | 0.0620 | 0.1245 | **2.01x** |
+| IVF Gini | 0.0070 | 0.0072 | 1.03x |
+
+Relative contrast's floor is 12x tighter at 100k; hubness skew's is twice as loose.
 
 | Statistic | v0 | v1 | v4 |
 |---|---|---|---|
-| LID median | 2.14x | 1.76x | 14.54x |
-| Relative contrast | **0.11x** | **0.30x** | 2.38x |
-| Hubness skew | 2.74x | 3.42x | 3.87x |
-| IVF Gini | 3.30x | 2.83x | **0.04x** |
+| LID median | 3.42x | 2.81x | — |
+| Relative contrast | 1.30x | 3.68x | — |
+| Hubness skew | 1.37x | 1.70x | — |
+| IVF Gini | 3.21x | 2.75x | — |
 
-Because the two floors differ these are not a cross-rung ranking — they answer "is
-this gap real?" only.
+**Against the measured floor, no v0 or v1 gap is inside noise.** The narrowest are
+v0's relative contrast at 1.30x and its hubness at 1.37x; the rest run to 3.7x.
+
+The floor is also **per architecture**, so it does not cover v4. No 100k floor
+exists for the structured-gate architecture, and the 30k v3-pair spread cannot
+stand in now that run length is known to move a floor 12x. **v4's multiples are
+withheld** rather than computed against a floor known to be wrong at this run
+length; its standing rests on the absolute gaps above, which need no floor.
 
 **v4's LID is not evidence and ranks nothing.** `lid_reg` fits the mean log-ratio
 profile of within-batch neighbours, the sufficient statistic the Hill estimator
@@ -114,18 +132,23 @@ The descriptor glyph panel shows this directly, and is the only panel that can: 
 real rows carry no negative bins, the v0 and v1 rows are shot through with them at
 100k just as at 30k, and v4's are clean.
 
-**What survives from the 30k reading**, narrower but still worth acting on: v0 sits
-*within noise of real* on relative contrast while being this far off-support. Four
+**What survives from the 30k reading**, narrower but still worth acting on: v0 is
+the closest rung to real on relative contrast while being this far off-support. Four
 statistics measuring neighbourhood geometry do not constrain support.
 
 ## EMA alone does nothing
 
 With run length matched, v0→v1 isolates generator EMA — one config key, all else
-equal. It moves nothing: LID 0.0622 (0.38x floor), relative contrast 0.0095 (0.20x),
-hubness skew 0.0419 (0.68x), IVF Gini 0.0033 (0.47x). **All four under 1x — every one
-smaller than a reseed.** It does not help the support problem either.
+equal. Against the measured 100k floor it moves LID 0.0622 (0.61x), hubness skew
+0.0419 (0.34x) and IVF Gini 0.0033 (0.46x) — all under 1x, each smaller than a
+reseed. **Relative contrast is the exception at 0.0095, which is 2.38x the floor**,
+and it moves the wrong way: v1 lands further from real than v0.
 
-At 30k this question was confounded, because the ladder's v1 was a 100k run.
+On the 30k floor that term read 0.20x and this section said EMA moved nothing. The
+measured floor turns the one statistic EMA affects into its only real effect, and
+that effect is a regression. It does not help the support problem either.
+
+At 30k the question was also confounded, because the ladder's v1 was a 100k run.
 
 ## Distribution diagnostics
 
@@ -178,8 +201,9 @@ its Frobenius norm at 2.7x the floor while v1 and v4 sit on it.
 
 At 30k the three lenses picked three different rungs. Matched at 100k they converge
 on v4, and the ladder is doing what a ladder should. The dissent worth keeping is
-relative contrast, where the plain baseline is indistinguishable from real and v4 is
-2.4x out — the one statistic on which the structured rung is measurably worse.
+relative contrast, where the plain baseline is closest to real — 0.0052 against v4's
+0.0483 — and is the only gap on the page within shouting distance of its own noise
+floor at 1.30x.
 
 ## What the lattice does to relative contrast
 
@@ -197,14 +221,14 @@ was never affected; only the histogram's axis was.
 
 ## What this does not say
 
-- **The noise floors were measured on 30k runs.** Both — the v0 seed floor and the
-  v3-pair spread — come from 30k pairs, and every multiple here divides a 100k gap by
-  one of them. A longer run need not have the same seed-to-seed spread. This is an
-  extrapolation; the claim it most affects is v0's 0.11x on relative contrast.
-  Measuring a 100k floor needs a second-seed 100k v0.
-- **n=1 per rung.** One seed each, and both floors are themselves n=2. Both are lower
-  bounds: two runs at identical seed still diverge 1–8% per loss column by step 250
-  from nondeterministic CUDA reduction order.
+- **v4 has no floor at this run length.** The v0/v1 multiples come from a 100k pair
+  measured here; v4's architecture has none, and the 30k v3-pair spread is not a
+  substitute. Its rows give gaps only. Producing one means a second-seed 100k v4.
+- **The 100k floor is n=2.** One paired difference has one degree of freedom: it
+  fixes the order of magnitude and nothing more, and it is a lower bound — two runs
+  at identical seed still diverge 1–8% per loss column by step 250 from
+  nondeterministic CUDA reduction order. Three to five seeds are needed before any of
+  this justifies a band.
 - **No band was set or moved.** `gates/sift.yaml` is untouched; every band is null.
 - **v4's LID ranks nothing** — fitted by construction.
 - **The real-vs-real floor is one split.** It resolves "saturated" from "clearly
@@ -219,9 +243,9 @@ was never affected; only the histogram's axis was.
 inverted the ranking of the two most distant rungs on this ladder. Any future rung
 carrying a regularizer should be assumed to need the same headroom.
 
-**The gate still needs a support check.** v0 sits within noise of real on relative
-contrast with 12.3% negative components and no exact zeros; that combination should
-not look like a pass on any statistic. `exact_zero_fraction` and `negative_fraction`
+**The gate still needs a support check.** v0 sits nearer real on relative contrast
+than any other rung while carrying 12.3% negative components and no exact zeros; that
+combination should not look like a pass on any statistic. `exact_zero_fraction` and `negative_fraction`
 are already computed by `eda_report`. Whether that becomes a fifth gated statistic or
 a precondition is a banding decision, and belongs to a human.
 

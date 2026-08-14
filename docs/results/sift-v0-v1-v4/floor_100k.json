@@ -1,0 +1,32 @@
+{
+  "conditions": {
+    "steps": 100000,
+    "train_seeds": [
+      42,
+      43
+    ],
+    "sample_seed": 42,
+    "n": 20000,
+    "k": 100,
+    "k_hub": 10,
+    "nlist": 256
+  },
+  "floor_100k": {
+    "lid_median": 0.10264807177065194,
+    "relative_contrast_median": 0.003976866183038386,
+    "hubness_skew": 0.1245157875710583,
+    "ivf_gini": 0.007194140625000012
+  },
+  "floor_30k": {
+    "lid_median": 0.164,
+    "relative_contrast_median": 0.048,
+    "hubness_skew": 0.062,
+    "ivf_gini": 0.007
+  },
+  "gap_to_real_seed42": {
+    "lid_median": 0.3508110456438658,
+    "relative_contrast_median": 0.005180152400598548,
+    "hubness_skew": 0.16996503556718756,
+    "ivf_gini": 0.02307656250000001
+  }
+}

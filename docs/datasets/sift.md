@@ -102,8 +102,9 @@ systematically favour the simpler rung.
 Second, at 100k the ladder does progress — `v4` takes hubness skew and IVF Gini
 (the latter near-exactly, 0.3035 against 0.3040) and the per-dimension marginals,
 and it is the only rung on SIFT's support at all. But **`v0` stays closest on
-relative contrast, at 0.11x the seed floor, while emitting 12.3% negative
-components and no exact zeros.** Four statistics measuring neighbourhood geometry
+relative contrast while emitting 12.3% negative components and no exact zeros.**
+Against a floor measured at 100k that gap is 1.30x -- marginal rather than inside
+noise, where the 30k floor had put it. Four statistics measuring neighbourhood geometry
 do not constrain support, so that page argues for a support check beside the
 gate; setting one is a human's call.
 
@@ -169,9 +170,26 @@ carry a meaningful band at this ladder's current distance from real, and neither
 should be used to attribute a rung-to-rung improvement. LID median is the one
 comfortably usable statistic; hubness skew is marginal.
 
-**This floor is measured at 30k steps.** `docs/results/sift-v0-v1-v4/` divides
-100k gaps by it for want of anything better, and says so; a 100k floor needs a
-second-seed 100k run and does not exist yet.
+**This floor is measured at 30k steps, and the floor moves with run length.**
+A matched 100k pair (`v0`, seeds 42 and 43, sampled at a fixed seed of 42) was
+measured 2026-08-14 and is recorded in
+`docs/results/sift-v0-v1-v4/floor_100k.json`:
+
+| Statistic | 30k spread | 100k spread | ratio |
+|---|---|---|---|
+| LID median | 0.164 | 0.1026 | 0.63x |
+| Relative contrast median | 0.048 | 0.0040 | **0.08x** |
+| Hubness skew | 0.062 | 0.1245 | **2.01x** |
+| IVF cell-balance Gini | 0.007 | 0.0072 | 1.03x |
+
+Relative contrast's floor is **12x tighter** at 100k and hubness skew's is
+**twice as loose**, so a 30k floor is not a usable stand-in at 100k in either
+direction. Use the floor measured at the run length you are judging. Both are
+n=2 and both are lower bounds.
+
+This is also why `docs/results/sift-v0-v1-v4/` withholds `v4`'s multiples: no
+100k floor exists for the structured-gate architecture, and floors transfer
+across neither architecture nor run length.
 
 **This is n=2.** A single paired difference has one degree of freedom: it
 establishes the floor's order of magnitude and nothing more, and the true spread

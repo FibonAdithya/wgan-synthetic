@@ -117,10 +117,16 @@ def knn(
     `backend` selects the neighbour search. "sklearn" is the default and is
     what every figure committed under docs/datasets/ was measured with;
     "torch" runs the same search on the GPU when one is available. The two
-    agree to the tolerance asserted in tests/test_ann_difficulty.py --
-    sklearn's brute euclidean uses the ||x||^2 + ||y||^2 - 2xy expansion,
-    which is the numerically worse form, so the difference is not all in
-    torch's column.
+    agree to the tolerance asserted in tests/test_ann_difficulty.py, but
+    those tests only exercise the CPU torch path -- this development
+    machine has no GPU. The evidence that the two backends agree under CUDA
+    is the committed pair `docs/datasets/glove_hub_stability_provenance.json`
+    (torch) and `docs/datasets/glove_hub_stability_sklearn_control.json`
+    (sklearn): the same eight draws, measured on the GPU box, agreeing to
+    under 0.00005% on all six statistics with worst per-draw disagreement
+    8.66e-05 absolute. sklearn's brute euclidean uses the
+    ||x||^2 + ||y||^2 - 2xy expansion, which is the numerically worse form,
+    so the difference is not all in torch's column.
 
     Self-exclusion is deferred to `_exclude_self`.
     """

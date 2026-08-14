@@ -1,3 +1,5 @@
+import inspect
+
 import numpy as np
 import pytest
 
@@ -330,6 +332,16 @@ def test_exclude_self_drops_the_farthest_when_the_query_did_not_come_back():
 
     np.testing.assert_array_equal(kept_idx, [[7, 8]])
     np.testing.assert_allclose(kept_dist, [[0.5, 1.0]])
+
+
+def test_knn_default_backend_is_sklearn():
+    # Every figure committed under docs/datasets/ was measured with the
+    # sklearn path. The parity test below calls knn(x, 10) with no explicit
+    # backend and compares it against backend="torch"; if the default ever
+    # flipped to "torch", that test would pass trivially instead of proving
+    # anything. Pin the default directly.
+    default = inspect.signature(ann_difficulty.knn).parameters["backend"].default
+    assert default == "sklearn"
 
 
 def test_torch_backend_returns_the_same_neighbours_as_sklearn():

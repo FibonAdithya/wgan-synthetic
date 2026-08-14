@@ -273,6 +273,7 @@ def test_cli_defaults_to_l2_and_records_it(tmp_path, monkeypatch, capsys):
 
     written = json.loads(output.read_text(encoding="utf-8"))
     assert written["conditions"]["preprocess"] == "l2"
+    assert written["conditions"]["backend"] == "sklearn"
 
 
 def test_sweep_reports_one_cell_per_n_with_every_raw_draw():

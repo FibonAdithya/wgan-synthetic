@@ -165,6 +165,17 @@ own noise floor -- which is what happened here -- and would go blind again
 against a later rung that closed most of that gap and landed inside
 3.46--8.33, indistinguishable there from a reseed of real itself.
 
+That reasoning stands -- a hubness-skew band is coarse, not useless -- but it
+is no longer the last word on this statistic. `## Hub statistic stability`
+below took the measurement this section could only argue for: across four N
+on GloVe and DEEP, `hubness_skew` is `rejected` at every one, and
+`hubness_gini` is the replacement it names, `qualified` at the locked
+canonical N=20,000. Adoption is not automatic: `summary()` in
+`src/eval/ann_difficulty.py` does not emit `hubness_gini`, so `check_gate`
+cannot read it yet, and whether to wire it in is a decision for a human, not
+this study. See that section before setting a `hubness_skew` band from the
+range above.
+
 Check a run against it:
 
     python -m src.eval.check_gate --dataset glove --run-dir runs/glove/profile
@@ -358,6 +369,13 @@ min) (discriminating). The tie-break, also pre-registered: take the cheapest
 qualifying cell -- if anything qualifies at the locked N=20,000, adopt it and
 leave canonical conditions alone.
 
+**This conclusion is not yet actionable.** `summary()` in
+`src/eval/ann_difficulty.py` does not emit `hubness_gini` or
+`hub_share_top1pct`, so `check_gate` cannot read either one, and no gate
+currently reads on them. Wiring a qualified statistic into the gate is a
+separate piece of work -- phase 2, decided by a human -- and every band in
+`gates/glove.yaml` stays null until then.
+
 ### GloVe: three hub statistics, four N
 
 | N | statistic | range % of mean | separation | draws disjoint | verdict |
@@ -473,12 +491,17 @@ for replacing the statistic everywhere rather than re-tuning N per family.
 One N=20,000 cell was drawn from `glove_250k.npy` at eight draws (not
 sixteen), matching the pool and draw count `docs/datasets/glove_noise_floor.json`
 used, to check that this sweep's numbers land where that one's do before
-anything else in the sweep is trusted. Three of four incumbent statistics
-reproduced the committed means; LID median missed by 0.28%, diagnosed as a
-difference in how many times the corpus is subsampled rather than a code
-defect. The same cell was re-run under `--backend sklearn` and agreed with
-`--backend torch` to within 8.7e-05 on every draw of every statistic. Both
-are committed: `docs/datasets/glove_hub_stability_provenance.json` and
+anything else in the sweep is trusted. The check is whether each incumbent
+statistic's mean lands **inside** `glove_noise_floor.json`'s committed range,
+not whether the means match: three of four did -- relative contrast, IVF
+Gini, and `hubness_skew`, whose provenance mean of 4.82465 sits inside the
+committed 3.463--8.331 range despite differing from the committed mean of
+4.4976 by +7.27%, the largest gap of the four. LID median is the one that
+missed the range outright, by 0.28%, diagnosed as a difference in how many
+times the corpus is subsampled rather than a code defect. The same cell was
+re-run under `--backend sklearn` and agreed with `--backend torch` to within
+8.7e-05 on every draw of every statistic. Both are committed:
+`docs/datasets/glove_hub_stability_provenance.json` and
 `docs/datasets/glove_hub_stability_sklearn_control.json`.
 
 The `v0` figures in the tables above come from a **fresh** 250,000-vector
@@ -486,38 +509,46 @@ re-sample of the same five `v0` checkpoints, at the fixed sampling seed of
 42 -- not from the 50,000-vector samples behind
 `docs/datasets/glove_v0_noise_floor.json`, which cannot support N above
 50,000. At N=20,000 the two measurements of `v0` agree closely: `lid_median`,
-`relative_contrast_median` and `hubness_skew` all differ by 0.12% or less
+`relative_contrast_median` and `hubness_skew` all differ by 0.13% or less
 between the committed five-seed means and the fresh re-sample, and
 `ivf_gini` differs by -3.72%. That is close enough to call the fresh
 re-sample trustworthy, while it remains a different measurement from the one
 `glove_v0_noise_floor.json` records, and the two are not spliced into one
 table.
 
-### An unlooked-for finding: `ivf_gini`'s noise, carried along as a control
+### An unlooked-for finding: `ivf_gini`'s margin is thinner than it looks
 
 The four incumbent statistics were carried through this sweep to
 re-measure the committed eight-draw table at sixteen draws and larger N, for
 free. `ivf_gini` -- currently gated as one of the four ANN-difficulty
-statistics, per `AGENTS.md`'s first invariant -- fails the same 10.0% bar
-this study used to disqualify `hubness_skew`.
+statistics, per `AGENTS.md`'s first invariant -- is `qualified` at the locked
+canonical N=20,000, but by only 0.84 percentage points against the same
+10.0% bar this study used to disqualify `hubness_skew`.
 
-On GloVe its real-side range runs 9.16 / 9.61 / 19.45 / 10.97% across
-N = 20,000 / 50,000 / 100,000 / 250,000; on DEEP it runs 12.01 / 13.79 /
-24.33 / 19.34%, over the bar at every single N. In cv terms -- comparable
-across draw counts, unlike range -- it sits at 2.56-5.21% on GloVe and
-3.06-5.88% on DEEP. `lid_median`'s cv over the same grid is 0.11-0.29% on
-GloVe and 0.06-0.40% on DEEP, so on both corpora `ivf_gini`'s noise is
-roughly an order of magnitude above `lid_median`'s -- comparing cv to cv, not
-cv to range, and not one corpus's figure to the other's. That is not a
-draw-count artifact. Its noise also **rises** with N up to 100,000 on both
-corpora rather than falling, the opposite of what subsample noise usually
-does as N grows.
+On GloVe its real-side range runs 9.158 / 9.610 / 19.449 / 10.973% across
+N = 20,000 / 50,000 / 100,000 / 250,000 (separation 6.27x / 6.45x / 3.35x /
+6.23x): over the bar and `qualified` at 20,000 and 50,000, `rejected` at
+100,000 and 250,000. On DEEP it runs 12.01 / 13.79 / 24.33 / 19.34%, over
+the bar and `unstable` at all four N -- worse than GloVe at every N, and
+never qualifying there at all. In cv terms -- comparable across draw counts,
+unlike range -- it sits at 2.56-5.21% on GloVe and 3.06-5.88% on DEEP.
+`lid_median`'s cv over the same grid is 0.11-0.29% on GloVe and 0.06-0.40% on
+DEEP, so on both corpora `ivf_gini`'s noise is roughly an order of magnitude
+above `lid_median`'s -- comparing cv to cv, not cv to range, and not one
+corpus's figure to the other's. That is not a draw-count artifact. Its noise
+also **rises** with N up to 100,000 on both corpora rather than falling, the
+opposite of what subsample noise usually does as N grows.
 
-`## Hubness skew is below the noise floor at this N` above used to call
-`ivf_gini` "stable enough to gate on" at 3.68%, and has been corrected above
-to qualify that: a band set from 3.68% would be tighter than the statistic
-supports once N or corpus changes, since the same statistic reaches 19.45%
-on GloVe and clears 20% on DEEP within the grid this sweep measured.
+This is not grounds to call `ivf_gini` disqualified: at the locked canonical
+N it passes the same rule that qualified `hubness_gini`. It is grounds to
+distrust the margin. `## Hubness skew is below the noise floor at this N`
+above used to call `ivf_gini` "stable enough to gate on" at 3.68%, and has
+been corrected above to qualify that: a band set from 3.68% would be
+tighter than the statistic supports once N or corpus changes, since the same
+statistic's range more than doubles to 19.449% on GloVe at N=100,000 and
+clears 20% on DEEP within the grid this sweep measured, and even at the
+canonical N its 9.158% leaves only 0.84 points of headroom before crossing
+the pre-registered bar.
 
 A plausible mechanism, consistent with the numbers and the code but **not
 proven here**: `cell_occupancy` in `src/eval/ann_difficulty.py` clusters

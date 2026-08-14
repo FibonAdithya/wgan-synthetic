@@ -38,7 +38,7 @@ class HubStabilityError(Exception):
 def allocate_draws(
     pool_size: int, n: int, draws: int, seed: int
 ) -> tuple[list[np.ndarray], bool]:
-    """Row indices for `draws` subsamples of `n` rows, and whether they overlap.
+    """Row indices for `draws` subsamples of `n` rows, and whether they are disjoint.
 
     Disjoint draws are the ones worth having: they are independent samples of
     the corpus, so their spread is the subsample noise. When `draws * n`
@@ -274,19 +274,29 @@ def sweep(
         per_series: dict[str, dict[str, float]] = {}
         for label in sorted(synthetic):
             series = synthetic[label]
+            # Only rows[0] is used -- one draw per synthetic series, mirroring
+            # the v0 noise floor where each training seed is one measurement.
+            # `draws=2` is requested (not 1) purely to clear allocate_draws's
+            # `draws < 2` guard; the disjoint flag it returns is discarded
+            # because a single draw has nothing to be disjoint from. Do not
+            # "simplify" this to draws=1 -- it would raise HubStabilityError.
             rows, _ = allocate_draws(series.shape[0], n, 2, seed)
             per_series[label] = measure_draw(series[rows[0]], **measure)
 
         synthetic_mean: dict[str, float] | None = None
         synthetic_spread: dict[str, dict[str, float]] | None = None
         if len(per_series) >= 2:
-            synthetic_mean = {
-                name: float(np.mean([v[name] for v in per_series.values()]))
-                for name in STATISTICS
-            }
             synthetic_spread = {
                 name: summarize_spread([v[name] for v in per_series.values()])
                 for name in STATISTICS
+            }
+            # Read the mean off the spread block rather than recomputing it
+            # with np.mean: summarize_spread uses statistics.fmean, and the
+            # two differ at float-precision (largest observed delta 3.6e-15).
+            # One series, one value -- there is no spread block, so that
+            # path below still computes its own mean.
+            synthetic_mean = {
+                name: synthetic_spread[name]["mean"] for name in STATISTICS
             }
         elif len(per_series) == 1:
             only = next(iter(per_series.values()))
@@ -420,7 +430,7 @@ def main() -> None:
             chunk_rows=args.chunk_rows,
             preprocess=args.preprocess,
         )
-    except (HubStabilityError, OSError, ValueError) as exc:
+    except (HubStabilityError, OSError, ValueError, ZeroDivisionError) as exc:
         # stderr, so stdout stays parseable as JSON or empty, never half a
         # report -- the same contract noise_floor.py keeps.
         print(f"hub_stability: {exc}", file=sys.stderr)

@@ -377,15 +377,27 @@ leave canonical conditions alone.
 
 Full artifact: `docs/datasets/glove_hub_stability.json`.
 
+| N | `hubness_skew` cv % | `hubness_gini` cv % | `hub_share_top1pct` cv % | `ivf_gini` cv % | `lid_median` cv % |
+|---|---|---|---|---|---|
+| 20,000 | 35.12 | 0.53 | 2.72 | 2.56 | 0.29 |
+| 50,000 | 17.66 | 0.17 | 1.22 | 2.77 | 0.19 |
+| 100,000 | 12.47 | 0.13 | 0.80 | 5.21 | 0.13 |
+| 250,000 | 6.36 | 0.08 | 0.61 | 3.02 | 0.11 |
+
+`cv_pct` (std/mean) is the metric that is comparable across the different
+draw counts used elsewhere in this study; `range_pct_of_mean` is not, because
+a wider draw is more likely to catch an extreme value (see the
+`hub_share_top1pct` paragraph below).
+
 **One statistic qualifies at the locked N, so the tie-break stops there.**
 `hubness_gini` is stable (1.56% against the 10.0% bar) and discriminating
 (15.43x) at N=20,000. Because the pre-registered tie-break takes the
 cheapest qualifying cell, canonical measurement conditions are not touched.
-`hubness_skew` is rejected at every N, and raising N does not rescue it on
-this corpus: its range falls from 151.33% at 20,000 to 21.33% at 250,000, but
-its cv sits near 35% at every scale it is measured in (see the cv table
-below), so the instability is a property of the statistic on this corpus,
-not a small-sample artifact that a bigger draw would fix. `hub_share_top1pct`
+`hubness_skew` is rejected at every N. Raising N does help, on both metrics:
+its cv falls 5.5x, from 35.12% at 20,000 to 6.36% at 250,000, and its range
+falls in step, from 151.33% to 21.33% (table above). But raising N does not
+rescue it on GloVe within the range this study tested: at 12.5x the locked
+N, its range is still 21.33% against the 10.0% bar. `hub_share_top1pct`
 is rejected at the locked N by a narrow margin -- 10.46% against the 10.0%
 bar -- and qualifies at 50,000.
 
@@ -436,6 +448,16 @@ on GloVe's gate.
 
 Full artifact: `docs/datasets/deep_hub_stability.json`.
 
+The N=100,000 and 250,000 rows above are in the same overlapping-draws
+regime as GloVe's: DEEP's pool is likewise 1M rows, so sixteen draws at
+those two N also exceed it and are not disjoint (pool-to-N ratios 10.0 and
+4.0), and the `stable` verdicts there rest on a spread that is a lower
+bound, exactly as GloVe's `provisional` verdicts do. The artifact reports
+them as `stable` rather than `provisional` because that downgrade only
+fires when a synthetic mean is present to separate against, and DEEP has
+none -- the verdict string is not wrong, the caveat just belongs here in
+prose instead.
+
 `hubness_skew` is salvageable on DEEP -- 22.13% at N=20,000, falling under
 the 10.0% bar by N=100,000 -- and is not salvageable on GloVe at any N tried.
 The difference tracks the two corpora's own hubness: DEEP's mean
@@ -483,10 +505,13 @@ On GloVe its real-side range runs 9.16 / 9.61 / 19.45 / 10.97% across
 N = 20,000 / 50,000 / 100,000 / 250,000; on DEEP it runs 12.01 / 13.79 /
 24.33 / 19.34%, over the bar at every single N. In cv terms -- comparable
 across draw counts, unlike range -- it sits at 2.56-5.21% on GloVe and
-3.06-5.88% on DEEP, several times `lid_median`'s 0.26-1.53% over the same
-grid, so this is not a draw-count artifact. Its noise also **rises** with N
-up to 100,000 on both corpora rather than falling, the opposite of what
-subsample noise usually does as N grows.
+3.06-5.88% on DEEP. `lid_median`'s cv over the same grid is 0.11-0.29% on
+GloVe and 0.06-0.40% on DEEP, so on both corpora `ivf_gini`'s noise is
+roughly an order of magnitude above `lid_median`'s -- comparing cv to cv, not
+cv to range, and not one corpus's figure to the other's. That is not a
+draw-count artifact. Its noise also **rises** with N up to 100,000 on both
+corpora rather than falling, the opposite of what subsample noise usually
+does as N grows.
 
 `## Hubness skew is below the noise floor at this N` above used to call
 `ivf_gini` "stable enough to gate on" at 3.68%, and has been corrected above

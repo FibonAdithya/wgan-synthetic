@@ -75,17 +75,24 @@ were drawn, give:
 Those draws are committed as `docs/datasets/glove_noise_floor.json`. Hubness
 skew is a third moment of the k-occurrence distribution, so a handful of
 extreme hubs in the tail set it; at N=20000 with `k_hub` 10, whether a few
-land in the draw moves it by more than a factor of two. The other three are
-stable enough to gate on.
+land in the draw moves it by more than a factor of two. The other three
+looked stable enough to gate on at this N and draw count. `## Hub statistic
+stability` below qualifies that for IVF Gini: its own range grows with N
+rather than shrinking on a wider sweep, reaching 19.45% on GloVe and clearing
+20% on DEEP, so a band set from the 3.68% figure above would be tighter than
+the statistic actually supports once N or corpus changes.
 
 This is a problem for this family in particular, because the structural
 section above names hubness as the statistic GloVe is most likely to fail and
 the most informative when it does. Choosing what to do about it -- raising N
 for the hubness pass, or adding a hub statistic that is not a third moment --
-changes locked measurement conditions or the gate's contents, so it needs a
-human. See the `## Gate` section. The synthetic side's own hubness spread --
-a separate measurement, from a five-seed `v0` sweep rather than a real-data
-subsample -- is in `## Noise floor` below.
+changes locked measurement conditions or the gate's contents, and that choice
+has now been made from a measurement rather than argument. See
+`## Hub statistic stability` below for the sweep and its answer: `hubness_gini`
+qualifies at the locked N and `hubness_skew` does not, at any N tried. The
+synthetic side's own hubness spread -- a separate measurement, from a
+five-seed `v0` sweep rather than a real-data subsample -- is in
+`## Noise floor` below.
 
 ### These are L2 measurements of an angular corpus
 
@@ -157,6 +164,17 @@ can only catch a generator whose hubness deficit exceeds the real corpus's
 own noise floor -- which is what happened here -- and would go blind again
 against a later rung that closed most of that gap and landed inside
 3.46--8.33, indistinguishable there from a reseed of real itself.
+
+That reasoning stands -- a hubness-skew band is coarse, not useless -- but it
+is no longer the last word on this statistic. `## Hub statistic stability`
+below took the measurement this section could only argue for: across four N
+on GloVe and DEEP, `hubness_skew` is `rejected` at every one, and
+`hubness_gini` is the replacement it names, `qualified` at the locked
+canonical N=20,000. Adoption is not automatic: `summary()` in
+`src/eval/ann_difficulty.py` does not emit `hubness_gini`, so `check_gate`
+cannot read it yet, and whether to wire it in is a decision for a human, not
+this study. See that section before setting a `hubness_skew` band from the
+range above.
 
 Check a run against it:
 
@@ -265,6 +283,18 @@ that gap would land inside the real-side noise (3.463--8.331) and stop being
 judgeable by this statistic alone -- indistinguishable there from a reseed of
 the real corpus.
 
+**Confirmed, not overturned, at sixteen draws.** The stability sweep in
+`## Hub statistic stability` below repeats this comparison at the locked N
+with twice the draws and finds the same non-overlap: real 3.41340--10.33706
+against `v0` 1.55003--1.90223. What sixteen draws add is a size on how thin
+that margin is: the gap between the two ranges is 0.2x the real-side range's
+own width, thinner than the eight-draw estimate above suggested, where the
+sweep's replacement candidate, `hubness_gini`, manages 14.1x on the same pair
+of real and `v0` ranges. That is the case for changing which statistic
+carries the band, not for trusting this one at a wider setting -- see
+`## Hub statistic stability` for the full comparison and the rule it was
+decided under.
+
 **This is n=5 on the synthetic side.** Five points bound the floor's order of
 magnitude with more confidence than a single paired difference would, but
 they are still five points; treat the ranges above as bounds on the floor's
@@ -319,3 +349,217 @@ then difference the five labelled series against `real`:
         --series v0_seed42 --series v0_seed43 --series v0_seed44 \
         --series v0_seed45 --series v0_seed46 \
         --output docs/datasets/glove_v0_noise_floor.json
+
+## Hub statistic stability
+
+Issue #29 named four fixes for the hubness problem above and said choosing
+between them needed a measurement nobody had taken. This is that measurement:
+two corpora (GloVe and DEEP), four N (20,000 / 50,000 / 100,000 / 250,000),
+16 draws per cell, `--backend torch`, at commit `8a90daf`. It answers, for
+GloVe's canonical N, which of three hub statistics -- the incumbent
+`hubness_skew` and two candidates, `hubness_gini` and `hub_share_top1pct` --
+can carry a gate band at all.
+
+The rule was fixed before the sweep ran and is not revisable after seeing
+numbers (`docs/superpowers/specs/2026-08-13-glove-hub-statistic-stability-design.md#the-pre-registered-rule`).
+A statistic qualifies at a given N when both hold: its real-side
+`range_pct_of_mean` across the 16 draws is at most **10.0%** (stable), and
+`|mean(real) - mean(v0)|` is at least **1.0x** the real-side range (max -
+min) (discriminating). The tie-break, also pre-registered: take the cheapest
+qualifying cell -- if anything qualifies at the locked N=20,000, adopt it and
+leave canonical conditions alone.
+
+**This conclusion is not yet actionable.** `summary()` in
+`src/eval/ann_difficulty.py` does not emit `hubness_gini` or
+`hub_share_top1pct`, so `check_gate` cannot read either one, and no gate
+currently reads on them. Wiring a qualified statistic into the gate is a
+separate piece of work -- phase 2, decided by a human -- and every band in
+`gates/glove.yaml` stays null until then.
+
+### GloVe: three hub statistics, four N
+
+| N | statistic | range % of mean | separation | draws disjoint | verdict |
+|---|---|---|---|---|---|
+| 20,000 | `hubness_skew` | 151.33 | 0.42x | yes | rejected |
+| 20,000 | `hubness_gini` | 1.56 | 15.43x | yes | **qualified** |
+| 20,000 | `hub_share_top1pct` | 10.46 | 4.39x | yes | rejected |
+| 50,000 | `hubness_skew` | 73.89 | 0.81x | yes | rejected |
+| 50,000 | `hubness_gini` | 0.58 | 40.78x | yes | qualified |
+| 50,000 | `hub_share_top1pct` | 3.68 | 12.30x | yes | qualified |
+| 100,000 | `hubness_skew` | 40.57 | 1.49x | no | rejected |
+| 100,000 | `hubness_gini` | 0.44 | 53.51x | no | provisional |
+| 100,000 | `hub_share_top1pct` | 2.41 | 18.65x | no | provisional |
+| 250,000 | `hubness_skew` | 21.33 | 2.81x | no | rejected |
+| 250,000 | `hubness_gini` | 0.30 | 76.35x | no | provisional |
+| 250,000 | `hub_share_top1pct` | 2.43 | 18.56x | no | provisional |
+
+Full artifact: `docs/datasets/glove_hub_stability.json`.
+
+| N | `hubness_skew` cv % | `hubness_gini` cv % | `hub_share_top1pct` cv % | `ivf_gini` cv % | `lid_median` cv % |
+|---|---|---|---|---|---|
+| 20,000 | 35.12 | 0.53 | 2.72 | 2.56 | 0.29 |
+| 50,000 | 17.66 | 0.17 | 1.22 | 2.77 | 0.19 |
+| 100,000 | 12.47 | 0.13 | 0.80 | 5.21 | 0.13 |
+| 250,000 | 6.36 | 0.08 | 0.61 | 3.02 | 0.11 |
+
+`cv_pct` (std/mean) is the metric that is comparable across the different
+draw counts used elsewhere in this study; `range_pct_of_mean` is not, because
+a wider draw is more likely to catch an extreme value (see the
+`hub_share_top1pct` paragraph below).
+
+**One statistic qualifies at the locked N, so the tie-break stops there.**
+`hubness_gini` is stable (1.56% against the 10.0% bar) and discriminating
+(15.43x) at N=20,000. Because the pre-registered tie-break takes the
+cheapest qualifying cell, canonical measurement conditions are not touched.
+`hubness_skew` is rejected at every N. Raising N does help, on both metrics:
+its cv falls 5.5x, from 35.12% at 20,000 to 6.36% at 250,000, and its range
+falls in step, from 151.33% to 21.33% (table above). But raising N does not
+rescue it on GloVe within the range this study tested: at 12.5x the locked
+N, its range is still 21.33% against the 10.0% bar. `hub_share_top1pct`
+is rejected at the locked N by a narrow margin -- 10.46% against the 10.0%
+bar -- and qualifies at 50,000.
+
+**At N=100,000 and 250,000 the sixteen draws no longer fit GloVe's 1M pool
+without overlap.** Sixteen disjoint draws exhaust the pool at N=62,500; at
+100,000 they need 1.6M rows and at 250,000 they need 4M, so the draws share
+rows and their measured spread is a **lower bound** on the true subsample
+spread. That biases the sweep toward finding statistics stable at large N --
+the direction that would wrongly favour "raise N" as the fix -- which is why
+every verdict at those two N above is reported `provisional` rather than
+`qualified`, and why a provisional pass is not grounds for moving canonical N
+on its own.
+
+**`hub_share_top1pct`'s rejection at N=20,000 turns on which noise metric the
+rule uses.** `range_pct_of_mean` grows with the number of draws sampled,
+because a wider draw is more likely to catch an extreme one; `cv_pct` does
+not. At the eight draws the provenance cell used, `hub_share_top1pct`
+measured 7.23% and would have passed the 10.0% bar; at the sixteen draws
+this sweep used, it measured 10.46% and failed. The rule was applied exactly
+as pre-registered, on the draw count the sweep actually ran, and the outcome
+does not change: `hubness_gini` is the better statistic on every metric
+regardless, cv 0.53% against `hub_share_top1pct`'s 2.72% at N=20,000. But
+this particular rejection is a real artifact of range-over-cv, not a wide
+margin, and is worth stating plainly rather than leaving as a clean 10.0%
+cutoff would imply.
+
+### DEEP: condition 1 only
+
+DEEP has no synthetic series in this study, so it votes on whether a
+statistic's instability is a property of the statistic or of a
+high-hubness corpus -- it is evidence about generality, not a second vote
+on GloVe's gate.
+
+| N | statistic | range % of mean | cv % | draws disjoint | verdict |
+|---|---|---|---|---|---|
+| 20,000 | `hubness_skew` | 22.13 | 5.45 | yes | unstable |
+| 20,000 | `hubness_gini` | 1.25 | 0.31 | yes | stable |
+| 20,000 | `hub_share_top1pct` | 6.60 | 1.88 | yes | stable |
+| 50,000 | `hubness_skew` | 10.89 | 2.92 | yes | unstable |
+| 50,000 | `hubness_gini` | 0.71 | 0.19 | yes | stable |
+| 50,000 | `hub_share_top1pct` | 3.86 | 1.05 | yes | stable |
+| 100,000 | `hubness_skew` | 8.45 | 2.21 | no | stable |
+| 100,000 | `hubness_gini` | 0.64 | 0.16 | no | stable |
+| 100,000 | `hub_share_top1pct` | 3.25 | 0.88 | no | stable |
+| 250,000 | `hubness_skew` | 5.61 | 1.38 | no | stable |
+| 250,000 | `hubness_gini` | 0.46 | 0.11 | no | stable |
+| 250,000 | `hub_share_top1pct` | 2.24 | 0.56 | no | stable |
+
+Full artifact: `docs/datasets/deep_hub_stability.json`.
+
+The N=100,000 and 250,000 rows above are in the same overlapping-draws
+regime as GloVe's: DEEP's pool is likewise 1M rows, so sixteen draws at
+those two N also exceed it and are not disjoint (pool-to-N ratios 10.0 and
+4.0), and the `stable` verdicts there rest on a spread that is a lower
+bound, exactly as GloVe's `provisional` verdicts do. The artifact reports
+them as `stable` rather than `provisional` because that downgrade only
+fires when a synthetic mean is present to separate against, and DEEP has
+none -- the verdict string is not wrong, the caveat just belongs here in
+prose instead.
+
+`hubness_skew` is salvageable on DEEP -- 22.13% at N=20,000, falling under
+the 10.0% bar by N=100,000 -- and is not salvageable on GloVe at any N tried.
+The difference tracks the two corpora's own hubness: DEEP's mean
+`hubness_skew` is 1.91 against GloVe's 4.58, a much less skewed
+k-occurrence distribution to begin with. That is the difference between
+"this statistic is corpus-dependent" and "raise N for GloVe" -- raising N
+helps on DEEP and does not rescue GloVe within the range tried.
+`hubness_gini` is stable on both corpora at every N, which is the argument
+for replacing the statistic everywhere rather than re-tuning N per family.
+
+### Provenance and the fresh `v0` re-sample
+
+One N=20,000 cell was drawn from `glove_250k.npy` at eight draws (not
+sixteen), matching the pool and draw count `docs/datasets/glove_noise_floor.json`
+used, to check that this sweep's numbers land where that one's do before
+anything else in the sweep is trusted. The check is whether each incumbent
+statistic's mean lands **inside** `glove_noise_floor.json`'s committed range,
+not whether the means match: three of four did -- relative contrast, IVF
+Gini, and `hubness_skew`, whose provenance mean of 4.82465 sits inside the
+committed 3.463--8.331 range despite differing from the committed mean of
+4.4976 by +7.27%, the largest gap of the four. LID median is the one that
+missed the range outright, by 0.28%, diagnosed as a difference in how many
+times the corpus is subsampled rather than a code defect. The same cell was
+re-run under `--backend sklearn` and agreed with `--backend torch` to within
+8.7e-05 on every draw of every statistic. Both are committed:
+`docs/datasets/glove_hub_stability_provenance.json` and
+`docs/datasets/glove_hub_stability_sklearn_control.json`.
+
+The `v0` figures in the tables above come from a **fresh** 250,000-vector
+re-sample of the same five `v0` checkpoints, at the fixed sampling seed of
+42 -- not from the 50,000-vector samples behind
+`docs/datasets/glove_v0_noise_floor.json`, which cannot support N above
+50,000. At N=20,000 the two measurements of `v0` agree closely: `lid_median`,
+`relative_contrast_median` and `hubness_skew` all differ by 0.13% or less
+between the committed five-seed means and the fresh re-sample, and
+`ivf_gini` differs by -3.72%. That is close enough to call the fresh
+re-sample trustworthy, while it remains a different measurement from the one
+`glove_v0_noise_floor.json` records, and the two are not spliced into one
+table.
+
+### An unlooked-for finding: `ivf_gini`'s margin is thinner than it looks
+
+The four incumbent statistics were carried through this sweep to
+re-measure the committed eight-draw table at sixteen draws and larger N, for
+free. `ivf_gini` -- currently gated as one of the four ANN-difficulty
+statistics, per `AGENTS.md`'s first invariant -- is `qualified` at the locked
+canonical N=20,000, but by only 0.84 percentage points against the same
+10.0% bar this study used to disqualify `hubness_skew`.
+
+On GloVe its real-side range runs 9.158 / 9.610 / 19.449 / 10.973% across
+N = 20,000 / 50,000 / 100,000 / 250,000 (separation 6.27x / 6.45x / 3.35x /
+6.23x): over the bar and `qualified` at 20,000 and 50,000, `rejected` at
+100,000 and 250,000. On DEEP it runs 12.01 / 13.79 / 24.33 / 19.34%, over
+the bar and `unstable` at all four N -- worse than GloVe at every N, and
+never qualifying there at all. In cv terms -- comparable across draw counts,
+unlike range -- it sits at 2.56-5.21% on GloVe and 3.06-5.88% on DEEP.
+`lid_median`'s cv over the same grid is 0.11-0.29% on GloVe and 0.06-0.40% on
+DEEP, so on both corpora `ivf_gini`'s noise is roughly an order of magnitude
+above `lid_median`'s -- comparing cv to cv, not cv to range, and not one
+corpus's figure to the other's. That is not a draw-count artifact. Its noise
+also **rises** with N up to 100,000 on both corpora rather than falling, the
+opposite of what subsample noise usually does as N grows.
+
+This is not grounds to call `ivf_gini` disqualified: at the locked canonical
+N it passes the same rule that qualified `hubness_gini`. It is grounds to
+distrust the margin. `## Hubness skew is below the noise floor at this N`
+above used to call `ivf_gini` "stable enough to gate on" at 3.68%, and has
+been corrected above to qualify that: a band set from 3.68% would be
+tighter than the statistic supports once N or corpus changes, since the same
+statistic's range more than doubles to 19.449% on GloVe at N=100,000 and
+clears 20% on DEEP within the grid this sweep measured, and even at the
+canonical N its 9.158% leaves only 0.84 points of headroom before crossing
+the pre-registered bar.
+
+A plausible mechanism, consistent with the numbers and the code but **not
+proven here**: `cell_occupancy` in `src/eval/ann_difficulty.py` clusters
+each draw with `MiniBatchKMeans(n_clusters=nlist_eff, random_state=seed,
+n_init=3, batch_size=1024)`, at sklearn's default `max_iter`. The clustering
+budget is fixed while N grows, so the partition has progressively more
+points to place in the same number of iterations and batches -- a
+progressively less converged clustering, not a progressively less balanced
+corpus. This is a hypothesis worth testing directly, not a cause this study
+established.
+
+This finding does not change any gate: `gates/glove.yaml` already carries
+`ivf_gini` with a null band, and setting or tightening a band is reserved
+for a human working from a trained ladder, unchanged by this sweep.

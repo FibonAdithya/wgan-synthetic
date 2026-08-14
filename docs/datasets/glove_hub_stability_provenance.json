@@ -1,0 +1,207 @@
+{
+  "pool_rows": 250000,
+  "conditions": {
+    "k": 100,
+    "k_hub": 10,
+    "nlist": 256,
+    "seed": 42,
+    "backend": "torch",
+    "chunk_rows": 1024,
+    "preprocess": "l2"
+  },
+  "rule": {
+    "stable_max_range_pct": 10.0,
+    "min_separation_in_ranges": 1.0
+  },
+  "statistics": [
+    "lid_median",
+    "relative_contrast_median",
+    "hubness_skew",
+    "ivf_gini",
+    "hubness_gini",
+    "hub_share_top1pct"
+  ],
+  "cells": [
+    {
+      "n": 20000,
+      "draws": 8,
+      "draws_disjoint": true,
+      "pool_to_n": 12.5,
+      "real": {
+        "per_draw": [
+          {
+            "lid_median": 35.35708724439506,
+            "relative_contrast_median": 1.3866755894829552,
+            "hubness_skew": 4.95893246975401,
+            "ivf_gini": 0.5915957031250001,
+            "hubness_gini": 0.5155840064999999,
+            "hub_share_top1pct": 0.081745
+          },
+          {
+            "lid_median": 35.22340948658228,
+            "relative_contrast_median": 1.3879613067506846,
+            "hubness_skew": 4.104263934645459,
+            "ivf_gini": 0.5937867187500001,
+            "hubness_gini": 0.5118292485,
+            "hub_share_top1pct": 0.077205
+          },
+          {
+            "lid_median": 35.19535098712795,
+            "relative_contrast_median": 1.3887824272720117,
+            "hubness_skew": 4.131207357623402,
+            "ivf_gini": 0.57679453125,
+            "hubness_gini": 0.515554077,
+            "hub_share_top1pct": 0.080515
+          },
+          {
+            "lid_median": 35.2340096582129,
+            "relative_contrast_median": 1.388260143260203,
+            "hubness_skew": 4.410996313354473,
+            "ivf_gini": 0.5772718750000001,
+            "hubness_gini": 0.5118035034999999,
+            "hub_share_top1pct": 0.081185
+          },
+          {
+            "lid_median": 35.134182682878844,
+            "relative_contrast_median": 1.3877554781103885,
+            "hubness_skew": 4.01088820524603,
+            "ivf_gini": 0.5774078125,
+            "hubness_gini": 0.5136108794999998,
+            "hub_share_top1pct": 0.07981
+          },
+          {
+            "lid_median": 35.19156467778894,
+            "relative_contrast_median": 1.388319159157745,
+            "hubness_skew": 8.624185319101345,
+            "ivf_gini": 0.6072640625000001,
+            "hubness_gini": 0.5150718259999998,
+            "hub_share_top1pct": 0.080345
+          },
+          {
+            "lid_median": 35.23685480617716,
+            "relative_contrast_median": 1.3888607734565022,
+            "hubness_skew": 4.135847022428235,
+            "ivf_gini": 0.6094410156250001,
+            "hubness_gini": 0.516243383,
+            "hub_share_top1pct": 0.08112
+          },
+          {
+            "lid_median": 35.192519549214154,
+            "relative_contrast_median": 1.390598192125686,
+            "hubness_skew": 4.220850691902767,
+            "ivf_gini": 0.59729453125,
+            "hubness_gini": 0.5169707344999999,
+            "hub_share_top1pct": 0.08303
+          }
+        ],
+        "spread": {
+          "lid_median": {
+            "mean": 35.22062238654716,
+            "std": 0.06416242975790272,
+            "min": 35.134182682878844,
+            "max": 35.35708724439506,
+            "range_pct_of_mean": 0.6328808136035575,
+            "cv_pct": 0.1821729015850956
+          },
+          "relative_contrast_median": {
+            "mean": 1.388401633702022,
+            "std": 0.001121105135893408,
+            "min": 1.3866755894829552,
+            "max": 1.390598192125686,
+            "range_pct_of_mean": 0.28252650728101036,
+            "cv_pct": 0.0807478980634806
+          },
+          "hubness_skew": {
+            "mean": 4.824646414256965,
+            "std": 1.5641821222766519,
+            "min": 4.01088820524603,
+            "max": 8.624185319101345,
+            "range_pct_of_mean": 95.61938259812973,
+            "cv_pct": 32.42065817827499
+          },
+          "ivf_gini": {
+            "mean": 0.59135703125,
+            "std": 0.013235866437706096,
+            "min": 0.57679453125,
+            "max": 0.6094410156250001,
+            "range_pct_of_mean": 5.520604753103637,
+            "cv_pct": 2.2382191701903595
+          },
+          "hubness_gini": {
+            "mean": 0.5145834573124999,
+            "std": 0.001960170104540237,
+            "min": 0.5118035034999999,
+            "max": 0.5169707344999999,
+            "range_pct_of_mean": 1.004158009079166,
+            "cv_pct": 0.380923653235485
+          },
+          "hub_share_top1pct": {
+            "mean": 0.080619375,
+            "std": 0.0016923323666720197,
+            "min": 0.077205,
+            "max": 0.08303,
+            "range_pct_of_mean": 7.22531029296619,
+            "cv_pct": 2.0991633421519578
+          }
+        }
+      },
+      "synthetic": {
+        "series": [],
+        "per_series": {},
+        "mean": null,
+        "spread": null
+      },
+      "verdicts": {
+        "lid_median": {
+          "stable": true,
+          "range_pct_of_mean": 0.6328808136035575,
+          "separation_in_ranges": null,
+          "discriminating": null,
+          "draws_disjoint": true,
+          "verdict": "stable"
+        },
+        "relative_contrast_median": {
+          "stable": true,
+          "range_pct_of_mean": 0.28252650728101036,
+          "separation_in_ranges": null,
+          "discriminating": null,
+          "draws_disjoint": true,
+          "verdict": "stable"
+        },
+        "hubness_skew": {
+          "stable": false,
+          "range_pct_of_mean": 95.61938259812973,
+          "separation_in_ranges": null,
+          "discriminating": null,
+          "draws_disjoint": true,
+          "verdict": "unstable"
+        },
+        "ivf_gini": {
+          "stable": true,
+          "range_pct_of_mean": 5.520604753103637,
+          "separation_in_ranges": null,
+          "discriminating": null,
+          "draws_disjoint": true,
+          "verdict": "stable"
+        },
+        "hubness_gini": {
+          "stable": true,
+          "range_pct_of_mean": 1.004158009079166,
+          "separation_in_ranges": null,
+          "discriminating": null,
+          "draws_disjoint": true,
+          "verdict": "stable"
+        },
+        "hub_share_top1pct": {
+          "stable": true,
+          "range_pct_of_mean": 7.22531029296619,
+          "separation_in_ranges": null,
+          "discriminating": null,
+          "draws_disjoint": true,
+          "verdict": "stable"
+        }
+      }
+    }
+  ],
+  "real_path": "/workspace/data-cache/glove_250k.npy"
+}

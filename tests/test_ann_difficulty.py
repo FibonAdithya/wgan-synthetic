@@ -1,5 +1,9 @@
-import numpy as np
+import inspect
 
+import numpy as np
+import pytest
+
+from src.eval import ann_difficulty
 from src.eval.ann_difficulty import (
     cell_occupancy,
     compute,
@@ -304,3 +308,133 @@ def test_compute_discards_every_query_when_k_clamps_to_one():
     assert metrics.k == 1
     assert metrics.discarded_queries == metrics.num_rows
     assert summary(metrics)["lid_median"] is None
+
+
+def test_exclude_self_drops_the_query_from_its_own_row():
+    # Row 1 came back as its own nearest neighbour, which is what the
+    # +1 column exists to absorb.
+    dist = np.array([[0.0, 1.0, 2.0], [0.0, 1.5, 2.5]])
+    idx = np.array([[0, 1, 2], [1, 0, 2]])
+
+    kept_dist, kept_idx = ann_difficulty._exclude_self(dist, idx, 2)
+
+    np.testing.assert_array_equal(kept_idx, [[1, 2], [0, 2]])
+    np.testing.assert_allclose(kept_dist, [[1.0, 2.0], [1.5, 2.5]])
+
+
+def test_exclude_self_drops_the_farthest_when_the_query_did_not_come_back():
+    # Row 0's own index is absent, so it has three keepers for two slots
+    # and the farthest must go -- not an arbitrary one.
+    dist = np.array([[0.5, 1.0, 2.0]])
+    idx = np.array([[7, 8, 9]])
+
+    kept_dist, kept_idx = ann_difficulty._exclude_self(dist, idx, 2)
+
+    np.testing.assert_array_equal(kept_idx, [[7, 8]])
+    np.testing.assert_allclose(kept_dist, [[0.5, 1.0]])
+
+
+def test_knn_default_backend_is_sklearn():
+    # Every figure committed under docs/datasets/ was measured with the
+    # sklearn path. The parity test below calls knn(x, 10) with no explicit
+    # backend and compares it against backend="torch"; if the default ever
+    # flipped to "torch", that test would pass trivially instead of proving
+    # anything. Pin the default directly.
+    default = inspect.signature(ann_difficulty.knn).parameters["backend"].default
+    assert default == "sklearn"
+
+
+def test_torch_backend_returns_the_same_neighbours_as_sklearn():
+    rng = np.random.default_rng(0)
+    x = rng.standard_normal((300, 16)).astype(np.float32)
+
+    d_sk, i_sk, k_sk = ann_difficulty.knn(x, 10)
+    d_t, i_t, k_t = ann_difficulty.knn(x, 10, backend="torch")
+
+    assert k_t == k_sk
+    np.testing.assert_allclose(d_t, d_sk, rtol=1e-4, atol=1e-4)
+    # Indices are allowed to differ only where the two candidates are
+    # indistinguishable at that tolerance -- a genuine tie, not a wrong
+    # neighbour.
+    differing = i_t != i_sk
+    assert np.all(np.abs(d_t[differing] - d_sk[differing]) <= 1e-4)
+
+
+def test_torch_backend_excludes_self_when_every_row_is_a_duplicate():
+    # Every distance is 0.0, so nothing about the sort order can be relied
+    # on. This is the case the index-based exclusion exists for.
+    x = np.zeros((6, 4), dtype=np.float32)
+
+    _, idx, k_eff = ann_difficulty.knn(x, 3, backend="torch")
+
+    assert k_eff == 3
+    assert not np.any(idx == np.arange(6)[:, None])
+
+
+def test_torch_backend_agrees_with_sklearn_on_every_summary_statistic():
+    rng = np.random.default_rng(1)
+    x = rng.standard_normal((500, 12)).astype(np.float32)
+
+    sk = ann_difficulty.summary(
+        ann_difficulty.compute(x, k=20, k_hub=5, nlist=8, max_rows=0)
+    )
+    torch_ = ann_difficulty.summary(
+        ann_difficulty.compute(x, k=20, k_hub=5, nlist=8, max_rows=0, backend="torch")
+    )
+
+    for name in ("lid_median", "relative_contrast_median", "hubness_skew", "ivf_gini"):
+        assert sk[name] == pytest.approx(torch_[name], rel=1e-4, abs=1e-6), name
+
+
+def test_knn_rejects_an_unknown_backend():
+    x = np.zeros((4, 2), dtype=np.float32)
+    with pytest.raises(ValueError, match="backend"):
+        ann_difficulty.knn(x, 2, backend="faiss")
+
+
+def test_torch_backend_is_unaffected_by_chunk_width():
+    rng = np.random.default_rng(2)
+    x = rng.standard_normal((257, 8)).astype(np.float32)
+
+    wide = ann_difficulty.knn(x, 5, backend="torch", chunk_rows=1024)
+    narrow = ann_difficulty.knn(x, 5, backend="torch", chunk_rows=7)
+
+    np.testing.assert_array_equal(wide[1], narrow[1])
+    np.testing.assert_allclose(wide[0], narrow[0], rtol=1e-5, atol=1e-6)
+
+
+def test_hubness_gini_is_zero_when_every_point_is_drawn_on_equally():
+    counts = np.full(100, 7)
+    assert ann_difficulty.hubness_gini(counts) == pytest.approx(0.0, abs=1e-12)
+
+
+def test_hubness_gini_approaches_one_when_a_single_hub_takes_everything():
+    counts = np.zeros(100)
+    counts[0] = 100.0
+    # (n - 1) / n for n = 100.
+    assert ann_difficulty.hubness_gini(counts) == pytest.approx(0.99)
+
+
+def test_hub_share_top1pct_is_one_percent_under_a_flat_distribution():
+    counts = np.full(100, 7)
+    assert ann_difficulty.hub_share_top1pct(counts) == pytest.approx(0.01)
+
+
+def test_hub_share_top1pct_is_one_when_a_single_hub_takes_everything():
+    counts = np.zeros(100)
+    counts[0] = 100.0
+    assert ann_difficulty.hub_share_top1pct(counts) == pytest.approx(1.0)
+
+
+def test_hub_share_top1pct_rounds_the_top_slice_up_to_at_least_one_point():
+    # 1% of 10 points is 0.1; taking zero points would make the statistic
+    # meaningless on small sets.
+    counts = np.array([5, 1, 1, 1, 1, 1, 1, 1, 1, 1])
+    assert ann_difficulty.hub_share_top1pct(counts) == pytest.approx(5.0 / 14.0)
+
+
+def test_hub_statistics_are_zero_on_an_empty_neighbour_budget():
+    # Every count zero means no neighbour slots were handed out at all.
+    counts = np.zeros(50)
+    assert ann_difficulty.hubness_gini(counts) == 0.0
+    assert ann_difficulty.hub_share_top1pct(counts) == 0.0

@@ -36,6 +36,15 @@ CAGRA_GRAPH_DEGREE = 64
 CAGRA_INTERMEDIATE_GRAPH_DEGREE = 128
 CAGRA_ITOPK_SIZE = (32, 64, 128, 256, 512)
 
+# Tiling for the torch brute-force baselines. The score tile is
+# query_chunk x corpus_tile float32 = 537 MB at these values, which is what
+# makes the pair a real choice: the full 10,000 x 1,000,000 distance matrix
+# would be 40 GB, five times the card, so brute force here is necessarily a
+# fused scan rather than one matmul. Held as constants so the box run and the
+# CPU tests exercise the same code path at different sizes.
+TORCH_QUERY_CHUNK = 2048
+TORCH_CORPUS_TILE = 65536
+
 INSTALL_HINT = (
     "cuVS is not installed. It is deliberately absent from requirements.txt: "
     "it is CUDA-13-only and would break the CPU-only install CI runs. On the "
@@ -443,14 +452,260 @@ class NumpyFlatAdapter(IndexAdapter):
         return None
 
 
+class _TorchFlatAdapter(IndexAdapter):
+    """Exact brute force in torch: tiled matmul plus top-k.
+
+    A second opinion on `FlatAdapter`, not a replacement. The published run
+    measured cuVS brute force at 7,996 QPS on 1M x 128, which is ~14% of the
+    card's FP32 peak; decomposing that batch shows only ~170 ms of its
+    1,251 ms is the distance GEMM, so roughly 86% is top-k selection over
+    10^10 candidate distances. That makes "is brute force actually optimized
+    here?" a measurable question rather than a rhetorical one, and it decides
+    how much of ANN's advantage at 1M scale is real.
+
+    Three precisions are registered so the answer separates two causes: a
+    different tiling strategy (`torch_flat`, FP32, TF32 explicitly off) from
+    the tensor cores cuVS may not be using (`torch_flat_tf32`,
+    `torch_flat_fp16`). Reduced precision is scored by the same recall path
+    as every other index, so if it costs exactness the grid reports that as a
+    recall below 1.0 rather than hiding it in a faster number.
+
+    Unlike the cuVS adapters this runs under `make check`: torch is in
+    requirements.txt and installs CPU-only, so `device="cpu"` with small
+    tiles exercises the real tiling and merge logic in pytest.
+    """
+
+    param_name = ""
+    precision = "fp32"
+    allow_tf32 = False
+    compute_dtype_name = "float32"
+
+    def __init__(
+        self,
+        *,
+        device: str | None = None,
+        query_chunk: int = TORCH_QUERY_CHUNK,
+        corpus_tile: int = TORCH_CORPUS_TILE,
+    ) -> None:
+        self._device_override = device
+        self._query_chunk = int(query_chunk)
+        self._corpus_tile = int(corpus_tile)
+        self._torch_module = None
+
+    def _torch(self):
+        """Import torch lazily, mirroring how cuVS is kept off module scope."""
+        if self._torch_module is None:
+            try:
+                import torch
+            except ImportError as exc:  # pragma: no cover - torch is pinned
+                raise RuntimeError(
+                    "torch is required for the brute-force baselines; it is "
+                    "pinned in requirements.txt"
+                ) from exc
+            self._torch_module = torch
+        return self._torch_module
+
+    def _device(self):
+        torch = self._torch()
+        if self._device_override is not None:
+            return torch.device(self._device_override)
+        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    def _apply_backend_flags(self) -> None:
+        """Pin the TF32 setting this adapter is named for.
+
+        Set on every build and search rather than once at construction: the
+        flag is global process state, so an adapter that assumed its value
+        would silently inherit whichever torch adapter ran before it and
+        report one precision's throughput under another's name.
+        """
+        torch = self._torch()
+        if torch.cuda.is_available():
+            torch.backends.cuda.matmul.allow_tf32 = self.allow_tf32
+            torch.backends.cudnn.allow_tf32 = self.allow_tf32
+
+    def sweep_params(self) -> tuple[int | None, ...]:
+        return (None,)
+
+    def describe(self) -> dict[str, object]:
+        return {
+            "metric": METRIC,
+            "precision": self.precision,
+            "query_chunk": self._query_chunk,
+            "corpus_tile": self._corpus_tile,
+        }
+
+    def _device_used_bytes(self, device) -> int | None:
+        torch = self._torch()
+        if device.type != "cuda":
+            return None
+        free, total = torch.cuda.mem_get_info()
+        return int(total - free)
+
+    def build(self, vectors: np.ndarray) -> BuiltIndex:
+        torch = self._torch()
+        device = self._device()
+        self._apply_backend_flags()
+        before = self._device_used_bytes(device)
+
+        self.sync()
+        started = time.perf_counter()
+        stored = torch.as_tensor(
+            np.ascontiguousarray(vectors, dtype=np.float32), device=device
+        )
+        # Squared norms stay FP32 whatever the compute dtype. They are a
+        # per-vector constant added once per distance, so computing them in
+        # half precision would spend accuracy on every distance in the grid
+        # and buy no throughput at all.
+        norms = (stored.float() ** 2).sum(dim=1)
+        compute_dtype = getattr(torch, self.compute_dtype_name)
+        if stored.dtype == compute_dtype:
+            compute = stored
+        else:
+            compute = stored.to(compute_dtype)
+            # Drop the FP32 copy: at 1M x 128 it is 512 MB of card that the
+            # half-precision path exists to avoid spending.
+            del stored
+        self.sync()
+        elapsed = time.perf_counter() - started
+
+        after = self._device_used_bytes(device)
+        peak = None if before is None or after is None else max(after - before, 0)
+        return BuiltIndex(
+            handle={"vectors": compute, "norms": norms},
+            # No training phase, as with cuVS brute force: the whole cost is
+            # ingesting the vectors, reported as `add` so the IVF indexes'
+            # train column stays comparable.
+            train_seconds=0.0,
+            add_seconds=elapsed,
+            index_bytes_estimated=int(
+                compute.element_size() * compute.numel()
+                + norms.element_size() * norms.numel()
+            ),
+            peak_vram_bytes=peak,
+            dataset=compute,
+        )
+
+    def search(self, built, queries, k, param):
+        torch = self._torch()
+        self._apply_backend_flags()
+        stored = built.handle["vectors"]
+        norms = built.handle["norms"]
+        device = stored.device
+
+        host_queries = np.ascontiguousarray(queries, dtype=np.float32)
+        all_q = torch.as_tensor(host_queries, device=device)
+        query_norms = (all_q**2).sum(dim=1)
+        compute_q = all_q.to(stored.dtype)
+
+        num_queries = all_q.shape[0]
+        num_vectors = stored.shape[0]
+        out_distances = torch.empty(
+            (num_queries, k), dtype=torch.float32, device=device
+        )
+        out_ids = torch.empty((num_queries, k), dtype=torch.int64, device=device)
+
+        for q_start in range(0, num_queries, self._query_chunk):
+            q_end = min(q_start + self._query_chunk, num_queries)
+            best_distances = None
+            best_ids = None
+            for c_start in range(0, num_vectors, self._corpus_tile):
+                c_end = min(c_start + self._corpus_tile, num_vectors)
+                # ||q||^2 is a per-query constant, so it is left out of the
+                # ranking and added back at the end -- it cannot change the
+                # ordering within a query, and omitting it keeps the tile in
+                # one fused expression.
+                scores = compute_q[q_start:q_end] @ stored[c_start:c_end].T
+                scores = scores.float().mul_(-2.0).add_(norms[c_start:c_end])
+
+                # A tile can only offer as many candidates as it holds, so k
+                # above the tile size has to accumulate across tiles rather
+                # than truncate at the first one's supply.
+                take = min(k, c_end - c_start)
+                tile_distances, tile_ids = torch.topk(
+                    scores, take, dim=1, largest=False, sorted=True
+                )
+                tile_ids = tile_ids + c_start
+                if best_distances is None:
+                    best_distances, best_ids = tile_distances, tile_ids
+                    continue
+                merged_distances = torch.cat([best_distances, tile_distances], dim=1)
+                merged_ids = torch.cat([best_ids, tile_ids], dim=1)
+                keep = min(k, merged_distances.shape[1])
+                best_distances, order = torch.topk(
+                    merged_distances, keep, dim=1, largest=False, sorted=True
+                )
+                best_ids = torch.gather(merged_ids, 1, order)
+
+            out_distances[q_start:q_end] = best_distances + (
+                query_norms[q_start:q_end].unsqueeze(1)
+            )
+            out_ids[q_start:q_end] = best_ids
+
+        return (
+            out_distances.cpu().numpy().astype(np.float32),
+            out_ids.cpu().numpy().astype(np.int64),
+        )
+
+    def sync(self) -> None:
+        torch = self._torch()
+        if self._device().type == "cuda":
+            torch.cuda.synchronize()
+
+
+class TorchFlatAdapter(_TorchFlatAdapter):
+    """FP32, TF32 off: the like-for-like comparison against cuVS `flat`."""
+
+    name = "torch_flat"
+    precision = "fp32"
+    allow_tf32 = False
+    compute_dtype_name = "float32"
+
+
+class TorchFlatTf32Adapter(_TorchFlatAdapter):
+    """FP32 inputs through TF32 tensor cores."""
+
+    name = "torch_flat_tf32"
+    precision = "tf32"
+    allow_tf32 = True
+    compute_dtype_name = "float32"
+
+
+class TorchFlatFp16Adapter(_TorchFlatAdapter):
+    """FP16 storage and matmul, FP32 accumulate and FP32 norms."""
+
+    name = "torch_flat_fp16"
+    precision = "fp16"
+    allow_tf32 = False
+    compute_dtype_name = "float16"
+
+
 _ADAPTERS: dict[str, type[IndexAdapter]] = {
     "flat": FlatAdapter,
     "ivf_flat": IvfFlatAdapter,
     "ivf_pq": IvfPqAdapter,
     "cagra": CagraAdapter,
+    "torch_flat": TorchFlatAdapter,
+    "torch_flat_tf32": TorchFlatTf32Adapter,
+    "torch_flat_fp16": TorchFlatFp16Adapter,
 }
 
 ADAPTER_NAMES: tuple[str, ...] = tuple(_ADAPTERS)
+
+# The grid the published artifact reports. The torch baselines are opt-in via
+# `--indexes`: they answer whether cuVS brute force is near the hardware's
+# limit, which is a different question from how the variant ladder searches,
+# and adding a probe should not silently change the shipped table's shape.
+DEFAULT_INDEX_NAMES: tuple[str, ...] = ("flat", "ivf_flat", "ivf_pq", "cagra")
+
+
+def adapter_class(name: str) -> type[IndexAdapter]:
+    """The adapter class registered under `name`, for callers needing kwargs."""
+    if name not in _ADAPTERS:
+        raise ValueError(
+            f"unknown index name: {name}. Known: {', '.join(ADAPTER_NAMES)}"
+        )
+    return _ADAPTERS[name]
 
 
 def build_adapters(names: Sequence[str]) -> tuple[IndexAdapter, ...]:

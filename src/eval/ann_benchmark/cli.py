@@ -63,8 +63,15 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--indexes",
         nargs="+",
-        default=list(indexes.ADAPTER_NAMES),
+        default=list(indexes.DEFAULT_INDEX_NAMES),
         choices=list(indexes.ADAPTER_NAMES),
+        help=(
+            "Which indexes to run. Defaults to the four cuVS indexes the "
+            "published grid reports. The torch_flat* brute-force baselines "
+            "are selectable but off by default: they measure whether cuVS "
+            "brute force is near the hardware's limit, which is a separate "
+            "question from how the variant ladder searches."
+        ),
     )
     parser.add_argument(
         "--allow-missing",

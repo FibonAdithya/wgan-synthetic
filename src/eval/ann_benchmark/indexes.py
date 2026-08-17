@@ -20,6 +20,7 @@ metric directly; the other three take it on `IndexParams`. See
 
 from __future__ import annotations
 
+import importlib
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -84,6 +85,31 @@ class BuiltIndex:
     index_bytes_estimated: int
     peak_vram_bytes: int | None = None
     dataset: object | None = None
+
+
+def stack_versions() -> dict[str, str | None]:
+    """Installed versions of the compute stack, for the environment block.
+
+    Measured per run rather than transcribed from requirements.txt. The first
+    grid's write-up named PyTorch 2.13.0 -- the pinned version -- while the
+    box it ran on has had 2.12.0 installed since June, so the one figure in
+    that environment block nobody actually read off the machine was the one
+    that was wrong. Recording it here makes the claim a measurement.
+
+    `None` where a package is absent, and never an exception: a provenance
+    field must not be able to fail the run it is describing. cuVS and cupy
+    are legitimately missing on the CPU-only box that runs `make check`.
+    """
+    versions: dict[str, str | None] = {}
+    for name in ("torch", "cuvs", "cupy"):
+        try:
+            module = importlib.import_module(name)
+        except Exception:  # noqa: BLE001 - provenance must not break a run
+            versions[name] = None
+            continue
+        version = getattr(module, "__version__", None)
+        versions[name] = None if version is None else str(version)
+    return versions
 
 
 def require_device_stack() -> None:

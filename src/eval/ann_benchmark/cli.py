@@ -143,6 +143,27 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
 
 
+def environment_block(args) -> dict[str, object]:
+    """What the run was, recorded so the artifact can be read years later.
+
+    `versions` is read off the interpreter that is running, not off
+    requirements.txt: the two disagree on this box (torch is pinned at
+    2.13.0, installed at 2.12.0), and a provenance field copied from the pin
+    would record the disagreement as agreement. See `indexes.stack_versions`.
+    """
+    return {
+        "platform": platform.platform(),
+        "python": platform.python_version(),
+        "versions": indexes.stack_versions(),
+        "num_vectors": args.num_vectors,
+        "num_queries": args.num_queries,
+        "k": args.k,
+        "repeats": args.repeats,
+        "target_recall": args.target_recall,
+        "normalized": True,
+    }
+
+
 def run_and_report(built_corpora, adapters, args, work_dir, output_dir):
     builds, searches = runner.run_grid(
         built_corpora,
@@ -151,16 +172,7 @@ def run_and_report(built_corpora, adapters, args, work_dir, output_dir):
         repeats=args.repeats,
         records_path=work_dir / "records.json",
     )
-    environment = {
-        "platform": platform.platform(),
-        "python": platform.python_version(),
-        "num_vectors": args.num_vectors,
-        "num_queries": args.num_queries,
-        "k": args.k,
-        "repeats": args.repeats,
-        "target_recall": args.target_recall,
-        "normalized": True,
-    }
+    environment = environment_block(args)
     report.write_json(
         output_dir / "ann_benchmark.json",
         builds=builds,

@@ -17,7 +17,25 @@ from src.eval.ann_benchmark import indexes
 def test_module_imports_without_cuvs():
     # Importing the module is the assertion. If any cuVS import moved to
     # module scope this test fails at collection on every CPU-only machine.
-    assert indexes.ADAPTER_NAMES == ("flat", "ivf_flat", "ivf_pq", "cagra")
+    assert indexes.ADAPTER_NAMES == (
+        "flat",
+        "ivf_flat",
+        "ivf_pq",
+        "cagra",
+        "torch_flat",
+        "torch_flat_tf32",
+        "torch_flat_fp16",
+    )
+
+
+def test_default_indexes_are_the_four_cuvs_adapters():
+    """The torch baselines are opt-in, not part of the shipped grid.
+
+    They answer a different question -- whether cuVS brute force is leaving
+    throughput on the table -- and the published artifact's shape should not
+    change because a probe was added beside it.
+    """
+    assert indexes.DEFAULT_INDEX_NAMES == ("flat", "ivf_flat", "ivf_pq", "cagra")
 
 
 def test_build_adapters_returns_requested_adapters_in_order():
@@ -259,3 +277,135 @@ def test_gpu_and_numpy_exact_neighbours_agree():
     )
     assert list(gpu_ids.flatten()) == list(numpy_ids.flatten())
     assert gpu_dist == pytest.approx(numpy_dist, abs=1e-4)
+
+
+# --- torch brute-force baselines -------------------------------------------
+#
+# These exist to answer whether cuVS `flat` is near the hardware's limit or
+# leaving throughput on the table. cuVS brute force spends ~86% of its time
+# in top-k selection rather than the distance GEMM, so a differently-tiled
+# implementation is worth measuring rather than assuming.
+#
+# torch is in requirements.txt and installs CPU-only, so unlike the cuVS
+# adapters these run for real under `make check` -- on CPU, at small sizes,
+# with the tiling forced to actually tile.
+
+TORCH_ADAPTERS = ("torch_flat", "torch_flat_tf32", "torch_flat_fp16")
+
+
+def _cpu_adapter(name, **kwargs):
+    """One torch adapter pinned to CPU with tiny tiles, for exactness tests."""
+    cls = indexes.adapter_class(name)
+    return cls(device="cpu", query_chunk=3, corpus_tile=7, **kwargs)
+
+
+def test_torch_adapters_have_no_swept_parameter():
+    for name in TORCH_ADAPTERS:
+        adapter = _cpu_adapter(name)
+        assert adapter.sweep_params() == (None,)
+        assert adapter.param_name == ""
+
+
+def test_torch_adapters_describe_their_precision_and_tiling():
+    assert _cpu_adapter("torch_flat").describe()["precision"] == "fp32"
+    assert _cpu_adapter("torch_flat_tf32").describe()["precision"] == "tf32"
+    assert _cpu_adapter("torch_flat_fp16").describe()["precision"] == "fp16"
+    described = _cpu_adapter("torch_flat").describe()
+    assert described["query_chunk"] == 3
+    assert described["corpus_tile"] == 7
+    assert described["metric"] == indexes.METRIC
+
+
+@pytest.mark.parametrize("name", ["torch_flat", "torch_flat_tf32"])
+def test_torch_fp32_matches_numpy_brute_force_exactly(name):
+    """Full-precision tiling must reproduce numpy's exact neighbours.
+
+    The corpus (23) is larger than the tile (7) and the query set (8) larger
+    than the chunk (3), so both loops run more than one iteration and the
+    cross-tile merge is genuinely exercised -- a merge that dropped a tile's
+    winners would still pass on a single-tile corpus.
+    """
+    rng = np.random.default_rng(7)
+    vectors = rng.standard_normal((23, 5)).astype(np.float32)
+    queries = rng.standard_normal((8, 5)).astype(np.float32)
+
+    adapter = _cpu_adapter(name)
+    built = adapter.build(vectors)
+    got_dist, got_ids = adapter.search(built, queries, 4, None)
+
+    reference = indexes.NumpyFlatAdapter()
+    ref_built = reference.build(vectors)
+    ref_dist, ref_ids = reference.search(ref_built, queries, 4, None)
+
+    assert got_ids.tolist() == ref_ids.tolist()
+    assert got_dist == pytest.approx(ref_dist, rel=1e-4, abs=1e-4)
+
+
+def test_torch_fp16_finds_the_same_neighbour_set():
+    """Half precision may reorder ties but must not miss real neighbours.
+
+    Scored the way the benchmark scores every index: as a set of ids, not a
+    sequence, because fp16 rounding can swap two near-equidistant neighbours
+    without that being a recall loss.
+    """
+    rng = np.random.default_rng(11)
+    vectors = rng.standard_normal((23, 5)).astype(np.float32)
+    queries = rng.standard_normal((8, 5)).astype(np.float32)
+
+    adapter = _cpu_adapter("torch_flat_fp16")
+    built = adapter.build(vectors)
+    _, got_ids = adapter.search(built, queries, 4, None)
+
+    reference = indexes.NumpyFlatAdapter()
+    _, ref_ids = reference.search(reference.build(vectors), queries, 4, None)
+
+    for got_row, ref_row in zip(got_ids, ref_ids, strict=True):
+        assert set(got_row.tolist()) == set(ref_row.tolist())
+
+
+def test_torch_returns_true_squared_l2_not_just_a_ranking_score():
+    """The ||q||^2 term must be added back.
+
+    Dropping it ranks identically and is a tempting saving, but it would make
+    every reported distance wrong by a per-query constant. Nothing in the
+    grid reads these distances -- recall is recomputed from ids -- so an
+    error here would be silent.
+    """
+    vectors = np.array([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32)
+    queries = np.array([[3.0, 4.0]], dtype=np.float32)
+
+    adapter = _cpu_adapter("torch_flat")
+    distances, ids = adapter.search(adapter.build(vectors), queries, 2, None)
+
+    # (3-0)^2 + (4-1)^2 = 18 to [0,1]; (3-1)^2 + (4-0)^2 = 20 to [1,0]
+    assert ids.tolist() == [[1, 0]]
+    assert distances.ravel().tolist() == pytest.approx([18.0, 20.0], abs=1e-4)
+
+
+def test_torch_handles_k_larger_than_a_single_corpus_tile():
+    """k above the tile size must still return k neighbours.
+
+    Each tile can only offer min(k, tile) candidates, so the merge has to
+    accumulate across tiles rather than truncate at the first one's supply.
+    """
+    rng = np.random.default_rng(3)
+    vectors = rng.standard_normal((23, 5)).astype(np.float32)
+    queries = rng.standard_normal((4, 5)).astype(np.float32)
+
+    adapter = _cpu_adapter("torch_flat")  # corpus_tile=7, k=10 > 7
+    distances, ids = adapter.search(adapter.build(vectors), queries, 10, None)
+
+    assert ids.shape == (4, 10)
+    reference = indexes.NumpyFlatAdapter()
+    _, ref_ids = reference.search(reference.build(vectors), queries, 10, None)
+    assert ids.tolist() == ref_ids.tolist()
+    # Ascending, as every adapter's contract requires.
+    assert np.all(np.diff(distances, axis=1) >= -1e-5)
+
+
+def test_torch_build_reports_the_dtype_it_actually_stores():
+    """fp16 stores half the bytes; the estimate must say so."""
+    vectors = np.zeros((16, 4), dtype=np.float32)
+    fp32 = _cpu_adapter("torch_flat").build(vectors)
+    fp16 = _cpu_adapter("torch_flat_fp16").build(vectors)
+    assert fp32.index_bytes_estimated > fp16.index_bytes_estimated

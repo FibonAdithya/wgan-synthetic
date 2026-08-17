@@ -2,8 +2,19 @@
 
 Measured 2026-08-13 from commit `7c00b45` on the exclusive `gpuq` GPU lane
 (job `wgan-synthetic-20260813T080256Z-3b6ec3`, exit 0). The machine had one
-NVIDIA GeForce RTX 4060 (8188 MiB, driver 580.95.05), PyTorch 2.13.0+cu130,
+NVIDIA GeForce RTX 4060 (8188 MiB, driver 580.95.05), PyTorch 2.12.0+cu130,
 CUDA 13.0 and cuVS 26.08.01.
+
+**Corrected 2026-08-17: this line previously said PyTorch 2.13.0+cu130.** That
+is the version `requirements.txt` pins, not the version the box ran. The box's
+`torch-2.12.0+cu130.dist-info` is dated 8 June, two months before this run, so
+2.13.0 was never installed there and the figure had been transcribed from the
+pin rather than read off the machine. Nothing in the table moves: torch is not
+on the cuVS search path, and the corpora it generated were cached under the
+same 2.12.0. The environment block now records versions from the running
+interpreter (`indexes.stack_versions`) so a provenance field cannot be copied
+from a pin again. **The box does not satisfy `requirements.txt`'s torch pin**,
+which is a live discrepancy this correction documents rather than resolves.
 
 This is a measurement exercise. It reports index build time, recall@10 and QPS
 for real SIFT and each trained SIFT variant. **It does not adjudicate the
@@ -232,6 +243,53 @@ mostly tracks what else happened to be resident at sample time.
 The exact-search ceiling is 7,948–7,996 QPS across the seven corpora — the
 price of perfect recall, and roughly 9x slower than IVF-Flat at 0.90 and 30x
 slower than CAGRA at its floor.
+
+### Those two multiples are not matched-recall comparisons
+
+Both compare an approximate index against *exact* search, so they price a
+speedup that is partly paid for in recall. This section applies to brute force
+the same discipline the CAGRA section above applies across corpora, because
+the same mistake is available here: reading 30x as "the approximate index is
+30x better" when it is measured at recall 0.963 against a ceiling at 1.000.
+
+Read down each sweep to the point where the approximate index is actually
+exact, on `real`:
+
+| Index | Knob | Recall | QPS | vs brute force |
+|---|---:|---:|---:|---:|
+| CAGRA | `itopk_size=32` | 0.9633 | 250,469 | 31.3x |
+| CAGRA | `itopk_size=512` | **1.0000** | 20,855 | **2.6x** |
+| IVF-Flat | `n_probes=32` | 0.9226 | 62,524 | 7.8x |
+| IVF-Flat | `n_probes=256` | 0.9991 | 8,335 | **1.0x** |
+| IVF-PQ | `n_probes=256` | 0.8811 | 10,634 | 1.3x (never exact) |
+
+At matched recall the advantage largely disappears: CAGRA is 2.6x, IVF-Flat is
+break-even, and IVF-PQ cannot get there at all. Both framings are true and
+neither is the honest one alone.
+
+Three things specific to this setup keep brute force competitive, and all
+three are properties of the measurement rather than of ANN in general. N = 1M
+is small, and brute force is O(N·d) against a graph index's roughly O(log N).
+Queries are issued 10,000 at a time, which collapses brute force into one
+large GEMM while graph traversal — irregular and pointer-chasing — gains far
+less from batching; published ANN speedups are usually quoted at batch 1,
+where brute force cannot fill the card. And the whole corpus is 512 MB on an
+8 GiB card at d=128, so nothing pages. **Do not carry these multiples to
+another scale or another batch size.**
+
+### The brute-force baseline is itself measured, not assumed
+
+Everything above prices ANN against cuVS brute force, so how good that
+baseline is decides how much of the advantage is real — and 7,996 QPS is only
+~14% of the card's FP32 peak, which is the kind of number that invites the
+objection that the ceiling is just an unoptimized implementation.
+
+It was tested rather than argued. `docs/results/ann-gpu-benchmark-bruteforce/`
+records three independent torch implementations measured on the same card
+against the same corpora; cuVS beat all three, and reduced precision did not
+help, because the work is top-k selection rather than the distance GEMM. The
+~8,000 QPS ceiling stands, so the 2.6x and 1.0x above are real figures and not
+an artifact of a weak baseline.
 
 ## How to read the files
 

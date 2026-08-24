@@ -79,7 +79,14 @@ def test_cagra_iters_sweeps_max_iterations_at_the_itopk_floor():
     """
     (iters,) = indexes.build_adapters(["cagra_iters"])
     assert iters.param_name == "max_iterations"
-    assert iters.sweep_params() == (1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64)
+    assert iters.sweep_params() == (
+        (1, 2, 3, 4, 6, 8, 12, 16, 18, 20, 22, 24, 32, 48, 64)
+    )
+    # The measured 0.90 crossing sits between 16 and 24. The headline QPS is
+    # interpolated across whichever two points bracket the target, so losing
+    # the dense cluster there silently widens that bracket from 0.02 recall
+    # to 0.07 without failing anything else.
+    assert {18, 20, 22} <= set(iters.sweep_params())
     # The sweep must bracket cuVS's auto-selected cap (~1.2 * itopk_size /
     # search_width, so ~38 here) from above, or its top point is not the
     # published itopk_size=32 cell and the two curves do not join.

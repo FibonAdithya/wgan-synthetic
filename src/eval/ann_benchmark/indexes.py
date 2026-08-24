@@ -36,6 +36,23 @@ PQ_BITS = 8
 CAGRA_GRAPH_DEGREE = 64
 CAGRA_INTERMEDIATE_GRAPH_DEGREE = 128
 CAGRA_ITOPK_SIZE = (32, 64, 128, 256, 512)
+# CAGRA's published knob bottoms out above the benchmark's target, so the
+# shipped table has no matched-recall CAGRA row. `itopk_size` must be a
+# multiple of 32 and at least k, making 32 its floor, and at 32 every corpus
+# already clears recall 0.90 -- which is why every CAGRA cell in
+# docs/results/ann-gpu-benchmark/ reports a floor rather than a match.
+#
+# `max_iterations` is the other search-side knob cuVS exposes: it caps the
+# graph traversal, which auto-selects to roughly 1.2 * itopk_size /
+# search_width (~38 at the floor). Capping it below that is what takes CAGRA
+# under 0.90, and it does so without touching the graph -- so a QPS read off
+# this sweep is the *published* index searched more cheaply, comparable to the
+# IVF-Flat row at the same target. Lowering `graph_degree` would also work and
+# would not be: it builds a different index, moving build time and VRAM with
+# it. The sweep runs past the auto cap (64 > ~38) so its top point reproduces
+# the published itopk_size=32 cell and the two curves join there.
+CAGRA_ITOPK_FLOOR = 32
+CAGRA_MAX_ITERATIONS = (1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64)
 
 # Tiling for the torch brute-force baselines. The score tile is
 # query_chunk x corpus_tile float32 = 537 MB at these values, which is what
@@ -439,6 +456,40 @@ class CagraAdapter(_CuvsAdapter):
         return self._to_host(distances), self._to_host(neighbours)
 
 
+class CagraIterationsAdapter(CagraAdapter):
+    """CAGRA on the published graph, sweeping the traversal cap instead.
+
+    Inherits `build` -- deliberately, not incidentally. The index this
+    searches must be the same one `CagraAdapter` builds, or the numbers it
+    produces answer a different question. See `CAGRA_MAX_ITERATIONS`.
+    """
+
+    name = "cagra_iters"
+    param_name = "max_iterations"
+
+    def sweep_params(self) -> tuple[int | None, ...]:
+        return CAGRA_MAX_ITERATIONS
+
+    def describe(self) -> dict[str, object]:
+        # itopk_size is swept by CagraAdapter and fixed here, so it stops
+        # being implied by the adapter's identity and has to be recorded.
+        return {**super().describe(), "itopk_size": CAGRA_ITOPK_FLOOR}
+
+    def search(self, built, queries, k, param):
+        self._res()
+        from cuvs.neighbors import cagra
+
+        device_queries = self._to_device(queries)
+        search_params = cagra.SearchParams(
+            itopk_size=CAGRA_ITOPK_FLOOR, max_iterations=int(param)
+        )
+        # search takes (search_params, index, queries, k, ...).
+        distances, neighbours = cagra.search(
+            search_params, built.handle, device_queries, k
+        )
+        return self._to_host(distances), self._to_host(neighbours)
+
+
 class NumpyFlatAdapter(IndexAdapter):
     """Exact brute force in numpy -- the runner's stand-in under pytest.
 
@@ -711,6 +762,7 @@ _ADAPTERS: dict[str, type[IndexAdapter]] = {
     "ivf_flat": IvfFlatAdapter,
     "ivf_pq": IvfPqAdapter,
     "cagra": CagraAdapter,
+    "cagra_iters": CagraIterationsAdapter,
     "torch_flat": TorchFlatAdapter,
     "torch_flat_tf32": TorchFlatTf32Adapter,
     "torch_flat_fp16": TorchFlatFp16Adapter,

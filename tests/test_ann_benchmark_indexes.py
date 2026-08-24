@@ -22,6 +22,7 @@ def test_module_imports_without_cuvs():
         "ivf_flat",
         "ivf_pq",
         "cagra",
+        "cagra_iters",
         "torch_flat",
         "torch_flat_tf32",
         "torch_flat_fp16",
@@ -65,6 +66,102 @@ def test_cagra_sweeps_itopk_size():
     (cagra,) = indexes.build_adapters(["cagra"])
     assert cagra.param_name == "itopk_size"
     assert cagra.sweep_params() == (32, 64, 128, 256, 512)
+
+
+def test_cagra_iters_sweeps_max_iterations_at_the_itopk_floor():
+    """The second CAGRA adapter exists because the first cannot reach 0.90.
+
+    `itopk_size` must be a multiple of 32 and at least k, so 32 is its floor,
+    and at 32 every corpus already clears the benchmark's 0.90 target -- every
+    published CAGRA cell is a floor, not a match. This adapter pins itopk_size
+    at that floor and sweeps the traversal cap instead, which is the knob that
+    goes the other way.
+    """
+    (iters,) = indexes.build_adapters(["cagra_iters"])
+    assert iters.param_name == "max_iterations"
+    assert iters.sweep_params() == (1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64)
+    # The sweep must bracket cuVS's auto-selected cap (~1.2 * itopk_size /
+    # search_width, so ~38 here) from above, or its top point is not the
+    # published itopk_size=32 cell and the two curves do not join.
+    assert max(iters.sweep_params()) > 38
+
+
+def test_cagra_iters_builds_the_published_graph():
+    """Same index as the published CAGRA rows -- only the search differs.
+
+    If graph_degree drifted from cagra's, QPS at matched recall would no
+    longer be comparable to the shipped table: it would be a different index
+    measured at a different point, not the same index searched more cheaply.
+    """
+    cagra, iters = indexes.build_adapters(["cagra", "cagra_iters"])
+    assert iters.describe()["graph_degree"] == cagra.describe()["graph_degree"]
+    assert (
+        iters.describe()["intermediate_graph_degree"]
+        == cagra.describe()["intermediate_graph_degree"]
+    )
+    # The knob cagra sweeps is held fixed here, so it has to be recorded.
+    assert iters.describe()["itopk_size"] == 32
+
+
+def test_cagra_iters_passes_both_knobs_to_cuvs(monkeypatch):
+    """Both halves of the configuration must reach `cagra.SearchParams`.
+
+    Dropping `max_iterations` leaves the sweep silently measuring twelve
+    identical searches at the published floor -- a flat curve that never
+    crosses 0.90 and looks like a real null. Dropping `itopk_size` falls back
+    to cuVS's default of 64, which is a different index configuration than
+    the one `describe()` reports.
+    """
+    captured: dict[str, object] = {}
+
+    class FakeDeviceArray:
+        shape = (2, 4)
+
+        def get(self):
+            return np.zeros((2, 4), dtype=np.float32)
+
+    class FakeResources:
+        def sync(self):
+            pass
+
+    fake_cagra = types.ModuleType("cuvs.neighbors.cagra")
+
+    class SearchParams:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    def search(search_params, handle, queries, k):
+        return FakeDeviceArray(), FakeDeviceArray()
+
+    fake_cagra.SearchParams = SearchParams
+    fake_cagra.search = search
+
+    fake_cupy = types.ModuleType("cupy")
+    fake_cupy.asarray = lambda x: FakeDeviceArray()
+    fake_cupy.asnumpy = lambda x: np.zeros((2, 4), dtype=np.float32)
+    fake_cupy.cuda = types.SimpleNamespace(
+        runtime=types.SimpleNamespace(memGetInfo=lambda: (1_000, 2_000))
+    )
+    fake_common = types.ModuleType("cuvs.common")
+    fake_common.Resources = FakeResources
+    fake_neighbors = types.ModuleType("cuvs.neighbors")
+    fake_neighbors.cagra = fake_cagra
+
+    monkeypatch.setitem(sys.modules, "cupy", fake_cupy)
+    monkeypatch.setitem(sys.modules, "cuvs", types.ModuleType("cuvs"))
+    monkeypatch.setitem(sys.modules, "cuvs.common", fake_common)
+    monkeypatch.setitem(sys.modules, "cuvs.neighbors", fake_neighbors)
+
+    (iters,) = indexes.build_adapters(["cagra_iters"])
+    built = indexes.BuiltIndex(
+        handle=object(),
+        train_seconds=0.0,
+        add_seconds=0.0,
+        index_bytes_estimated=0,
+    )
+    iters.search(built, np.zeros((2, 4), dtype=np.float32), k=2, param=6)
+
+    assert captured == {"itopk_size": 32, "max_iterations": 6}
 
 
 def test_describe_records_the_fixed_build_parameters():

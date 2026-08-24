@@ -51,8 +51,14 @@ CAGRA_ITOPK_SIZE = (32, 64, 128, 256, 512)
 # would not be: it builds a different index, moving build time and VRAM with
 # it. The sweep runs past the auto cap (64 > ~38) so its top point reproduces
 # the published itopk_size=32 cell and the two curves join there.
+#
+# The spacing is geometric except around 16-24, where the first run put the
+# 0.90 crossing (recall 0.8538 at 16, 0.9243 at 24). A headline QPS at the
+# target is interpolated between the two points that bracket it, so the
+# bracket's width is the headline's error bar; 18/20/22 shrink it from 0.07
+# recall to under 0.02.
 CAGRA_ITOPK_FLOOR = 32
-CAGRA_MAX_ITERATIONS = (1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64)
+CAGRA_MAX_ITERATIONS = (1, 2, 3, 4, 6, 8, 12, 16, 18, 20, 22, 24, 32, 48, 64)
 
 # Tiling for the torch brute-force baselines. The score tile is
 # query_chunk x corpus_tile float32 = 537 MB at these values, which is what

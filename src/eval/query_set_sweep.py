@@ -77,6 +77,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--draws", type=int, default=DRAWS)
     parser.add_argument("--target-recall", type=float, default=TARGET_RECALL)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--indexes",
+        nargs="+",
+        default=["flat", "ivf_flat", "cagra_iters"],
+        choices=["flat", "ivf_flat", "cagra_iters", "cagra"],
+        help="Which indexes to calibrate and time. flat is always built for truth.",
+    )
     return parser.parse_args(argv)
 
 
@@ -131,6 +138,14 @@ class Timed:
 
             return ivf_flat.search(
                 ivf_flat.SearchParams(n_probes=int(param)), handle, device_queries, k
+            )
+        if kind == "cagra":
+            from cuvs.neighbors import cagra
+
+            # Auto max_iterations; the published knob. Needed where the
+            # itopk floor never reaches the bar (GloVe).
+            return cagra.search(
+                cagra.SearchParams(itopk_size=int(param)), handle, device_queries, k
             )
         if kind == "cagra_iters":
             from cuvs.neighbors import cagra
@@ -273,11 +288,15 @@ def main(argv: Sequence[str] | None = None) -> None:
     dim = database.shape[1]
     print(f"database {database.shape}, pool {pool.shape}", flush=True)
 
-    adapters = {
-        "flat": indexes.FlatAdapter(),
-        "ivf_flat": indexes.IvfFlatAdapter(),
-        "cagra_iters": indexes.CagraIterationsAdapter(),
+    wanted = list(dict.fromkeys(["flat", *args.indexes]))
+    all_adapters = {
+        "flat": indexes.FlatAdapter,
+        "ivf_flat": indexes.IvfFlatAdapter,
+        "cagra_iters": indexes.CagraIterationsAdapter,
+        # Same graph as cagra_iters; only the search knob differs.
+        "cagra": indexes.CagraAdapter,
     }
+    adapters = {kind: all_adapters[kind]() for kind in wanted}
     builds: dict[str, dict] = {}
     handles: dict[str, object] = {}
     for kind, adapter in adapters.items():
@@ -300,10 +319,15 @@ def main(argv: Sequence[str] | None = None) -> None:
     hits: dict[str, np.ndarray] = {}
     hits["flat"] = hits_for(timed, "flat", handles["flat"], database, pool, truth, K, None)
     calibration["flat"] = {"curve": [{"param": None, "recall": float(hits["flat"].mean())}], "chosen": None}
-    for kind, params in (
-        ("ivf_flat", indexes.IVF_N_PROBES),
-        ("cagra_iters", indexes.CAGRA_MAX_ITERATIONS),
-    ):
+    param_space = {
+        "ivf_flat": indexes.IVF_N_PROBES,
+        "cagra_iters": indexes.CAGRA_MAX_ITERATIONS,
+        "cagra": indexes.CAGRA_ITOPK_SIZE,
+    }
+    for kind in wanted:
+        if kind == "flat":
+            continue
+        params = param_space[kind]
         curve, chosen, chosen_hits = calibrate(
             timed, kind, handles[kind], database, pool, truth, K, params, args.target_recall
         )
@@ -315,7 +339,9 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     timing: dict[str, list[dict]] = {}
     fits: dict[str, dict] = {}
-    for kind in ("flat", "ivf_flat", "cagra_iters"):
+    for kind in wanted:
+        if kind == "flat" and "flat" not in args.indexes:
+            continue
         param = calibration[kind]["chosen"]
         if kind != "flat" and param is None:
             print(f"{kind}: no param reached {args.target_recall}; timing skipped", flush=True)

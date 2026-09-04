@@ -10,13 +10,16 @@ each build the probe records:
       through RMM, which is where cuVS and (here, by routing cupy through
       RMM) the dataset copy both allocate. Exact and process-local, but
       blind to the CUDA context and to anything cuVS allocates outside RMM.
-    - `smi_peak_mib`: the largest `nvidia-smi` reading for this pid during
-      the build, sampled as fast as nvidia-smi answers (~0.5 Hz on the box).
-      Includes the context; misses anything shorter than one sample.
     - `card_peak_delta_bytes`: max over samples of card-wide used memory
-      minus the pre-build baseline, sampled at ~200 Hz. Card-wide, so it
-      needs the job to hold the card alone; then it is the one figure that
-      sees allocations made outside RMM.
+      minus the pre-dataset baseline, sampled at ~200 Hz by a child process
+      (cuVS holds the GIL through `build()`, so a thread cannot). Card-wide,
+      so it needs the job to hold the card alone; then it is the one figure
+      that sees allocations made outside RMM.
+    - `context_mib_before_dataset`: one nvidia-smi reading of this pid before
+      the dataset copy, i.e. the CUDA context.
+
+With `--cap-mib`, the probe also enforces the cap the way the design's
+balloon does and reports whether the build survived it.
 * device bytes still held after the build (`resident_after_bytes`), the
   index plus the dataset it points into;
 * host RSS high-water mark, which is dominated by the corpus load.
@@ -37,7 +40,8 @@ import json
 import platform
 import resource
 import subprocess
-import threading
+import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -60,67 +64,75 @@ def parse_args(argv=None) -> argparse.Namespace:
     p.add_argument("--intermediate-graph-degree", type=int, default=128)
     p.add_argument("--build-algo", default="nn_descent", choices=["nn_descent", "ivf_pq", "iterative_cagra_search"])
     p.add_argument("--normalize", action="store_true", help="L2-normalize rows, as the ann benchmarks do")
+    p.add_argument(
+        "--cap-mib", type=int, default=0,
+        help="Enforce the c004 build cap the way the design does: after the dataset is on the device, "
+        "allocate free - (cap + 64 MiB) with raw cudaMalloc and hold it for the whole build. 0 disables.",
+    )
     return p.parse_args(argv)
 
 
-class SmiSampler:
-    """Two samplers: the driver's card-wide used bytes at ~200 Hz, and this
-    pid's nvidia-smi figure from a second thread. nvidia-smi takes ~2 s per
-    call on the GPU box (measured 2026-09-04), so it must never sit in the
-    fast loop: the first version of this probe did that and produced 0 to 1
-    samples per build.
+SAMPLER_SRC = r"""
+import sys, time
+import cupy
+out = open(sys.argv[1], "w")
+interval = float(sys.argv[2])
+while True:
+    free, total = cupy.cuda.runtime.memGetInfo()
+    out.write(f"{time.time():.6f} {total - free}\n")
+    out.flush()
+    time.sleep(interval)
+"""
 
-    Each job holds the whole card (no --vram-mb), so the card-wide delta from
-    the pre-build baseline is this process's growth, including anything
-    allocated outside RMM."""
 
-    def __init__(self, pid: int, cupy) -> None:
-        self.pid = pid
-        self.cupy = cupy
-        self.samples: list[tuple[float, int]] = []  # (t, card_used_bytes)
-        self.smi_samples: list[tuple[float, int]] = []  # (t, own_mib)
-        self._stop = threading.Event()
-        self._fast = threading.Thread(target=self._run_fast, daemon=True)
-        self._slow = threading.Thread(target=self._run_slow, daemon=True)
+class CardSampler:
+    """Card-wide used bytes, sampled by a child process.
 
-    def _read_own_mib(self) -> int:
-        try:
-            out = subprocess.run(
-                ["nvidia-smi", "--query-compute-apps=pid,used_memory", "--format=csv,noheader,nounits"],
-                capture_output=True, text=True, timeout=10,
-            ).stdout
-        except Exception:  # noqa: BLE001 - sampler must never kill the run
-            return -1
-        for line in out.splitlines():
-            parts = [s.strip() for s in line.split(",")]
-            if len(parts) == 2 and parts[0].isdigit() and int(parts[0]) == self.pid:
-                return int(parts[1])
-        return 0
+    A thread cannot do this: cuVS holds the GIL for the whole of `build()`,
+    so an in-process sampler gets one sample at each end and nothing in
+    between (measured 2026-09-04: 1-4 samples per 20 s build). The child has
+    its own CUDA context, which is constant and part of the baseline.
 
-    def _run_fast(self) -> None:
-        while not self._stop.is_set():
-            free, total = self.cupy.cuda.runtime.memGetInfo()
-            self.samples.append((time.perf_counter(), int(total - free)))
-            self._stop.wait(0.005)
+    Each job holds the whole card (no --vram-mb), so the delta from the
+    pre-build baseline is this process's growth, including anything cuVS
+    allocates outside RMM."""
 
-    def _run_slow(self) -> None:
-        while not self._stop.is_set():
-            own = self._read_own_mib()
-            self.smi_samples.append((time.perf_counter(), own))
-
-    def start(self) -> None:
-        self._fast.start()
-        self._slow.start()
+    def __init__(self, path: Path, interval_s: float = 0.005) -> None:
+        self.path = path
+        self.proc = subprocess.Popen([sys.executable, "-c", SAMPLER_SRC, str(path), str(interval_s)])
 
     def stop(self) -> None:
-        self._stop.set()
-        self._fast.join()
-        self._slow.join(timeout=15)
+        self.proc.terminate()
+        self.proc.wait(timeout=10)
 
-    def window(self, t0: float, t1: float) -> tuple[list[int], list[int]]:
-        card = [b for t, b in self.samples if t0 <= t <= t1]
-        own = [m for t, m in self.smi_samples if t0 <= t <= t1 + 3.0]
-        return card, own
+    def samples(self) -> list[tuple[float, int]]:
+        out = []
+        try:
+            for line in self.path.read_text().splitlines():
+                t, used = line.split()
+                out.append((float(t), int(used)))
+        except (OSError, ValueError):
+            pass
+        return out
+
+    def window(self, t0: float, t1: float) -> list[int]:
+        return [b for t, b in self.samples() if t0 <= t <= t1]
+
+
+def own_mib_now(pid: int) -> int:
+    """This pid's memory as nvidia-smi reports it (about 2 s per call)."""
+    try:
+        out = subprocess.run(
+            ["nvidia-smi", "--query-compute-apps=pid,used_memory", "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=20,
+        ).stdout
+    except Exception:  # noqa: BLE001 - must never kill the run
+        return -1
+    for line in out.splitlines():
+        parts = [s.strip() for s in line.split(",")]
+        if len(parts) == 2 and parts[0].isdigit() and int(parts[0]) == pid:
+            return int(parts[1])
+    return 0
 
 
 def build_once(kind: str, args, device_vectors, res):
@@ -192,11 +204,15 @@ def main(argv=None) -> None:
     load_s = time.perf_counter() - t0
     print(f"loaded {host.shape} in {load_s:.1f}s", flush=True)
 
-    sampler = SmiSampler(os.getpid(), cupy)
-    sampler.start()
-    time.sleep(2.5)
-    baseline_card = min(b for _, b in sampler.samples) if sampler.samples else 0
-    context_mib = max((m for _, m in sampler.smi_samples), default=-1)
+    out = Path(args.output)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    sampler = CardSampler(Path(tempfile.mkdtemp(prefix="index_build_probe_")) / "samples.txt")
+    context_mib = own_mib_now(os.getpid())
+    time.sleep(1.0)
+    baseline_samples = sampler.samples()
+    if not baseline_samples:
+        raise SystemExit("card sampler produced no samples; is cupy importable in the child?")
+    baseline_card = min(b for _, b in baseline_samples)
 
     res.sync()
     t0 = time.perf_counter()
@@ -205,6 +221,19 @@ def main(argv=None) -> None:
     h2d_s = time.perf_counter() - t0
     dataset_bytes = int(device_vectors.nbytes)
 
+    balloon = None
+    balloon_bytes = 0
+    free_before_balloon, _ = cupy.cuda.runtime.memGetInfo()
+    if args.cap_mib:
+        cap = args.cap_mib * 2**20
+        headroom = 64 * 2**20
+        if free_before_balloon < cap + headroom:
+            raise SystemExit(f"free {free_before_balloon} < cap + headroom {cap + headroom}; cannot enforce")
+        balloon_bytes = free_before_balloon - (cap + headroom)
+        balloon = cupy.cuda.runtime.malloc(balloon_bytes)  # raw cudaMalloc: invisible to the RMM stats
+        free_after, _ = cupy.cuda.runtime.memGetInfo()
+        print(f"balloon {balloon_bytes / 2**20:.0f} MiB held; {free_after / 2**20:.0f} MiB free for the build", flush=True)
+
     builds = []
     handle = None
     for i in range(args.repeats):
@@ -212,31 +241,42 @@ def main(argv=None) -> None:
         res.sync()
         counts_before = stats.allocation_counts
         t0 = time.perf_counter()
-        handle = build_once(args.kind, args, device_vectors, res)
-        res.sync()
+        wall0 = time.time()
+        error = None
+        try:
+            handle = build_once(args.kind, args, device_vectors, res)
+            res.sync()
+        except Exception as exc:  # noqa: BLE001 - an OOM under the cap is a result, not a crash
+            error = f"{type(exc).__name__}: {exc}"[:500]
+            handle = None
         elapsed = time.perf_counter() - t0
         counts_after = stats.allocation_counts
-        card, own = sampler.window(t0, t0 + elapsed)
+        card = sampler.window(wall0, wall0 + elapsed)
         builds.append(
             {
                 "repeat": i,
                 "build_seconds": elapsed,
+                "error": error,
                 "rmm_current_before_bytes": int(counts_before.current_bytes),
                 "rmm_peak_bytes": int(counts_after.peak_bytes),
                 "resident_after_bytes": int(counts_after.current_bytes),
-                "smi_peak_mib": max(own, default=-1),
                 "card_peak_delta_bytes": max(card, default=baseline_card) - baseline_card,
                 "card_samples": len(card),
-                "smi_samples": len(own),
             }
         )
         print(
             f"{args.kind} build {i}: {elapsed:.2f}s, rmm peak {counts_after.peak_bytes / 2**20:.0f} MiB, "
-            f"smi peak {builds[-1]['smi_peak_mib']} MiB, resident {counts_after.current_bytes / 2**20:.0f} MiB",
+            f"card delta peak {builds[-1]['card_peak_delta_bytes'] / 2**20:.0f} MiB over {len(card)} samples, "
+            f"resident {counts_after.current_bytes / 2**20:.0f} MiB"
+            + (f", FAILED: {error}" if error else ""),
             flush=True,
         )
+        if error:
+            break
     sampler.stop()
     del handle
+    if balloon is not None:
+        cupy.cuda.runtime.free(balloon)
 
     result = {
         "kind": args.kind,
@@ -247,6 +287,10 @@ def main(argv=None) -> None:
         "load_seconds": load_s,
         "h2d_seconds": h2d_s,
         "context_mib_before_dataset": context_mib,
+        "baseline_card_bytes": int(baseline_card),
+        "cap_mib": args.cap_mib,
+        "balloon_bytes": int(balloon_bytes),
+        "free_before_balloon_bytes": int(free_before_balloon),
         "builds": builds,
         "host_maxrss_mib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024,
         "environment": {
@@ -261,11 +305,11 @@ def main(argv=None) -> None:
         "notes": [
             "rmm_peak_bytes is the process-wide RMM high-water mark since process start, so repeat i>0 "
             "cannot report a lower peak than repeat 0.",
-            "smi_peak_mib includes the CUDA context; card_peak_delta_bytes is card-wide and may include other jobs.",
+            "card_peak_delta_bytes is card-wide used memory minus the pre-dataset baseline, from a child "
+            "process sampling the driver; it includes the dataset and anything allocated outside RMM, and "
+            "excludes both CUDA contexts (parent and sampler), which are in the baseline.",
         ],
     }
-    out = Path(args.output)
-    out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(result, indent=2) + "\n")
     print(f"wrote {out}", flush=True)
 

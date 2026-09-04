@@ -11,11 +11,12 @@ each build the probe records:
       RMM) the dataset copy both allocate. Exact and process-local, but
       blind to the CUDA context and to anything cuVS allocates outside RMM.
     - `smi_peak_mib`: the largest `nvidia-smi` reading for this pid during
-      the build, sampled as fast as nvidia-smi answers (~20 Hz). Includes
-      the context; can miss a spike shorter than one sample.
+      the build, sampled as fast as nvidia-smi answers (~0.5 Hz on the box).
+      Includes the context; misses anything shorter than one sample.
     - `card_peak_delta_bytes`: max over samples of card-wide used memory
-      minus the pre-build baseline. Card-wide, so contaminated by any other
-      job on the card; kept as a cross-check only.
+      minus the pre-build baseline, sampled at ~200 Hz. Card-wide, so it
+      needs the job to hold the card alone; then it is the one figure that
+      sees allocations made outside RMM.
 * device bytes still held after the build (`resident_after_bytes`), the
   index plus the dataset it points into;
 * host RSS high-water mark, which is dominated by the corpus load.
@@ -63,20 +64,30 @@ def parse_args(argv=None) -> argparse.Namespace:
 
 
 class SmiSampler:
-    """Poll nvidia-smi for this pid's memory and the card-wide total."""
+    """Two samplers: the driver's card-wide used bytes at ~200 Hz, and this
+    pid's nvidia-smi figure from a second thread. nvidia-smi takes ~2 s per
+    call on the GPU box (measured 2026-09-04), so it must never sit in the
+    fast loop: the first version of this probe did that and produced 0 to 1
+    samples per build.
+
+    Each job holds the whole card (no --vram-mb), so the card-wide delta from
+    the pre-build baseline is this process's growth, including anything
+    allocated outside RMM."""
 
     def __init__(self, pid: int, cupy) -> None:
         self.pid = pid
         self.cupy = cupy
-        self.samples: list[tuple[float, int, int]] = []  # (t, own_mib, card_used_bytes)
+        self.samples: list[tuple[float, int]] = []  # (t, card_used_bytes)
+        self.smi_samples: list[tuple[float, int]] = []  # (t, own_mib)
         self._stop = threading.Event()
-        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._fast = threading.Thread(target=self._run_fast, daemon=True)
+        self._slow = threading.Thread(target=self._run_slow, daemon=True)
 
     def _read_own_mib(self) -> int:
         try:
             out = subprocess.run(
                 ["nvidia-smi", "--query-compute-apps=pid,used_memory", "--format=csv,noheader,nounits"],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True, text=True, timeout=10,
             ).stdout
         except Exception:  # noqa: BLE001 - sampler must never kill the run
             return -1
@@ -86,19 +97,30 @@ class SmiSampler:
                 return int(parts[1])
         return 0
 
-    def _run(self) -> None:
+    def _run_fast(self) -> None:
+        while not self._stop.is_set():
+            free, total = self.cupy.cuda.runtime.memGetInfo()
+            self.samples.append((time.perf_counter(), int(total - free)))
+            self._stop.wait(0.005)
+
+    def _run_slow(self) -> None:
         while not self._stop.is_set():
             own = self._read_own_mib()
-            free, total = self.cupy.cuda.runtime.memGetInfo()
-            self.samples.append((time.perf_counter(), own, int(total - free)))
-            self._stop.wait(0.02)
+            self.smi_samples.append((time.perf_counter(), own))
 
     def start(self) -> None:
-        self._thread.start()
+        self._fast.start()
+        self._slow.start()
 
     def stop(self) -> None:
         self._stop.set()
-        self._thread.join()
+        self._fast.join()
+        self._slow.join(timeout=15)
+
+    def window(self, t0: float, t1: float) -> tuple[list[int], list[int]]:
+        card = [b for t, b in self.samples if t0 <= t <= t1]
+        own = [m for t, m in self.smi_samples if t0 <= t <= t1 + 3.0]
+        return card, own
 
 
 def build_once(kind: str, args, device_vectors, res):
@@ -172,9 +194,9 @@ def main(argv=None) -> None:
 
     sampler = SmiSampler(os.getpid(), cupy)
     sampler.start()
-    time.sleep(0.3)
-    baseline_card = min(s[2] for s in sampler.samples) if sampler.samples else 0
-    context_mib = max((s[1] for s in sampler.samples), default=-1)
+    time.sleep(2.5)
+    baseline_card = min(b for _, b in sampler.samples) if sampler.samples else 0
+    context_mib = max((m for _, m in sampler.smi_samples), default=-1)
 
     res.sync()
     t0 = time.perf_counter()
@@ -189,13 +211,12 @@ def main(argv=None) -> None:
         handle = None  # free the previous index before rebuilding
         res.sync()
         counts_before = stats.allocation_counts
-        sample_lo = len(sampler.samples)
         t0 = time.perf_counter()
         handle = build_once(args.kind, args, device_vectors, res)
         res.sync()
         elapsed = time.perf_counter() - t0
         counts_after = stats.allocation_counts
-        window = sampler.samples[sample_lo:]
+        card, own = sampler.window(t0, t0 + elapsed)
         builds.append(
             {
                 "repeat": i,
@@ -203,9 +224,10 @@ def main(argv=None) -> None:
                 "rmm_current_before_bytes": int(counts_before.current_bytes),
                 "rmm_peak_bytes": int(counts_after.peak_bytes),
                 "resident_after_bytes": int(counts_after.current_bytes),
-                "smi_peak_mib": max((s[1] for s in window), default=-1),
-                "card_peak_delta_bytes": max((s[2] for s in window), default=baseline_card) - baseline_card,
-                "smi_samples": len(window),
+                "smi_peak_mib": max(own, default=-1),
+                "card_peak_delta_bytes": max(card, default=baseline_card) - baseline_card,
+                "card_samples": len(card),
+                "smi_samples": len(own),
             }
         )
         print(

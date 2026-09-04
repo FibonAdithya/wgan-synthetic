@@ -200,9 +200,9 @@ def main(argv=None) -> None:
             {
                 "repeat": i,
                 "build_seconds": elapsed,
-                "rmm_current_before_bytes": int(counts_before["current_bytes"]),
-                "rmm_peak_bytes": int(counts_after["peak_bytes"]),
-                "resident_after_bytes": int(counts_after["current_bytes"]),
+                "rmm_current_before_bytes": int(counts_before.current_bytes),
+                "rmm_peak_bytes": int(counts_after.peak_bytes),
+                "resident_after_bytes": int(counts_after.current_bytes),
                 "smi_peak_mib": max((s[1] for s in window), default=-1),
                 "card_peak_delta_bytes": max((s[2] for s in window), default=baseline_card) - baseline_card,
                 "smi_samples": len(window),

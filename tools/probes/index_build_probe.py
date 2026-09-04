@@ -209,8 +209,8 @@ def main(argv=None) -> None:
             }
         )
         print(
-            f"{args.kind} build {i}: {elapsed:.2f}s, rmm peak {counts_after['peak_bytes'] / 2**20:.0f} MiB, "
-            f"smi peak {builds[-1]['smi_peak_mib']} MiB, resident {counts_after['current_bytes'] / 2**20:.0f} MiB",
+            f"{args.kind} build {i}: {elapsed:.2f}s, rmm peak {counts_after.peak_bytes / 2**20:.0f} MiB, "
+            f"smi peak {builds[-1]['smi_peak_mib']} MiB, resident {counts_after.current_bytes / 2**20:.0f} MiB",
             flush=True,
         )
     sampler.stop()

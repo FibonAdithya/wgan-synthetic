@@ -1,0 +1,981 @@
+{
+  "corpus": "sift",
+  "real_path": "/workspace/data-cache/sift_1m.npy",
+  "shape": {
+    "n": 250000,
+    "dim": 128,
+    "dtype": "float32"
+  },
+  "params": {
+    "n_lists": 4096,
+    "n_iters": 20,
+    "trainset_fraction": 0.5,
+    "n_train": 125000,
+    "assign_tile": [
+      8,
+      32
+    ],
+    "threads": 256,
+    "update_threads": 128
+  },
+  "gpu_fuel_scale": 20,
+  "fuel_limit_patched": 4611686018427387904,
+  "calibration": {
+    "1": {
+      "raw": 42,
+      "static_block_total": 21,
+      "raw_per_thread_over_static": 2.0
+    },
+    "1024": {
+      "raw": 43008,
+      "static_block_total": 21,
+      "raw_per_thread_over_static": 2.0
+    },
+    "65536": {
+      "raw": 2752512,
+      "static_block_total": 21,
+      "raw_per_thread_over_static": 2.0
+    }
+  },
+  "summary": {
+    "total": {
+      "raw_fuel": 14756922292346,
+      "reported_fuel": 737846114605,
+      "seconds": 4.418843558756635,
+      "phases": 64
+    },
+    "kmeans": {
+      "raw_fuel": 13413700514088,
+      "reported_fuel": 670685025693,
+      "seconds": 3.953652422875166,
+      "phases": 60
+    },
+    "kmeans_assign": {
+      "raw_fuel": 13394085000000,
+      "reported_fuel": 669704250000,
+      "seconds": 3.9232145315036178,
+      "phases": 20
+    },
+    "kmeans_update": {
+      "raw_fuel": 19189109248,
+      "reported_fuel": 959455453,
+      "seconds": 0.02426399290561676,
+      "phases": 20
+    },
+    "kmeans_csr": {
+      "raw_fuel": 426404840,
+      "reported_fuel": 21320240,
+      "seconds": 0.0061738984659314156,
+      "phases": 20
+    },
+    "final": {
+      "raw_fuel": 1343163058002,
+      "reported_fuel": 67158152900,
+      "seconds": 0.4639102849178016,
+      "phases": 3
+    },
+    "final_assign": {
+      "raw_fuel": 1339408500000,
+      "reported_fuel": 66970425000,
+      "seconds": 0.3921684760134667,
+      "phases": 1
+    },
+    "fuel_per_second_reported": 166977197720.16858
+  },
+  "phases": [
+    {
+      "phase": "pick_centroids",
+      "raw_fuel": 58720256,
+      "reported_fuel": 2936012,
+      "seconds": 0.001280850963667035,
+      "errorstat": 0
+    },
+    {
+      "phase": "kmeans_assign[0]",
+      "raw_fuel": 669704250000,
+      "reported_fuel": 33485212500,
+      "seconds": 0.2037083520554006,
+      "errorstat": 0,
+      "iteration": 0,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_csr[0]",
+      "raw_fuel": 21320242,
+      "reported_fuel": 1066012,
+      "seconds": 0.0003094240091741085,
+      "errorstat": 0,
+      "iteration": 0,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_update[0]",
+      "raw_fuel": 958618112,
+      "reported_fuel": 47930905,
+      "seconds": 0.0012026159092783928,
+      "errorstat": 0,
+      "iteration": 0,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_assign[1]",
+      "raw_fuel": 669704250000,
+      "reported_fuel": 33485212500,
+      "seconds": 0.19495329703204334,
+      "errorstat": 0,
+      "iteration": 1,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_csr[1]",
+      "raw_fuel": 21320242,
+      "reported_fuel": 1066012,
+      "seconds": 0.0002925340086221695,
+      "errorstat": 0,
+      "iteration": 1,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_update[1]",
+      "raw_fuel": 958818048,
+      "reported_fuel": 47940902,
+      "seconds": 0.0012338480446487665,
+      "errorstat": 0,
+      "iteration": 1,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_assign[2]",
+      "raw_fuel": 669704250000,
+      "reported_fuel": 33485212500,
+      "seconds": 0.19524515978991985,
+      "errorstat": 0,
+      "iteration": 2,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_csr[2]",
+      "raw_fuel": 21320242,
+      "reported_fuel": 1066012,
+      "seconds": 0.000371578149497509,
+      "errorstat": 0,
+      "iteration": 2,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_update[2]",
+      "raw_fuel": 959104256,
+      "reported_fuel": 47955212,
+      "seconds": 0.001215070951730013,
+      "errorstat": 0,
+      "iteration": 2,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_assign[3]",
+      "raw_fuel": 669704250000,
+      "reported_fuel": 33485212500,
+      "seconds": 0.1952513710130006,
+      "errorstat": 0,
+      "iteration": 3,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_csr[3]",
+      "raw_fuel": 21320242,
+      "reported_fuel": 1066012,
+      "seconds": 0.00030004815198481083,
+      "errorstat": 0,
+      "iteration": 3,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_update[3]",
+      "raw_fuel": 958486784,
+      "reported_fuel": 47924339,
+      "seconds": 0.0012068678624927998,
+      "errorstat": 0,
+      "iteration": 3,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_assign[4]",
+      "raw_fuel": 669704250000,
+      "reported_fuel": 33485212500,
+      "seconds": 0.19525440107099712,
+      "errorstat": 0,
+      "iteration": 4,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_csr[4]",
+      "raw_fuel": 21320242,
+      "reported_fuel": 1066012,
+      "seconds": 0.0003260441590100527,
+      "errorstat": 0,
+      "iteration": 4,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_update[4]",
+      "raw_fuel": 959282176,
+      "reported_fuel": 47964108,
+      "seconds": 0.0012016021646559238,
+      "errorstat": 0,
+      "iteration": 4,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_assign[5]",
+      "raw_fuel": 669704250000,
+      "reported_fuel": 33485212500,
+      "seconds": 0.19525689305737615,
+      "errorstat": 0,
+      "iteration": 5,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_csr[5]",
+      "raw_fuel": 21320242,
+      "reported_fuel": 1066012,
+      "seconds": 0.0002940208651125431,
+      "errorstat": 0,
+      "iteration": 5,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_update[5]",
+      "raw_fuel": 959199744,
+      "reported_fuel": 47959987,
+      "seconds": 0.001201787032186985,
+      "errorstat": 0,
+      "iteration": 5,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_assign[6]",
+      "raw_fuel": 669704250000,
+      "reported_fuel": 33485212500,
+      "seconds": 0.19525854499079287,
+      "errorstat": 0,
+      "iteration": 6,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_csr[6]",
+      "raw_fuel": 21320242,
+      "reported_fuel": 1066012,
+      "seconds": 0.00030229194089770317,
+      "errorstat": 0,
+      "iteration": 6,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_update[6]",
+      "raw_fuel": 960022272,
+      "reported_fuel": 48001113,
+      "seconds": 0.0012046040501445532,
+      "errorstat": 0,
+      "iteration": 6,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_assign[7]",
+      "raw_fuel": 669704250000,
+      "reported_fuel": 33485212500,
+      "seconds": 0.19525889493525028,
+      "errorstat": 0,
+      "iteration": 7,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_csr[7]",
+      "raw_fuel": 21320242,
+      "reported_fuel": 1066012,
+      "seconds": 0.00029734312556684017,
+      "errorstat": 0,
+      "iteration": 7,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_update[7]",
+      "raw_fuel": 959940096,
+      "reported_fuel": 47997004,
+      "seconds": 0.0012018769048154354,
+      "errorstat": 0,
+      "iteration": 7,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_assign[8]",
+      "raw_fuel": 669704250000,
+      "reported_fuel": 33485212500,
+      "seconds": 0.19525831006467342,
+      "errorstat": 0,
+      "iteration": 8,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_csr[8]",
+      "raw_fuel": 21320242,
+      "reported_fuel": 1066012,
+      "seconds": 0.00029342295601963997,
+      "errorstat": 0,
+      "iteration": 8,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_update[8]",
+      "raw_fuel": 959803904,
+      "reported_fuel": 47990195,
+      "seconds": 0.0012012750376015902,
+      "errorstat": 0,
+      "iteration": 8,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_assign[9]",
+      "raw_fuel": 669704250000,
+      "reported_fuel": 33485212500,
+      "seconds": 0.19525247998535633,
+      "errorstat": 0,
+      "iteration": 9,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_csr[9]",
+      "raw_fuel": 21320242,
+      "reported_fuel": 1066012,
+      "seconds": 0.0002939819823950529,
+      "errorstat": 0,
+      "iteration": 9,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_update[9]",
+      "raw_fuel": 959535104,
+      "reported_fuel": 47976755,
+      "seconds": 0.0012006000615656376,
+      "errorstat": 0,
+      "iteration": 9,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_assign[10]",
+      "raw_fuel": 669704250000,
+      "reported_fuel": 33485212500,
+      "seconds": 0.1954355649650097,
+      "errorstat": 0,
+      "iteration": 10,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_csr[10]",
+      "raw_fuel": 21320242,
+      "reported_fuel": 1066012,
+      "seconds": 0.00029717013239860535,
+      "errorstat": 0,
+      "iteration": 10,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_update[10]",
+      "raw_fuel": 959291904,
+      "reported_fuel": 47964595,
+      "seconds": 0.0012229559943079948,
+      "errorstat": 0,
+      "iteration": 10,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_assign[11]",
+      "raw_fuel": 669704250000,
+      "reported_fuel": 33485212500,
+      "seconds": 0.1963248159736395,
+      "errorstat": 0,
+      "iteration": 11,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_csr[11]",
+      "raw_fuel": 21320242,
+      "reported_fuel": 1066012,
+      "seconds": 0.00029413308948278427,
+      "errorstat": 0,
+      "iteration": 11,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_update[11]",
+      "raw_fuel": 959173632,
+      "reported_fuel": 47958681,
+      "seconds": 0.0012076999992132187,
+      "errorstat": 0,
+      "iteration": 11,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_assign[12]",
+      "raw_fuel": 669704250000,
+      "reported_fuel": 33485212500,
+      "seconds": 0.1963154929690063,
+      "errorstat": 0,
+      "iteration": 12,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_csr[12]",
+      "raw_fuel": 21320242,
+      "reported_fuel": 1066012,
+      "seconds": 0.00029877410270273685,
+      "errorstat": 0,
+      "iteration": 12,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_update[12]",
+      "raw_fuel": 959402752,
+      "reported_fuel": 47970137,
+      "seconds": 0.0012197359465062618,
+      "errorstat": 0,
+      "iteration": 12,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_assign[13]",
+      "raw_fuel": 669704250000,
+      "reported_fuel": 33485212500,
+      "seconds": 0.19638495496474206,
+      "errorstat": 0,
+      "iteration": 13,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_csr[13]",
+      "raw_fuel": 21320242,
+      "reported_fuel": 1066012,
+      "seconds": 0.00030314107425510883,
+      "errorstat": 0,
+      "iteration": 13,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_update[13]",
+      "raw_fuel": 959751936,
+      "reported_fuel": 47987596,
+      "seconds": 0.0012190539855509996,
+      "errorstat": 0,
+      "iteration": 13,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_assign[14]",
+      "raw_fuel": 669704250000,
+      "reported_fuel": 33485212500,
+      "seconds": 0.19632779899984598,
+      "errorstat": 0,
+      "iteration": 14,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_csr[14]",
+      "raw_fuel": 21320242,
+      "reported_fuel": 1066012,
+      "seconds": 0.0003033729735761881,
+      "errorstat": 0,
+      "iteration": 14,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_update[14]",
+      "raw_fuel": 959732224,
+      "reported_fuel": 47986611,
+      "seconds": 0.0012071409728378057,
+      "errorstat": 0,
+      "iteration": 14,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_assign[15]",
+      "raw_fuel": 669704250000,
+      "reported_fuel": 33485212500,
+      "seconds": 0.19633771385997534,
+      "errorstat": 0,
+      "iteration": 15,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_csr[15]",
+      "raw_fuel": 21320242,
+      "reported_fuel": 1066012,
+      "seconds": 0.00029801391065120697,
+      "errorstat": 0,
+      "iteration": 15,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_update[15]",
+      "raw_fuel": 959735552,
+      "reported_fuel": 47986777,
+      "seconds": 0.0012098639272153378,
+      "errorstat": 0,
+      "iteration": 15,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_assign[16]",
+      "raw_fuel": 669704250000,
+      "reported_fuel": 33485212500,
+      "seconds": 0.19632329000160098,
+      "errorstat": 0,
+      "iteration": 16,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_csr[16]",
+      "raw_fuel": 21320242,
+      "reported_fuel": 1066012,
+      "seconds": 0.00029993802309036255,
+      "errorstat": 0,
+      "iteration": 16,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_update[16]",
+      "raw_fuel": 959704320,
+      "reported_fuel": 47985216,
+      "seconds": 0.0012100569438189268,
+      "errorstat": 0,
+      "iteration": 16,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_assign[17]",
+      "raw_fuel": 669704250000,
+      "reported_fuel": 33485212500,
+      "seconds": 0.19635257800109684,
+      "errorstat": 0,
+      "iteration": 17,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_csr[17]",
+      "raw_fuel": 21320242,
+      "reported_fuel": 1066012,
+      "seconds": 0.0003287028521299362,
+      "errorstat": 0,
+      "iteration": 17,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_update[17]",
+      "raw_fuel": 959877632,
+      "reported_fuel": 47993881,
+      "seconds": 0.0012120071332901716,
+      "errorstat": 0,
+      "iteration": 17,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_assign[18]",
+      "raw_fuel": 669704250000,
+      "reported_fuel": 33485212500,
+      "seconds": 0.19634096883237362,
+      "errorstat": 0,
+      "iteration": 18,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_csr[18]",
+      "raw_fuel": 21320242,
+      "reported_fuel": 1066012,
+      "seconds": 0.0003136999439448118,
+      "errorstat": 0,
+      "iteration": 18,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_update[18]",
+      "raw_fuel": 959873536,
+      "reported_fuel": 47993676,
+      "seconds": 0.0012276319321244955,
+      "errorstat": 0,
+      "iteration": 18,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_assign[19]",
+      "raw_fuel": 669704250000,
+      "reported_fuel": 33485212500,
+      "seconds": 0.19637364894151688,
+      "errorstat": 0,
+      "iteration": 19,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_csr[19]",
+      "raw_fuel": 21320242,
+      "reported_fuel": 1066012,
+      "seconds": 0.00035626301541924477,
+      "errorstat": 0,
+      "iteration": 19,
+      "rows": 125000
+    },
+    {
+      "phase": "kmeans_update[19]",
+      "raw_fuel": 959755264,
+      "reported_fuel": 47987763,
+      "seconds": 0.0012576980516314507,
+      "errorstat": 0,
+      "iteration": 19,
+      "rows": 125000
+    },
+    {
+      "phase": "final_assign",
+      "raw_fuel": 1339408500000,
+      "reported_fuel": 66970425000,
+      "seconds": 0.3921684760134667,
+      "errorstat": 0,
+      "rows": 250000
+    },
+    {
+      "phase": "final_csr",
+      "raw_fuel": 42558002,
+      "reported_fuel": 2127900,
+      "seconds": 0.0005102988798171282,
+      "errorstat": 0,
+      "rows": 250000
+    },
+    {
+      "phase": "gather",
+      "raw_fuel": 3712000000,
+      "reported_fuel": 185600000,
+      "seconds": 0.07123151002451777,
+      "errorstat": 0,
+      "rows": 250000
+    }
+  ],
+  "build_wall_seconds": 4.435667791869491,
+  "sanity": {
+    "counts_sum": 250000,
+    "n": 250000,
+    "offsets_last": 250000,
+    "empty_lists": 0,
+    "max_list": 236,
+    "min_list": 1,
+    "assign_check_sample": 512,
+    "assign_check_mismatches": 0
+  },
+  "load_seconds": 0.000951095949858427,
+  "h2d_seconds": 0.10994693310931325,
+  "compile_seconds": 0.9825387019664049,
+  "instrumentation": {
+    "static": {
+      "initialize_kernel": {
+        "blocks": 1,
+        "status": "SKIPPED",
+        "block_fuel": [],
+        "static_total": 0
+      },
+      "finalize_kernel": {
+        "blocks": 1,
+        "status": "SKIPPED",
+        "block_fuel": [],
+        "static_total": 0
+      },
+      "fuel_calibrate": {
+        "blocks": 3,
+        "status": "PROCESSING",
+        "block_fuel": [
+          4,
+          4,
+          13
+        ],
+        "static_total": 21
+      },
+      "ivf_pick_centroids": {
+        "blocks": 4,
+        "status": "PROCESSING",
+        "block_fuel": [
+          20,
+          2,
+          0,
+          34
+        ],
+        "static_total": 56
+      },
+      "ivf_assign": {
+        "blocks": 23,
+        "status": "PROCESSING",
+        "block_fuel": [
+          27,
+          4,
+          17,
+          2,
+          7,
+          3,
+          17,
+          1,
+          1,
+          3,
+          10,
+          0,
+          5,
+          0,
+          0,
+          1,
+          3,
+          1,
+          3,
+          1,
+          3,
+          1,
+          5
+        ],
+        "static_total": 115
+      },
+      "ivf_count": {
+        "blocks": 2,
+        "status": "PROCESSING",
+        "block_fuel": [
+          14,
+          16
+        ],
+        "static_total": 30
+      },
+      "ivf_scan": {
+        "blocks": 7,
+        "status": "PROCESSING",
+        "block_fuel": [
+          14,
+          1,
+          5,
+          19,
+          0,
+          22,
+          5
+        ],
+        "static_total": 66
+      },
+      "ivf_scatter": {
+        "blocks": 2,
+        "status": "PROCESSING",
+        "block_fuel": [
+          22,
+          33
+        ],
+        "static_total": 55
+      },
+      "kmeans_update": {
+        "blocks": 14,
+        "status": "PROCESSING",
+        "block_fuel": [
+          23,
+          5,
+          1,
+          2,
+          0,
+          40,
+          16,
+          16,
+          17,
+          109,
+          16,
+          0,
+          14,
+          0
+        ],
+        "static_total": 259
+      },
+      "ivf_gather": {
+        "blocks": 5,
+        "status": "PROCESSING",
+        "block_fuel": [
+          19,
+          3,
+          35,
+          1,
+          0
+        ],
+        "static_total": 58
+      }
+    },
+    "uncosted_opcodes": {
+      "cvta.to.global.u64": 25,
+      "ld.global.nc.u32": 18,
+      "cvt.s64.s32": 17,
+      "setp.lt.s32": 16,
+      "ld.shared.f32": 14,
+      "setp.ge.s32": 13,
+      "mul.lo.s64": 13,
+      "ld.global.nc.f32": 12,
+      "ret;": 10,
+      "mad.lo.s32": 10,
+      "mul.wide.s32": 10,
+      "mov.b32": 10,
+      "shfl.sync.down.b32": 10,
+      "add.ftz.f32": 9,
+      "st.global.u64": 8,
+      "sub.ftz.f32": 8,
+      "setp.eq.s32": 8,
+      "st.global.u32": 8,
+      "sub.s32": 7,
+      "fma.rn.ftz.f32": 7,
+      "ld.global.u64": 6,
+      "@%p1": 6,
+      "setp.eq.ftz.f32": 6,
+      "and.pred": 6,
+      "selp.b32": 6,
+      "st.global.f32": 5,
+      "setp.ne.s32": 5,
+      "mov.pred": 5,
+      "selp.f32": 5,
+      "setp.gt.ftz.f32": 5,
+      "mul.lo.s32": 4,
+      "@%p2": 4,
+      "bra.uni": 3,
+      "div.s32": 3,
+      "bar.sync": 3,
+      "@%p3": 3,
+      "@%p4": 3,
+      "shr.s32": 2,
+      "@%p11": 2,
+      "st.shared.f32": 2,
+      "atom.global.add.u32": 2,
+      "@%p5": 2,
+      "@%p6": 2,
+      "mul.ftz.f32": 2,
+      "setp.eq.s64": 1,
+      "div.s64": 1,
+      "shr.u32": 1,
+      "@%p12": 1,
+      "@%p13": 1,
+      "@%p14": 1,
+      "@%p15": 1,
+      "@%p16": 1,
+      "@%p17": 1,
+      "@%p18": 1,
+      "@%p19": 1,
+      "@%p20": 1,
+      "@%p21": 1,
+      "@%p22": 1,
+      "@%p23": 1,
+      "@%p24": 1,
+      "setp.lt.ftz.f32": 1,
+      "@%p26": 1,
+      "@%p29": 1,
+      "@%p33": 1,
+      "@%p39": 1,
+      "@%p45": 1,
+      "@%p51": 1,
+      "or.pred": 1,
+      "@%p61": 1,
+      "@%p62": 1,
+      "cvt.rn.f32.u32": 1,
+      "rcp.approx.ftz.f32": 1,
+      "not.b32": 1,
+      "@%p7": 1,
+      "@%p8": 1,
+      "@%p9": 1,
+      "@%p10": 1
+    },
+    "costed_opcodes": {
+      "mov.u32": {
+        "count": 59,
+        "cost": 1
+      },
+      "add.s64": {
+        "count": 55,
+        "cost": 5
+      },
+      "add.s32": {
+        "count": 39,
+        "cost": 1
+      },
+      "ld.param.u64": {
+        "count": 26,
+        "cost": 4
+      },
+      "shl.b64": {
+        "count": 14,
+        "cost": 3
+      },
+      "ld.param.u32": {
+        "count": 13,
+        "cost": 3
+      },
+      "mul.wide.u32": {
+        "count": 10,
+        "cost": 6
+      },
+      "cvt.u64.u32": {
+        "count": 9,
+        "cost": 2
+      },
+      "mov.f32": {
+        "count": 8,
+        "cost": 1
+      },
+      "shl.b32": {
+        "count": 7,
+        "cost": 1
+      },
+      "and.b32": {
+        "count": 4,
+        "cost": 1
+      },
+      "setp.lt.u32": {
+        "count": 4,
+        "cost": 1
+      },
+      "mov.u64": {
+        "count": 3,
+        "cost": 1
+      },
+      "cvt.u32.u64": {
+        "count": 3,
+        "cost": 2
+      },
+      "or.b32": {
+        "count": 2,
+        "cost": 1
+      },
+      "xor.b64": {
+        "count": 1,
+        "cost": 1
+      },
+      "and.b64": {
+        "count": 1,
+        "cost": 1
+      },
+      "div.u32": {
+        "count": 1,
+        "cost": 10
+      },
+      "setp.gt.u32": {
+        "count": 1,
+        "cost": 1
+      }
+    },
+    "patched_limit_sites": 8,
+    "nvcc_version": "Build cuda_12.6.r12.6/compiler.35059454_0",
+    "nvcc_cmd": "/usr/local/cuda-12.6/bin/nvcc -ptx /tmp/index_build_fuel_0qn8s8k6/temp.cu -o /tmp/index_build_fuel_0qn8s8k6/temp.ptx -arch compute_70 -code sm_70 --use_fast_math -dopt=on",
+    "build_ptx_sha256": "5d29b77538654a9673cd231f1a80b0fd17ed93b9d5055e4afb8d8f354414ddaf",
+    "framework_cu_sha256": "2ca822a9ea31ff92b43a17722caceb685fd0a630325a7402f16b1474cdceb384",
+    "kernels_cu_sha256": "20e1194a76a9fd6c622a22592d9d26a92e46789e0d06f1b5cf8f32486da9787c",
+    "instrumented_ptx_sha256": "fcb443c188b26f2a8a4a768f2df8f28a60ee5d6bf00e1a660a90b7dbd3666e07",
+    "monorepo_head": "28e26fae3de9433a3b6788bdc398483e0d1ece9d"
+  },
+  "environment": {
+    "gpu": "NVIDIA GeForce RTX 3060",
+    "platform": "Linux-6.8.0-138-generic-x86_64-with-glibc2.35",
+    "python": "3.12.14",
+    "cupy": "14.2.0",
+    "numpy": "2.5.1"
+  },
+  "notes": [
+    "raw_fuel is gbl_FUELUSAGE as the injected PTX leaves it; reported_fuel is raw // 20, which is what tig-runtime prints as 'gpu fuel used'.",
+    "Fuel is a static instruction count and is data-independent to first order; it is specific to these kernels, not a property of IVF-Flat in general.",
+    "calibration.raw_per_thread_over_static is the factor by which the injector's per-return atomics multiply a thread's accumulated block cost."
+  ]
+}

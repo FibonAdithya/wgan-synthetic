@@ -1,0 +1,71 @@
+instrumented PTX in 0.8s; metered kernels: ['fuel_calibrate', 'ivf_pick_centroids', 'ivf_assign', 'ivf_count', 'ivf_scan', 'ivf_scatter', 'kmeans_update', 'ivf_gather']
+loaded (1000000, 96) in 0.2s
+calibration: {'1': {'raw': 42, 'static_block_total': 21, 'raw_per_thread_over_static': 2.0}, '1024': {'raw': 43008, 'static_block_total': 21, 'raw_per_thread_over_static': 2.0}, '65536': {'raw': 2752512, 'static_block_total': 21, 'raw_per_thread_over_static': 2.0}}
+build: n=1000000 dims=96 n_lists=1024 n_train=500000 n_iters=20
+          pick_centroids: raw       11,010,048  reported         550,502     0.000s
+        kmeans_assign[0]: raw  508,289,000,000  reported  25,414,450,000     0.159s
+           kmeans_csr[0]: raw       85,047,858  reported       4,252,392     0.001s
+        kmeans_update[0]: raw    2,634,384,128  reported     131,719,206     0.002s
+        kmeans_assign[1]: raw  508,289,000,000  reported  25,414,450,000     0.155s
+           kmeans_csr[1]: raw       85,047,858  reported       4,252,392     0.001s
+        kmeans_update[1]: raw    2,634,400,640  reported     131,720,032     0.001s
+        kmeans_assign[2]: raw  508,289,000,000  reported  25,414,450,000     0.151s
+           kmeans_csr[2]: raw       85,047,858  reported       4,252,392     0.001s
+        kmeans_update[2]: raw    2,634,612,608  reported     131,730,630     0.001s
+        kmeans_assign[3]: raw  508,289,000,000  reported  25,414,450,000     0.151s
+           kmeans_csr[3]: raw       85,047,858  reported       4,252,392     0.001s
+        kmeans_update[3]: raw    2,634,196,736  reported     131,709,836     0.001s
+        kmeans_assign[4]: raw  508,289,000,000  reported  25,414,450,000     0.150s
+           kmeans_csr[4]: raw       85,047,858  reported       4,252,392     0.001s
+        kmeans_update[4]: raw    2,634,283,520  reported     131,714,176     0.001s
+        kmeans_assign[5]: raw  508,289,000,000  reported  25,414,450,000     0.149s
+           kmeans_csr[5]: raw       85,047,858  reported       4,252,392     0.001s
+        kmeans_update[5]: raw    2,634,212,096  reported     131,710,604     0.001s
+        kmeans_assign[6]: raw  508,289,000,000  reported  25,414,450,000     0.149s
+           kmeans_csr[6]: raw       85,047,858  reported       4,252,392     0.001s
+        kmeans_update[6]: raw    2,634,280,640  reported     131,714,032     0.001s
+        kmeans_assign[7]: raw  508,289,000,000  reported  25,414,450,000     0.149s
+           kmeans_csr[7]: raw       85,047,858  reported       4,252,392     0.001s
+        kmeans_update[7]: raw    2,634,339,008  reported     131,716,950     0.001s
+        kmeans_assign[8]: raw  508,289,000,000  reported  25,414,450,000     0.149s
+           kmeans_csr[8]: raw       85,047,858  reported       4,252,392     0.001s
+        kmeans_update[8]: raw    2,634,184,448  reported     131,709,222     0.001s
+        kmeans_assign[9]: raw  508,289,000,000  reported  25,414,450,000     0.149s
+           kmeans_csr[9]: raw       85,047,858  reported       4,252,392     0.001s
+        kmeans_update[9]: raw    2,634,265,088  reported     131,713,254     0.001s
+       kmeans_assign[10]: raw  508,289,000,000  reported  25,414,450,000     0.149s
+          kmeans_csr[10]: raw       85,047,858  reported       4,252,392     0.001s
+       kmeans_update[10]: raw    2,634,308,288  reported     131,715,414     0.001s
+       kmeans_assign[11]: raw  508,289,000,000  reported  25,414,450,000     0.149s
+          kmeans_csr[11]: raw       85,047,858  reported       4,252,392     0.001s
+       kmeans_update[11]: raw    2,634,307,136  reported     131,715,356     0.001s
+       kmeans_assign[12]: raw  508,289,000,000  reported  25,414,450,000     0.149s
+          kmeans_csr[12]: raw       85,047,858  reported       4,252,392     0.001s
+       kmeans_update[12]: raw    2,633,895,296  reported     131,694,764     0.001s
+       kmeans_assign[13]: raw  508,289,000,000  reported  25,414,450,000     0.149s
+          kmeans_csr[13]: raw       85,047,858  reported       4,252,392     0.001s
+       kmeans_update[13]: raw    2,634,255,296  reported     131,712,764     0.001s
+       kmeans_assign[14]: raw  508,289,000,000  reported  25,414,450,000     0.149s
+          kmeans_csr[14]: raw       85,047,858  reported       4,252,392     0.001s
+       kmeans_update[14]: raw    2,634,248,960  reported     131,712,448     0.001s
+       kmeans_assign[15]: raw  508,289,000,000  reported  25,414,450,000     0.149s
+          kmeans_csr[15]: raw       85,047,858  reported       4,252,392     0.001s
+       kmeans_update[15]: raw    2,634,174,080  reported     131,708,704     0.001s
+       kmeans_assign[16]: raw  508,289,000,000  reported  25,414,450,000     0.149s
+          kmeans_csr[16]: raw       85,047,858  reported       4,252,392     0.001s
+       kmeans_update[16]: raw    2,634,327,488  reported     131,716,374     0.001s
+       kmeans_assign[17]: raw  508,289,000,000  reported  25,414,450,000     0.149s
+          kmeans_csr[17]: raw       85,047,858  reported       4,252,392     0.001s
+       kmeans_update[17]: raw    2,634,368,768  reported     131,718,438     0.001s
+       kmeans_assign[18]: raw  508,289,000,000  reported  25,414,450,000     0.149s
+          kmeans_csr[18]: raw       85,047,858  reported       4,252,392     0.001s
+       kmeans_update[18]: raw    2,634,180,032  reported     131,709,001     0.001s
+       kmeans_assign[19]: raw  508,289,000,000  reported  25,414,450,000     0.149s
+          kmeans_csr[19]: raw       85,047,858  reported       4,252,392     0.001s
+       kmeans_update[19]: raw    2,634,139,520  reported     131,706,976     0.001s
+            final_assign: raw 1,016,578,000,000  reported  50,828,900,000     0.298s
+               final_csr: raw      170,042,418  reported       8,502,120     0.001s
+                  gather: raw    9,019,048,960  reported     450,952,448     0.074s
+sanity: {'counts_sum': 1000000, 'n': 1000000, 'offsets_last': 1000000, 'empty_lists': 0, 'max_list': 3132, 'min_list': 134, 'assign_check_sample': 512, 'assign_check_mismatches': 0}
+TOTAL reported fuel 562,297,221,091 in 3.43s (1.649e+11 reported fuel/s)
+wrote docs/results/index-build-fuel/deep_n1000000_nlist1024.json

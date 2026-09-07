@@ -1,0 +1,70 @@
+kernel: initialize_kernel, #blocks: 1, status: SKIPPED
+kernel: finalize_kernel, #blocks: 1, status: SKIPPED
+kernel: fuel_calibrate, #blocks: 3, status: PROCESSING
+	block 0: fuel_usage: 4, signature: 0xe8f1ea1134f747e3
+	block 1: fuel_usage: 4, signature: 0x9b91574291551ea7
+	block 2: fuel_usage: 13, signature: 0x48f90761c7acbcd8
+kernel: ivf_pick_centroids, #blocks: 4, status: PROCESSING
+	block 0: fuel_usage: 20, signature: 0x01d0cd29e0804bc6
+	block 1: fuel_usage: 2, signature: 0xe226227bdcb6d3e8
+	block 2: fuel_usage: 0, signature: 0xb8a9a70a73e58098
+	block 3: fuel_usage: 34, signature: 0x07284034f901bd9c
+kernel: ivf_assign, #blocks: 23, status: PROCESSING
+	block 0: fuel_usage: 27, signature: 0x82085743f132391c
+	block 1: fuel_usage: 4, signature: 0xa0dcea01bc490fef
+	block 2: fuel_usage: 17, signature: 0xdc68db9245724beb
+	block 3: fuel_usage: 2, signature: 0x76cc2f07714c80aa
+	block 4: fuel_usage: 7, signature: 0x190b4f14d4afe6e4
+	block 5: fuel_usage: 3, signature: 0x2c489223b40a9f01
+	block 6: fuel_usage: 17, signature: 0x2056f94b298dee75
+	block 7: fuel_usage: 1, signature: 0x3dbaac60895c25b4
+	block 8: fuel_usage: 1, signature: 0x3a1d8c3af22a323e
+	block 9: fuel_usage: 3, signature: 0x41363cb6e4bb0c60
+	block 10: fuel_usage: 10, signature: 0x4bab16ecef4b7622
+	block 11: fuel_usage: 0, signature: 0x3e63c21f767c4b41
+	block 12: fuel_usage: 5, signature: 0xfed8f8fa8a76b6f0
+	block 13: fuel_usage: 0, signature: 0x213590447e4e9ad7
+	block 14: fuel_usage: 0, signature: 0x6bf81370cb512e3a
+	block 15: fuel_usage: 1, signature: 0x2f9ffc18e245479a
+	block 16: fuel_usage: 3, signature: 0xd30d1971353243d2
+	block 17: fuel_usage: 1, signature: 0x49c2bb22ba98c8a7
+	block 18: fuel_usage: 3, signature: 0x3be16d9ba328d1a7
+	block 19: fuel_usage: 1, signature: 0x62e0242b2b6344f3
+	block 20: fuel_usage: 3, signature: 0xb3db1c0a30e474d2
+	block 21: fuel_usage: 1, signature: 0xaf1104999369e372
+	block 22: fuel_usage: 5, signature: 0x69b4b94f04b199fa
+kernel: ivf_count, #blocks: 2, status: PROCESSING
+	block 0: fuel_usage: 14, signature: 0xa4e36247a7190bda
+	block 1: fuel_usage: 16, signature: 0x8773924226166213
+kernel: ivf_scan, #blocks: 7, status: PROCESSING
+	block 0: fuel_usage: 14, signature: 0x94512ec6ed616b88
+	block 1: fuel_usage: 1, signature: 0x5c8d8b0441ba275e
+	block 2: fuel_usage: 5, signature: 0x76e1d4a034d7b12b
+	block 3: fuel_usage: 19, signature: 0xcc51e542833d1440
+	block 4: fuel_usage: 0, signature: 0x8b329b783d04802a
+	block 5: fuel_usage: 22, signature: 0x9f6f6370ba9e27fa
+	block 6: fuel_usage: 5, signature: 0xf14da69cb8dd4422
+kernel: ivf_scatter, #blocks: 2, status: PROCESSING
+	block 0: fuel_usage: 22, signature: 0xed922dfed1940814
+	block 1: fuel_usage: 33, signature: 0x445be04fe83ead85
+kernel: kmeans_update, #blocks: 14, status: PROCESSING
+	block 0: fuel_usage: 23, signature: 0x52156d0769cb7c28
+	block 1: fuel_usage: 5, signature: 0xff15698efe4f533a
+	block 2: fuel_usage: 1, signature: 0xb436fba947ecf650
+	block 3: fuel_usage: 2, signature: 0xf2303b52189eb1e7
+	block 4: fuel_usage: 0, signature: 0xb3ed28a012e5e611
+	block 5: fuel_usage: 40, signature: 0x0a1e331ad794754c
+	block 6: fuel_usage: 16, signature: 0x684622f9603bc400
+	block 7: fuel_usage: 16, signature: 0xb87843f1eebbc24d
+	block 8: fuel_usage: 17, signature: 0xd304641514223ec6
+	block 9: fuel_usage: 109, signature: 0x25bbe5936b1d5a6d
+	block 10: fuel_usage: 16, signature: 0xb2f72e99e9ead860
+	block 11: fuel_usage: 0, signature: 0x4ebbcfeca1de6502
+	block 12: fuel_usage: 14, signature: 0x4a1210c2de3cbc62
+	block 13: fuel_usage: 0, signature: 0x0341feb5d0419fe6
+kernel: ivf_gather, #blocks: 5, status: PROCESSING
+	block 0: fuel_usage: 19, signature: 0xb64084fedae6eff8
+	block 1: fuel_usage: 3, signature: 0xd157e854528c0f2b
+	block 2: fuel_usage: 35, signature: 0x8e7fed15c6c4d8af
+	block 3: fuel_usage: 1, signature: 0x9122a057499d9aec
+	block 4: fuel_usage: 0, signature: 0xcfbfe0d85093dbe5

@@ -333,8 +333,12 @@ def main(argv=None) -> None:
     sample = cupy.arange(0, n, max(1, n // 512))[:512]
     dbs = d_db.reshape(n, dims)[sample]
     cen = d_cent.reshape(n_cent, dims)
-    d2 = (dbs[:, None, :] - cen[None, :, :]) ** 2
-    ref = cupy.asnumpy(cupy.argmin(d2.sum(axis=2), axis=1))
+    # Chunked: 512 x n_cent x dims at once is 3.2 GB at 16,384 lists, which OOMed next to a 3.8 GB database.
+    ref_parts = []
+    for c0 in range(0, int(sample.size), 16):
+        d2 = (dbs[c0:c0 + 16, None, :] - cen[None, :, :]) ** 2
+        ref_parts.append(cupy.asnumpy(cupy.argmin(d2.sum(axis=2), axis=1)))
+    ref = np.concatenate(ref_parts)
     got = cupy.asnumpy(d_assign[sample])
     mismatches = int((ref != got).sum())
     sanity = {

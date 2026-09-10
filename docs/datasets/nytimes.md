@@ -198,11 +198,83 @@ the cleaned figures are what the corpus looks like without the artefact.
 
 | Variant | Delta | Config | Run | Status |
 |---|---|---|---|---|
-| `v0` | plain WGAN-GP | `configs/nytimes/v0.yaml` | — | not trained |
+| `v0` | plain WGAN-GP | `configs/nytimes/v0_seed42.yaml`, instrument of `configs/nytimes/v0.yaml` | `runs/nytimes/v0_seed42` (box: `/workspace/nytimes-v0/v0_seed42`) | trained -- n=1 seed, misses the gate on every statistic; see `## v0, measured` |
 
 Train `v0`:
 
     python -m src.train.train_wgan_gp --config configs/nytimes/v0.yaml
+
+## v0, measured
+
+Trained 2026-09-10 on `tig-gpu` (RTX 3060) as one gpuq job,
+`scripts/nytimes_v0_seed42_job.sh` at commit `49171d4`: 30,000 generator
+steps of `configs/nytimes/v0_seed42.yaml`, 37 minutes wall, on the corpus as
+shipped (zero rows and duplicates included). 50,000 samples at sampling seed
+42 from `best_generator.pt`, then from the step-26,000 and step-30,000
+checkpoints, all measured together against the cleaned real corpus in one
+`eda_report` invocation at the canonical conditions. The summaries,
+`run_config.yaml` and `run_metadata.json` are committed under
+`docs/results/nytimes-v0-seed42/`. The as-shipped comparison is committed
+too, but it is meaningless in the way the noise-floor section explains: the
+generator emits unit-norm rows, so it has no zero rows and its column is
+identical in both reports while the real column is set by them.
+
+The parenthesised figure after each v0 value is its distance from real in
+units of the real corpus's own ten-draw spread (the range in the real
+column). GloVe's page uses the training-seed spread for this; NYTimes has one
+seed, so the real-side spread is the only yardstick available and it is the
+looser of the two.
+
+| Statistic | real, cleaned (10-draw range) | `best_generator.pt` (step 1,000) | step 26,000 | step 30,000 |
+|---|---|---|---|---|
+| LID median | `55.97` (54.97 -- 56.86) | `26` (15.9x) | `18.82` (19.7x) | `17.98` (20.1x) |
+| Relative contrast | `1.271` (1.265 -- 1.276) | `1.598` (30.5x) | `2.101` (77.3x) | `2.078` (75.2x) |
+| Hubness skew | `2.529` (2.315 -- 2.779) | `1.536` (2.1x) | `2.459` (0.2x) | `2.035` (1.1x) |
+| IVF cell-balance Gini | `0.7767` (0.7832 -- 0.8231) | `0.2946` (12.1x) | `0.3516` (10.7x) | `0.295` (12.1x) |
+| Effective rank | `247.4` | `52.1` | `30.3` | `34.7` |
+| Median pairwise distance | `1.404` | `0.992` | `1.404` | `1.404` |
+| Median 5-NN distance | `1.205` | `0.658` | `0.710` | `0.719` |
+
+**v0 does not reproduce NYTimes' search difficulty at any checkpoint.** LID,
+contrast and Gini sit far outside the real spread at every checkpoint, in the
+same direction GloVe `v0` missed: lower LID, higher contrast, flatter IVF
+partition. Hubness skew is the exception -- inside the real range at step
+26,000, just under it at 30,000 -- and on its own it says little, since a
+low-rank cloud can have the same hub profile as the corpus while being far
+easier to search on the other three. (The real column's own Gini, `0.7767`,
+sits just under its ten-draw range because `eda_report` draws its 20,000 rows
+from a 50,000-row cut rather than from the whole subset; the draws behind the
+range are of the whole subset.) The samples
+are easier to search than the corpus, and the reason is visible in the
+effective rank. The corpus fills the sphere (rank 247 of 256, participation
+ratio 236); the generator never does. At step 1,000 it emits a cone -- mean
+vector norm `0.71`, random pairs at cosine `0.51`, where real has `0.12` and
+`0.015` -- and by step 30,000 it has learned the mean direction away (random
+pairs land on the real median distance of `1.404` exactly) but only by
+spreading a ~30-dimensional cloud over the sphere. A 30-dimensional cloud on a
+256-dimensional sphere has near neighbours that are much nearer than its bulk
+(contrast `2.1` against `1.27`), which is precisely the property an index
+exploits.
+
+**`best_generator.pt` is the step-1,000 checkpoint.** The trainer selects the
+checkpoint by the smallest covariance Frobenius gap (`cov_fro`), and on this
+family that gap is lowest at the first evaluation (`0.094`) and rises to
+`0.25` by the end, while the mean gap falls from `0.69` to `0.13` and the
+sample pairwise distance climbs onto the real value. The two diagnostics
+disagree about which checkpoint is best, the selector follows the one that
+gets worse, and neither is the gate (AGENTS.md invariant 1). Read the
+step-30,000 column as what v0 trained to; read the first column as what
+`src.sample.generate` on `best_generator.pt` would hand anyone who did not
+check. The step checkpoints hold live rather than EMA weights, so their
+columns are not quite what an EMA selection at those steps would give; the
+gap between columns two and three is far larger than that difference.
+
+What would move this is a ladder decision, not a rerun: the rank collapse is
+the thing to attack, and the per-family ladders in `PROJECT_DOCUMENTATION.md`
+already have rungs for it. Whether the training set should also have its zero
+rows and duplicates removed is the open question from `## Measured profile`;
+this run shows it does not decide the outcome, since the generator's failure
+is rank, not the 0.08% of rows at the origin.
 
 ## Gate
 

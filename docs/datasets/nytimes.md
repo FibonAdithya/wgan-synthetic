@@ -265,9 +265,8 @@ disagree about which checkpoint is best, the selector follows the one that
 gets worse, and neither is the gate (AGENTS.md invariant 1). Read the
 step-30,000 column as what v0 trained to; read the first column as what
 `src.sample.generate` on `best_generator.pt` would hand anyone who did not
-check. The step checkpoints hold live rather than EMA weights, so their
-columns are not quite what an EMA selection at those steps would give; the
-gap between columns two and three is far larger than that difference.
+check. EMA is off in `v0` (`ema_decay` unset), so every checkpoint, `best_generator.pt`
+included, holds live weights and the columns are directly comparable.
 
 What would move this is a ladder decision, not a rerun: the rank collapse is
 the thing to attack, and the per-family ladders in `PROJECT_DOCUMENTATION.md`

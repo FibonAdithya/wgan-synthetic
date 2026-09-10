@@ -199,6 +199,7 @@ the cleaned figures are what the corpus looks like without the artefact.
 | Variant | Delta | Config | Run | Status |
 |---|---|---|---|---|
 | `v0` | plain WGAN-GP | `configs/nytimes/v0_seed42.yaml`, instrument of `configs/nytimes/v0.yaml` | `runs/nytimes/v0_seed42` (box: `/workspace/nytimes-v0/v0_seed42`) | trained -- n=1 seed, misses the gate on every statistic; see `## v0, measured` |
+| `v0` at 100k steps | same rung, budget raised | `configs/nytimes/v0_seed42_100k.yaml`, resumed from the row above | `runs/nytimes/v0_seed42_100k` (box: `/workspace/nytimes-v0/v0_seed42_100k`) | trained -- gate statistics worse than at 30k; see `### Continued to 100,000 steps` |
 
 Train `v0`:
 
@@ -274,6 +275,52 @@ already have rungs for it. Whether the training set should also have its zero
 rows and duplicates removed is the open question from `## Measured profile`;
 this run shows it does not decide the outcome, since the generator's failure
 is rank, not the 0.08% of rows at the origin.
+
+### Continued to 100,000 steps
+
+Asked for after the table above. `configs/nytimes/v0_seed42_100k.yaml` is the
+same instrument with the budget raised, run with `--resume` from the 30k run's
+`checkpoint_step_30000.pt` (`scripts/nytimes_v0_seed42_100k_job.sh`, commit
+`aec4cbf`, 87 minutes for the remaining 70,000 steps). Summary,
+`run_config.yaml` and `run_metadata.json` are under
+`docs/results/nytimes-v0-seed42-100k/`. `best_generator.pt` never changed:
+the restored selection score of `0.094` from step 1,000 was not beaten (the
+continuation's lowest `cov_fro` was `0.162`, at step 95,000), so the sampled
+"best" is byte-identical to the 30k run's and is not repeated here.
+
+| Statistic | real, cleaned (10-draw range) | step 30,000 | step 100,000 |
+|---|---|---|---|
+| LID median | `55.97` (54.97 -- 56.86) | `17.98` (20.1x) | `13.75` (22.3x) |
+| Relative contrast | `1.271` (1.265 -- 1.276) | `2.078` (75.2x) | `2.076` (75.0x) |
+| Hubness skew | `2.529` (2.315 -- 2.779) | `2.035` (1.1x) | `1.362` (2.5x) |
+| IVF cell-balance Gini | `0.7767` (0.7832 -- 0.8231) | `0.295` (12.1x) | `0.2201` (14.0x) |
+| Effective rank | `247.4` | `34.7` | `83.8` |
+| Participation ratio | `236` | `14.3` | `31.4` |
+| Components for 90% of variance | `219` | `47` | `125` |
+| Mean-vector norm | `0.124` | `0.183` | `0.134` |
+| Median 5-NN distance | `1.205` | `0.719` | `0.766` |
+
+**More steps made the global moments better and the search difficulty
+worse.** By 100,000 steps the generator's mean is on target (mean gap `0.05`,
+down from `0.13`), random pairs land on the real cosine (`-0.007` against
+`0.015`), and the spectrum has broadened from 47 to 125 components for 90% of
+variance, with `cov_fro` still falling at the end -- the run had not
+converged on the diagnostics the trainer watches. On the gate it went the
+other way: LID median fell from `18` to `13.7`, hubness from `2.0` to `1.4`,
+Gini from `0.30` to `0.22`, while contrast held at `2.08`. The 5-NN distance
+histogram shows what happened: the generator now spreads its cloud across
+more global directions, but each sample's neighbours sit at `0.77` where the
+real corpus's sit at `1.2` -- locally the samples lie on a ~14-dimensional
+sheet, and that local dimension, not the global rank, is what LID, contrast
+and an IVF partition read.
+
+So the answer to "does it improve with a longer budget" is no, for this
+family and this rung: the objective is pulling the first two moments onto
+the corpus, and the first two moments of an isotropic corpus are satisfied
+by a low-dimensional cloud with the right mean and covariance envelope. The
+missing constraint is on local structure, which is what the later ladder
+rungs (`distance_reg_alpha`, `lid_reg`, `spectrum_reg`, all `0.0` in `v0`)
+exist to supply. Choosing one is a ladder decision.
 
 ## Gate
 

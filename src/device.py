@@ -35,3 +35,18 @@ def resolve_device(device_cfg: str, *, strict: bool = False) -> torch.device:
     if torch.backends.mps.is_available():
         return torch.device("mps")
     return torch.device("cpu")
+
+
+def cuda_device_index(device: torch.device) -> int:
+    """The integer index behind a CUDA device, filling in a bare `cuda`.
+
+    `resolve_device("auto")` returns `torch.device("cuda")` with no index,
+    and torch >= 2.13's `set_per_process_memory_fraction` refuses that
+    ("Expected a torch.device with a specified index or an integer"). A bare
+    `cuda` means the current card, which is what this returns.
+    """
+    if device.type != "cuda":
+        raise ValueError(f"expected a cuda device, got {device}")
+    if device.index is not None:
+        return int(device.index)
+    return int(torch.cuda.current_device())

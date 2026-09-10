@@ -21,7 +21,7 @@ from src.data.dataset import (
     PreprocessConfig,
     build_training_data,
 )
-from src.device import resolve_device
+from src.device import cuda_device_index, resolve_device
 from src.models.critic import Critic
 from src.models.generator import build_generator
 from src.train.gpu_lock import claim_gpu, gpu_lock_key
@@ -406,7 +406,9 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
     if device.type == "cuda" and 0.0 < memory_fraction < 1.0:
         # Belt and braces: if the lock is bypassed, a run degrades instead of
         # taking the whole card down with it.
-        torch.cuda.set_per_process_memory_fraction(memory_fraction, device)
+        torch.cuda.set_per_process_memory_fraction(
+            memory_fraction, cuda_device_index(device)
+        )
     out_dir = Path(config["output_dir"])
     out_dir.mkdir(parents=True, exist_ok=True)
 

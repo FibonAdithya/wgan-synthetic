@@ -1,0 +1,256 @@
+{
+  "as_is": {
+    "n": 20000,
+    "k": 100,
+    "k_hub": 10,
+    "nlist": 256,
+    "metric": "angular",
+    "seeds": 10,
+    "draws": "disjoint 20000-row draws of one seed-42 permutation",
+    "source": "data/nytimes_250k_l2.npy",
+    "rows_available": 250000,
+    "per_seed": [
+      {
+        "lid_median": 22.046494830592223,
+        "relative_contrast_median": 1.4055416229690088,
+        "hubness_skew": 40.7859973184558,
+        "ivf_gini": 0.9792121093749999,
+        "zero_rows_in_draw": 12,
+        "lid_discarded_queries": 33
+      },
+      {
+        "lid_median": 21.88159084428201,
+        "relative_contrast_median": 1.4061016859442848,
+        "hubness_skew": 40.786116610241166,
+        "ivf_gini": 0.981074609375,
+        "zero_rows_in_draw": 12,
+        "lid_discarded_queries": 22
+      },
+      {
+        "lid_median": 15.82169279414454,
+        "relative_contrast_median": 1.4053903818130493,
+        "hubness_skew": 31.57924473263859,
+        "ivf_gini": 0.9819570312499999,
+        "zero_rows_in_draw": 20,
+        "lid_discarded_queries": 36
+      },
+      {
+        "lid_median": 17.020913351838495,
+        "relative_contrast_median": 1.4057678403189005,
+        "hubness_skew": 33.28807358440702,
+        "ivf_gini": 0.982109765625,
+        "zero_rows_in_draw": 18,
+        "lid_discarded_queries": 34
+      },
+      {
+        "lid_median": 20.09455244233428,
+        "relative_contrast_median": 1.4055879712104797,
+        "hubness_skew": 37.75642005819346,
+        "ivf_gini": 0.83820390625,
+        "zero_rows_in_draw": 14,
+        "lid_discarded_queries": 18
+      },
+      {
+        "lid_median": 15.810651329705273,
+        "relative_contrast_median": 1.4057713569930985,
+        "hubness_skew": 31.578083474906087,
+        "ivf_gini": 0.9815968749999999,
+        "zero_rows_in_draw": 20,
+        "lid_discarded_queries": 44
+      },
+      {
+        "lid_median": 20.037954065015136,
+        "relative_contrast_median": 1.4053049087524414,
+        "hubness_skew": 37.75432162351763,
+        "ivf_gini": 0.9787777343749999,
+        "zero_rows_in_draw": 14,
+        "lid_discarded_queries": 25
+      },
+      {
+        "lid_median": 13.880138318862336,
+        "relative_contrast_median": 1.4050257624693419,
+        "hubness_skew": 28.825173959738166,
+        "ivf_gini": 0.9817312499999999,
+        "zero_rows_in_draw": 24,
+        "lid_discarded_queries": 42
+      },
+      {
+        "lid_median": 22.051481557166838,
+        "relative_contrast_median": 1.405705893379801,
+        "hubness_skew": 40.78623113988991,
+        "ivf_gini": 0.7998722656249999,
+        "zero_rows_in_draw": 12,
+        "lid_discarded_queries": 23
+      },
+      {
+        "lid_median": 21.053688603037894,
+        "relative_contrast_median": 1.405346155166626,
+        "hubness_skew": 39.183421413271326,
+        "ivf_gini": 0.981755078125,
+        "zero_rows_in_draw": 13,
+        "lid_discarded_queries": 29
+      }
+    ],
+    "spread": {
+      "lid_median": {
+        "mean": 18.969915813697902,
+        "std": 3.0511121006485364,
+        "min": 13.880138318862336,
+        "max": 22.051481557166838,
+        "range_pct_of_mean": 43.07527412643599,
+        "cv_pct": 16.08395171920253
+      },
+      "relative_contrast_median": {
+        "mean": 1.4055543579017031,
+        "std": 0.0003033811160532559,
+        "min": 1.4050257624693419,
+        "max": 1.4061016859442848,
+        "range_pct_of_mean": 0.07654798043877156,
+        "cv_pct": 0.021584445620883824
+      },
+      "hubness_skew": {
+        "mean": 36.23230839152591,
+        "std": 4.501937155026385,
+        "min": 28.825173959738166,
+        "max": 40.78623113988991,
+        "range_pct_of_mean": 33.01213119214126,
+        "cv_pct": 12.425201028812474
+      },
+      "ivf_gini": {
+        "mean": 0.9486290624999999,
+        "std": 0.0689048892037286,
+        "min": 0.7998722656249999,
+        "max": 0.982109765625,
+        "range_pct_of_mean": 19.21061742718852,
+        "cv_pct": 7.263628316650757
+      }
+    }
+  },
+  "zero_and_duplicate_rows_removed": {
+    "n": 20000,
+    "k": 100,
+    "k_hub": 10,
+    "nlist": 256,
+    "metric": "angular",
+    "seeds": 10,
+    "draws": "disjoint 20000-row draws of one seed-42 permutation",
+    "source": "data/nytimes_250k_l2_clean.npy",
+    "rows_available": 217854,
+    "per_seed": [
+      {
+        "lid_median": 55.83966447545117,
+        "relative_contrast_median": 1.2687287896236241,
+        "hubness_skew": 2.6600514506733535,
+        "ivf_gini": 0.7985949218749999,
+        "zero_rows_in_draw": 0,
+        "lid_discarded_queries": 0
+      },
+      {
+        "lid_median": 56.8615198841341,
+        "relative_contrast_median": 1.2648566866887676,
+        "hubness_skew": 2.3149919477381244,
+        "ivf_gini": 0.802576171875,
+        "zero_rows_in_draw": 0,
+        "lid_discarded_queries": 0
+      },
+      {
+        "lid_median": 55.55709245523375,
+        "relative_contrast_median": 1.2721747448906766,
+        "hubness_skew": 2.378627193472754,
+        "ivf_gini": 0.7999863281249999,
+        "zero_rows_in_draw": 0,
+        "lid_discarded_queries": 0
+      },
+      {
+        "lid_median": 55.85750801349954,
+        "relative_contrast_median": 1.2696544354902606,
+        "hubness_skew": 2.438666368592172,
+        "ivf_gini": 0.7832210937499999,
+        "zero_rows_in_draw": 0,
+        "lid_discarded_queries": 0
+      },
+      {
+        "lid_median": 54.97167365038141,
+        "relative_contrast_median": 1.2756039911073849,
+        "hubness_skew": 2.516951584113371,
+        "ivf_gini": 0.8231015625,
+        "zero_rows_in_draw": 0,
+        "lid_discarded_queries": 0
+      },
+      {
+        "lid_median": 56.16042921887831,
+        "relative_contrast_median": 1.2676433657583641,
+        "hubness_skew": 2.332104198901435,
+        "ivf_gini": 0.8022093749999999,
+        "zero_rows_in_draw": 0,
+        "lid_discarded_queries": 0
+      },
+      {
+        "lid_median": 56.029736195171665,
+        "relative_contrast_median": 1.2714032933383161,
+        "hubness_skew": 2.5580625796209877,
+        "ivf_gini": 0.7870761718749999,
+        "zero_rows_in_draw": 0,
+        "lid_discarded_queries": 0
+      },
+      {
+        "lid_median": 56.085525344631066,
+        "relative_contrast_median": 1.2670673299208297,
+        "hubness_skew": 2.5612565727341825,
+        "ivf_gini": 0.7937890624999999,
+        "zero_rows_in_draw": 0,
+        "lid_discarded_queries": 0
+      },
+      {
+        "lid_median": 56.118732774766606,
+        "relative_contrast_median": 1.269568911673553,
+        "hubness_skew": 2.778502194939324,
+        "ivf_gini": 0.807217578125,
+        "zero_rows_in_draw": 0,
+        "lid_discarded_queries": 0
+      },
+      {
+        "lid_median": 56.647888897587904,
+        "relative_contrast_median": 1.2684237825171096,
+        "hubness_skew": 2.532773278323773,
+        "ivf_gini": 0.804631640625,
+        "zero_rows_in_draw": 0,
+        "lid_discarded_queries": 0
+      }
+    ],
+    "spread": {
+      "lid_median": {
+        "mean": 56.01297709097355,
+        "std": 0.5278846610772645,
+        "min": 54.97167365038141,
+        "max": 56.8615198841341,
+        "range_pct_of_mean": 3.3739435607632298,
+        "cv_pct": 0.942432786994878
+      },
+      "relative_contrast_median": {
+        "mean": 1.2695125331008887,
+        "std": 0.002995197340870506,
+        "min": 1.2648566866887676,
+        "max": 1.2756039911073849,
+        "range_pct_of_mean": 0.846569383002946,
+        "cv_pct": 0.2359328689378505
+      },
+      "hubness_skew": {
+        "mean": 2.507198736910948,
+        "std": 0.14608100799943954,
+        "min": 2.3149919477381244,
+        "max": 2.778502194939324,
+        "range_pct_of_mean": 18.487176161083976,
+        "cv_pct": 5.826463050129884
+      },
+      "ivf_gini": {
+        "mean": 0.8002403906249999,
+        "std": 0.011091914202810499,
+        "min": 0.7832210937499999,
+        "max": 0.8231015625,
+        "range_pct_of_mean": 4.983561092042957,
+        "cv_pct": 1.3860727767249472
+      }
+    }
+  }
+}

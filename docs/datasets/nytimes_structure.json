@@ -1,0 +1,62 @@
+{
+  "facts": {
+    "rows": 217854,
+    "dim": 256,
+    "norm_mean": 1.0,
+    "norm_std": 3.922568936332027e-08,
+    "norm_max_abs_deviation_from_1": 1.7881393432617188e-07,
+    "mean_vector_norm": 0.12370670586824417,
+    "cos_to_mean_median": 0.12358348071575165,
+    "cos_to_mean_min": -0.21294841170310974,
+    "pairwise_cos_median": 0.014760434627532959,
+    "pairwise_cos_p99": 0.1690128743648529,
+    "raw_components_90pct": 220,
+    "raw_components_95pct": 238,
+    "raw_components_99pct": 253,
+    "raw_participation_ratio": 223.51756827454165,
+    "raw_top_component_share": 0.020673818966325946,
+    "centered_components_90pct": 221,
+    "centered_components_95pct": 238,
+    "centered_components_99pct": 253,
+    "centered_participation_ratio": 237.71979551426688,
+    "centered_top_component_share": 0.01021473484197695,
+    "two_nn_intrinsic_dim": 14.334771083685611,
+    "angular_k": 100,
+    "angular_k_hub": 10,
+    "neighbour_set_agreement": 0.999999,
+    "hubness_skew_l2": 2.5937613241228137,
+    "hubness_skew_cosine": 2.5937613241228137,
+    "lid_median_l2": 55.84171653253679,
+    "lid_median_cosine": 27.920875549316406
+  },
+  "noise_floor": {
+    "lid_median": {
+      "min": 54.97167365038141,
+      "median": 56.057630769901365,
+      "max": 56.8615198841341,
+      "spread": 1.8898462337526851,
+      "spread_pct_of_median": 3.371255987449593
+    },
+    "relative_contrast_median": {
+      "min": 1.2648566866887676,
+      "median": 1.2691488506485884,
+      "max": 1.2756039911073849,
+      "spread": 0.010747304418617265,
+      "spread_pct_of_median": 0.8468119726953178
+    },
+    "hubness_skew": {
+      "min": 2.3149919477381244,
+      "median": 2.524862431218572,
+      "max": 2.778502194939324,
+      "spread": 0.4635102472011994,
+      "spread_pct_of_median": 18.357841657832257
+    },
+    "ivf_gini": {
+      "min": 0.7832210937499999,
+      "median": 0.8010978515624999,
+      "max": 0.8231015625,
+      "spread": 0.039880468750000064,
+      "spread_pct_of_median": 4.9782269010228
+    }
+  }
+}

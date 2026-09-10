@@ -1,0 +1,118 @@
+{
+  "as_is": {
+    "lid_median": 19.223894954477373,
+    "relative_contrast_median": 1.4047392251932158,
+    "hubness_skew": 36.47254694145868,
+    "ivf_gini": 0.9822953125,
+    "lid_discarded_queries": 33,
+    "rows_available": 250000,
+    "zero_rows_in_draw": 15,
+    "top10_k_occurrence": [
+      12309,
+      12289,
+      12288,
+      12286,
+      12286,
+      12271,
+      12250,
+      12208,
+      12196,
+      12179
+    ],
+    "k_occurrence_zero_frac": 0.71735,
+    "top3_cell_occupancy": [
+      19532,
+      27,
+      26
+    ],
+    "rc_p99": 38373259.498755716,
+    "rc_max": 93962528.0
+  },
+  "drop_zero_rows": {
+    "lid_median": 55.36321973060046,
+    "relative_contrast_median": 1.2732516821869448,
+    "hubness_skew": 2.4800171328006955,
+    "ivf_gini": 0.802436328125,
+    "lid_discarded_queries": 10,
+    "rows_available": 249803,
+    "zero_rows_in_draw": 0,
+    "top10_k_occurrence": [
+      115,
+      111,
+      97,
+      96,
+      89,
+      86,
+      85,
+      81,
+      78,
+      77
+    ],
+    "k_occurrence_zero_frac": 0.00905,
+    "top3_cell_occupancy": [
+      789,
+      744,
+      707
+    ],
+    "rc_p99": 38506550.47051023,
+    "rc_max": 94711632.0
+  },
+  "drop_duplicates": {
+    "lid_median": 55.76686233359645,
+    "relative_contrast_median": 1.2709756519184103,
+    "hubness_skew": 2.6358772329454085,
+    "ivf_gini": 0.8157167968750001,
+    "lid_discarded_queries": 0,
+    "rows_available": 217855,
+    "zero_rows_in_draw": 0,
+    "top10_k_occurrence": [
+      111,
+      108,
+      107,
+      103,
+      96,
+      96,
+      85,
+      84,
+      84,
+      83
+    ],
+    "k_occurrence_zero_frac": 0.00925,
+    "top3_cell_occupancy": [
+      1153,
+      917,
+      902
+    ],
+    "rc_p99": 3.1134439974123715,
+    "rc_max": 313.37438436850505
+  },
+  "drop_zero_and_duplicates": {
+    "lid_median": 55.84171653253679,
+    "relative_contrast_median": 1.2691843077488718,
+    "hubness_skew": 2.5937613241228137,
+    "ivf_gini": 0.7958828124999999,
+    "lid_discarded_queries": 0,
+    "rows_available": 217854,
+    "zero_rows_in_draw": 0,
+    "top10_k_occurrence": [
+      110,
+      110,
+      99,
+      93,
+      88,
+      87,
+      84,
+      82,
+      82,
+      77
+    ],
+    "k_occurrence_zero_frac": 0.00885,
+    "top3_cell_occupancy": [
+      876,
+      799,
+      788
+    ],
+    "rc_p99": 3.192579989579948,
+    "rc_max": 143.77813665539148
+  }
+}

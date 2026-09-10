@@ -54,6 +54,19 @@ statistics:
   # Skew of the k-occurrence distribution. High skew means a few hub vectors
   # dominate neighbour lists, which is a real property of nytimes and not
   # something a generator gets for free.
+  #
+  # Careful with this one, and with lid_median and ivf_gini. At the locked
+  # conditions the real corpus scores hubness skew 28.8 to 40.8, LID 13.9 to
+  # 22.1 and Gini 0.80 to 0.98 across ten disjoint draws, and every one of
+  # those numbers is set by the 12 to 24 exact-zero rows that land in each
+  # draw: a zero row sits at L2 exactly 1.0 from every unit-norm row, closer
+  # than most rows' fifth real neighbour, so ten of them collect 61% of all
+  # k-occurrence. With zero rows and exact duplicates dropped the same draws
+  # score 2.3 to 2.8, 55.0 to 56.9 and 0.78 to 0.82. A band set against the
+  # as-shipped numbers would gate on how many zero rows a draw got. Whether
+  # the row filter becomes part of these locked conditions is a human
+  # decision; see "What needs a human" in docs/datasets/nytimes.md and
+  # docs/datasets/nytimes_noise_floor.json.
   hubness_skew:
     min: null
     max: null

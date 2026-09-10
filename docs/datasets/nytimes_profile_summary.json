@@ -1,0 +1,58 @@
+{
+  "real_path": "data/nytimes_250k.npy",
+  "synthetic_paths": [],
+  "preprocess": "l2",
+  "seed": 42,
+  "ann_settings": {
+    "k": 100,
+    "k_hub": 10,
+    "max_rows": 20000,
+    "nlist": 256,
+    "metric": "angular"
+  },
+  "knn_settings": {
+    "k": 5,
+    "max_rows": 20000
+  },
+  "stats": [
+    {
+      "name": "real",
+      "num_vectors": 50000,
+      "dim": 256,
+      "value_mean": 0.00024141276662703604,
+      "value_std": 0.06247515603899956,
+      "value_min": -0.324775367975235,
+      "value_max": 0.32617872953414917,
+      "exact_zero_fraction": 0.00078,
+      "negative_fraction": 0.4981915625,
+      "norm_mean": 0.9992200136184692,
+      "norm_std": 0.027917584404349327,
+      "duplicate_row_fraction": 0.03957999999999995,
+      "median_pairwise_distance": 1.4035379886627197,
+      "median_5nn_distance": 1.0,
+      "effective_rank": 247.43324279785156,
+      "lid_median": 15.813480461902047,
+      "relative_contrast_median": 1.4055192234467717,
+      "hubness_skew": 31.578471334786684,
+      "ivf_gini": 0.978471484375,
+      "lid_discarded_queries": 39,
+      "ann_measured_rows": 20000,
+      "ann_measured_k": 100,
+      "ann_measured_nlist": 256
+    }
+  ],
+  "worst_dimensions": {},
+  "report_html": "runs/nytimes/profile/eda_report.html",
+  "png_files": [
+    "runs/nytimes/profile/png/01_local_intrinsic_dimensionality.png",
+    "runs/nytimes/profile/png/02_hubness.png",
+    "runs/nytimes/profile/png/03_ivf_cell_balance.png",
+    "runs/nytimes/profile/png/04_pooled_value_distribution.png",
+    "runs/nytimes/profile/png/05_per-dimension_marginals.png",
+    "runs/nytimes/profile/png/06_per-dimension_profiles.png",
+    "runs/nytimes/profile/png/07_pairwise_distances.png",
+    "runs/nytimes/profile/png/08_within-set_5-nn_distances.png",
+    "runs/nytimes/profile/png/09_pca_spectrum.png",
+    "runs/nytimes/profile/png/10_correlation_structure.png"
+  ]
+}

@@ -390,7 +390,8 @@ Trajectory on the holdout (`run_metadata.json` `eval`, full table there):
 The generator starts at the Gaussian's numbers (LID `72` / contrast `1.17`
 around steps 2,000--7,000, close to the Gaussian row's `82.5` / `1.158` on
 this page) and drifts monotonically toward `v0`'s sheet (LID `42.6` /
-contrast `1.40` at step 30,000; `v0` read `14` / `2.08` at the same step). It
+contrast `1.40` at step 30,000; `v0` read `17.98` / `2.078` at the same
+step, and `13.7` / `2.08` after 100,000). It
 passes through the real point around step 20,000--21,000 and does not stay
 there. The gate selector caught the crossing; `cov_fro` would have caught the
 Gaussian end instead.
@@ -433,8 +434,9 @@ of real (`2.3%`) but LID is `11.8%` high, hubness skew is `10.4` against a
 real range topping out at `2.78` and worse than the noise-sweep bound of
 `4.0`, and Gini sits just above the real range. The architecture did what the
 spec claimed: the output stays full rank (`W`'s singular values never
-collapse), the generator reaches LID `72` at step 3,000 instead of the `14`
-`v0` was stuck near, and the gate selector found a checkpoint that passes
+collapse), the generator reaches LID `72` at step 3,000 instead of the `18`
+`v0` was stuck near at step 30,000 (falling to `13.7` at 100,000), and the
+gate selector found a checkpoint that passes
 through the real LID/contrast point -- something no `v0` checkpoint ever did.
 The real-side cleaning was necessary to see any of this: without it the
 reference LID the selector measures against is `29.9`, not `59`. But the

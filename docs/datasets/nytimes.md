@@ -192,7 +192,7 @@ the cleaned figures are what the corpus looks like without the artefact.
 
 ## Model family
 
-`mlp` today, `spherical` when phase (b) lands.
+`mlp` for `v0`, `linear_skip` for `v1`; `spherical` when phase (b) lands.
 
 ## Ladder
 

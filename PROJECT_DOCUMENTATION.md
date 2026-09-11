@@ -230,7 +230,8 @@ independent, a variant number means nothing across families: SIFT's `v2` and
 a future GIST `v2` are unrelated, and only ever compare within one dataset.
 Each family's ladder and its status live in its page under `docs/datasets/`.
 SIFT and DEEP have trained rungs above `v0`; GloVe has a trained `v0` and
-nothing above it; the other three have a `v0` baseline config only.
+nothing above it; NYTimes has a `v1` rung config above `v0` (untrained); the
+other two have a `v0` baseline config only.
 
 The SIFT ladder:
 

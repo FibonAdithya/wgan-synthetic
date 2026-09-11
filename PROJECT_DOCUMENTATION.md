@@ -321,8 +321,9 @@ both arms. Any write-up of a v4 result must lead with those.
 ### `generator_type`
 
 The architecture axis in the `model` config block, accepting `mlp` (default),
-`gated`, and `structured_gated`. It sits underneath the variant numbering:
-v0, v1 and v1_5 all use `mlp` and differ only in training settings.
+`gated`, `structured_gated`, and `linear_skip`. It sits underneath the variant
+numbering: v0, v1 and v1_5 all use `mlp` and differ only in training
+settings.
 
 A third value, `spherical`, is planned and not built. It is phase (b) of the
 multi-dataset design: a generator whose output is unit-norm by construction
@@ -343,6 +344,15 @@ config, dropping the old name would have made every checkpoint written before
 that rename unloadable — including v2's, whose `run_config.yaml` still says
 `sparse`. Write `gated` in new configs; the alias exists for the ones already
 on disk.
+
+`linear_skip` is an `mlp` trunk plus a bias-free linear map on a separate
+block of the latent: `x = trunk(z[:, :t]) + W z[:, t:]` with
+`t = latent_dim - skip_dim`. The output Jacobian is full rank by
+construction, which is the property `mlp` lacks on every family measured
+(its local dimension sits at about 15 regardless of the corpus). Keys:
+`skip_dim` (default `descriptor_dim`), `skip_init` (`orthogonal` or
+`identity`), `skip_init_gain`. Sampling and checkpoints are unchanged: the
+split happens inside the generator. First used by `configs/nytimes/v1.yaml`.
 
 ---
 
@@ -387,6 +397,17 @@ Degenerate batches are dropped rather than clamped, matching
 at distance zero (duplicates, entirely plausible under mode collapse) or whose
 neighbours all tie contributes nothing, and the penalty is exactly zero when no
 query survives on either side.
+
+### Checkpoint selection
+
+| Config key | Default | Meaning |
+|---|---|---|
+| `training.select_on` | `cov_fro` | Which statistic chooses `best_generator.pt`. `cov_fro` is the covariance Frobenius gap on the holdout, as always. `gate` scores each evaluation by the holdout's normalised LID-median and relative-contrast gaps (`src/train/selection.py`), logs all four ANN-difficulty statistics for fake and real as `gate_fake_*` / `gate_real_*`, and records `selection_score`. |
+
+The holdout is smaller than a family's canonical N, so `gate_*` values rank
+checkpoints within one run and are not the family's profile. Checkpoints
+record `select_on` and `best_score`; a resume under a different selector is
+refused.
 
 Training entrypoint:
 

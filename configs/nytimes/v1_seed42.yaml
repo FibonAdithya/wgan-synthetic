@@ -1,0 +1,68 @@
+# NYTimes v1, run 42. Identical to configs/nytimes/v1.yaml in every training
+# hyperparameter. Two things differ, listed so a reader can confirm nothing
+# else moved:
+#
+#   1. output_dir  runs/nytimes/v1 -> runs/nytimes/v1_seed42
+#   2. real_path   data/nytimes_250k.npy -> an absolute path (see below)
+#
+# Why this file exists rather than an edit to v1.yaml: v1 is a ladder rung,
+# and a rung is a historical record of a run that happened. Changing what it
+# points at would redefine what NYTimes v1 reproduces, which AGENTS.md
+# reserves for a human decision. This config is a measurement instrument,
+# the same pattern as configs/glove/v0_seed42.yaml.
+#
+# Why an absolute real_path: the gpuq runner executes each job in a fresh
+# detached git worktree cut from the pinned commit, and data/ is gitignored,
+# so a relative data/... path does not exist at run time. The file it names
+# is `python -m src.data.fetch nytimes` output at seed 42, sha256
+# ba8e8d512cc465e983661cbbabba64ead8251c3f313de86c3b1c3abe56c03428, the same
+# bytes as a local data/nytimes_250k.npy.
+#
+# The corpus is trained on as shipped: docs/datasets/nytimes.md records that
+# 197 of these rows are exactly zero and 32,145 are exact duplicates, and that
+# whether to filter them is an open decision. This run measures what v1 does
+# without that decision being made.
+seed: 42
+device: auto
+output_dir: runs/nytimes/v1_seed42
+
+data:
+  real_path: /workspace/data-cache/nytimes_250k.npy
+  format: npy
+  metric: angular
+  descriptor_dim: 256
+  holdout_fraction: 0.05
+  synthetic_if_missing: false
+  synthetic_num_vectors: 100000
+  preprocess:
+    center: false
+    whiten: false
+    l2_normalize: true
+
+model:
+  # 256 trunk + 256 skip. The generator splits the latent itself.
+  latent_dim: 512
+  generator_hidden_dims: [512, 1024, 1024]
+  critic_hidden_dims: [1024, 512, 256]
+  negative_slope: 0.2
+  generator_type: linear_skip
+  skip_dim: 256
+  skip_init: orthogonal
+  skip_init_gain: 1.0
+
+training:
+  batch_size: 512
+  num_gen_steps: 30000
+  n_critic: 3
+  lr_g: 1.0e-4
+  lr_d: 1.0e-4
+  betas: [0.0, 0.9]
+  lambda_gp: 5.0
+  distance_reg_alpha: 0.0
+  distance_reg_max_points: 256
+  num_workers: 0
+  amp: false
+  log_every: 250
+  eval_every: 1000
+  save_every: 2000
+  select_on: gate

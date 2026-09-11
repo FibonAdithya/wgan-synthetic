@@ -1,0 +1,60 @@
+# NYTimes v1, seed 42, continued to 100,000 generator steps. Identical to
+# configs/nytimes/v1_seed42.yaml except:
+#
+#   1. output_dir     runs/nytimes/v1_seed42 -> runs/nytimes/v1_seed42_100k
+#   2. num_gen_steps  30000 -> 100000
+#
+# Run with --resume pointed at the 30k run's checkpoint_step_30000.pt, so the
+# first 30,000 steps are the committed seed-42 run itself (live weights,
+# optimiser moments, best_cov, select_on and best_score all restored; EMA is
+# off in v1). The config's num_gen_steps is the target total, not an
+# additional budget. The checkpoint was selected under select_on: gate, and
+# this config keeps that selector, so the resume is accepted and the 30k
+# run's best_score (0.0114 at step 20,000) stays the bar a later checkpoint
+# must beat. Asked for by the owner after the 30k run missed the gate on LID
+# and hubness with the trunk/skip balance still drifting; this is a longer
+# budget, not a new rung.
+seed: 42
+device: auto
+output_dir: runs/nytimes/v1_seed42_100k
+
+data:
+  real_path: /workspace/data-cache/nytimes_250k.npy
+  format: npy
+  metric: angular
+  descriptor_dim: 256
+  holdout_fraction: 0.05
+  synthetic_if_missing: false
+  synthetic_num_vectors: 100000
+  preprocess:
+    center: false
+    whiten: false
+    l2_normalize: true
+
+model:
+  # 256 trunk + 256 skip. The generator splits the latent itself.
+  latent_dim: 512
+  generator_hidden_dims: [512, 1024, 1024]
+  critic_hidden_dims: [1024, 512, 256]
+  negative_slope: 0.2
+  generator_type: linear_skip
+  skip_dim: 256
+  skip_init: orthogonal
+  skip_init_gain: 1.0
+
+training:
+  batch_size: 512
+  num_gen_steps: 100000
+  n_critic: 3
+  lr_g: 1.0e-4
+  lr_d: 1.0e-4
+  betas: [0.0, 0.9]
+  lambda_gp: 5.0
+  distance_reg_alpha: 0.0
+  distance_reg_max_points: 256
+  num_workers: 0
+  amp: false
+  log_every: 250
+  eval_every: 1000
+  save_every: 2000
+  select_on: gate

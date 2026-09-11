@@ -54,7 +54,7 @@ bands; the pages are the source of truth for anything family-specific.
 | `gist` | 960 | `l2` | non-negative dense float, little zero mass, high ambient dim | `mlp` | `docs/datasets/gist.md` |
 | `deep` | 96 | `angular` | dense signed unit-norm image embeddings | `mlp` today, `spherical` when built | `docs/datasets/deep.md` |
 | `glove` | 100 | `angular` | dense signed word vectors, strong density gradient | `mlp` today, `spherical` when built | `docs/datasets/glove.md` |
-| `nytimes` | 256 | `angular` | dense signed document embeddings, strong topic clusters | `mlp` today, `spherical` when built | `docs/datasets/nytimes.md` |
+| `nytimes` | 256 | `angular` | dense signed document embeddings, strong topic clusters | `mlp` at v0, `linear_skip` at v1 (untrained), `spherical` still planned | `docs/datasets/nytimes.md` |
 | `openai` | 1536 | `angular` | unit-norm text embeddings, very high ambient dim, low intrinsic dim | `mlp` today, `spherical` when built | `docs/datasets/openai.md` |
 
 ### Fetching

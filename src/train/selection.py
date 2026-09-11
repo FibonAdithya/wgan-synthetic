@@ -42,15 +42,39 @@ LOGGED = (
     "hubness_skew",
     "ivf_gini",
     "lid_discarded_queries",
+    "zero_rows",
+    "measured_rows",
 )
+
+# A checkpoint whose surviving queries are a minority is unmeasurable, the
+# same principle as the None guard in selection_score below.
+MAX_DISCARD_FRACTION = 0.5
 
 
 def gate_statistics(
     x: np.ndarray, *, metric: str, seed: int
 ) -> dict[str, float | int | None]:
-    """The four ANN-difficulty statistics of `x`, plus the LID discard count."""
+    """The four ANN-difficulty statistics of `x`, plus the LID discard count.
+
+    Rows with an exact-zero L2 norm are dropped before measuring, on
+    whichever side has them: the real NYTimes holdout carries exact-zero
+    rows (`docs/datasets/nytimes.md`), and a zero row sits at the origin
+    rather than on the sphere, which corrupts every one of these statistics
+    -- on the shipped 12,500-row holdout it roughly halves the reference
+    LID. The fake side structurally has none, because the trainer's
+    `normalize_l2` clamps its divisor rather than dividing by zero. Exact
+    duplicate rows are left alone; only exact zeros are a preprocessing
+    artefact, not a legitimate query. `zero_rows` and `measured_rows` are
+    logged so a run's metadata says how much of the holdout the statistics
+    were actually measured on.
+    """
+    x = np.ascontiguousarray(x, dtype=np.float32)
+    norms = np.linalg.norm(x, axis=1)
+    zero_mask = norms == 0.0
+    zero_rows = int(np.count_nonzero(zero_mask))
+    measured = x[~zero_mask] if zero_rows else x
     m = ann_difficulty.compute(
-        np.ascontiguousarray(x, dtype=np.float32),
+        measured,
         k=GATE_K,
         k_hub=GATE_K_HUB,
         nlist=GATE_NLIST,
@@ -59,6 +83,8 @@ def gate_statistics(
         metric=metric,
     )
     s = ann_difficulty.summary(m)
+    s["zero_rows"] = zero_rows
+    s["measured_rows"] = int(measured.shape[0])
     return {k: s[k] for k in LOGGED}
 
 
@@ -70,7 +96,20 @@ def selection_score(
     Infinite when a statistic is missing or None on either side (every query
     discarded), or when the real value is zero: an unmeasurable checkpoint
     must never win by accident.
+
+    Also infinite when the fake side carries both `lid_discarded_queries`
+    and `measured_rows`, and either there were zero measured rows or more
+    than `MAX_DISCARD_FRACTION` of them were discarded from the LID/contrast
+    estimators: a checkpoint whose surviving queries are a minority is
+    unmeasurable, the same principle as the None guard above. Either key
+    absent skips the check, so hand-built stats dicts in existing tests stay
+    valid.
     """
+    discarded = fake.get("lid_discarded_queries")
+    measured = fake.get("measured_rows")
+    if discarded is not None and measured is not None:
+        if measured == 0 or discarded / measured > MAX_DISCARD_FRACTION:
+            return math.inf
     total = 0.0
     for key in SCORED:
         f, r = fake.get(key), real.get(key)

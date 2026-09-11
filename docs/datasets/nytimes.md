@@ -201,6 +201,7 @@ the cleaned figures are what the corpus looks like without the artefact.
 | `v0` | plain WGAN-GP | `configs/nytimes/v0_seed42.yaml`, instrument of `configs/nytimes/v0.yaml` | `runs/nytimes/v0_seed42` (box: `/workspace/nytimes-v0/v0_seed42`) | trained -- n=1 seed, misses the gate on every statistic; see `## v0, measured` |
 | `v0` at 100k steps | same rung, budget raised | `configs/nytimes/v0_seed42_100k.yaml`, resumed from the row above | `runs/nytimes/v0_seed42_100k` (box: `/workspace/nytimes-v0/v0_seed42_100k`) | trained -- gate statistics worse than at 30k; see `### Continued to 100,000 steps` |
 | `v1` | + linear skip path (`generator_type: linear_skip`) and `select_on: gate` | `configs/nytimes/v1.yaml`; box instrument `configs/nytimes/v1_seed42.yaml` | `runs/nytimes/v1_seed42` (box: `/workspace/nytimes-v1/v1_seed42`) | trained -- n=1 seed, misses the gate on LID and hubness, contrast within 3%; see `## v1, measured` |
+| `v1` at 100k steps | same rung, budget raised | `configs/nytimes/v1_seed42_100k.yaml`, resumed from the row above | `runs/nytimes/v1_seed42_100k` (box: `/workspace/nytimes-v1/v1_seed42_100k`) | trained -- collapses; gate statistics worse at every step after 30k; see `### Continued to 100,000 steps` under v1 |
 
 Train `v0`:
 
@@ -451,7 +452,114 @@ rung is the neighbourhood-aware critic (approach B), not another change to
 this generator. Pinning the skip share (or the trunk's output scale) is worth
 trying as a cheap diagnostic to see whether hubness comes down on its own,
 but it is a diagnostic, not a rung -- it does not give the critic the
-neighbourhood information the failure mode needs.
+neighbourhood information the failure mode needs. Continuing to 100,000
+steps confirmed this; see below.
+
+### Continued to 100,000 steps
+
+Asked for after the table above, the same way `v0` was. gpuq job
+`wgan-synthetic-20260911T152551Z-9b0713` at commit `a870bee` on `nytimes-eda`
+(`scripts/nytimes_v1_seed42_100k_job.sh`, RTX 3060) ran
+`configs/nytimes/v1_seed42_100k.yaml` (the v1_seed42 instrument with
+`num_gen_steps: 100000` and its own `output_dir`), resumed with `--resume`
+from `/workspace/nytimes-v1/v1_seed42/checkpoint_step_30000.pt` (live
+weights, `select_on: gate`, restored `best_score` `0.0114`). Submitted
+15:25:51Z, outputs copied at 16:52:47Z -- **87 minutes wall for the
+remaining 70,000 steps** plus sampling and the report, the same 87 minutes
+v0's continuation took. 70 evaluations ran (steps 31,000..100,000), no
+`gate_error`, `resumed_from_step` 30000. No evaluation after the resume beat
+the restored score: the best post-resume score was `0.4631` at step 31,000,
+40x worse than `0.0114`. The job's carry-over branch fired -- `best_generator.pt`
+is still the 30k run's step-20,000 file, and `v1_best` in this report is
+byte-identical to the 30k report's `v1_best` (checked: all four statistics
+equal to 1e-9), so it is not repeated here beyond the table below. Summary,
+`run_config.yaml` and `run_metadata.json` are committed under
+`docs/results/nytimes-v1-seed42-100k/`; samples are gitignored under
+`runs/nytimes/v1_seed42_100k/` (box: `/workspace/nytimes-v1/v1_seed42_100k`).
+
+| Statistic | real, cleaned (10-draw range) | `v1_best` (step 20,000, carried over) | step 100,000 |
+|---|---|---|---|
+| LID median | `55.97` (54.97 -- 56.86) | `62.58` (11.8% off, 3.5x) | `5.234` (90.6% off, 26.8x) |
+| Relative contrast | `1.271` (1.265 -- 1.276) | `1.242` (2.3% off, 2.7x) | `15.4` (1111.8% off, 1314.3x) |
+| Hubness skew | `2.529` (2.315 -- 2.779) | `10.37` (310.0% off, 16.9x) | `0.8049` (68.2% off, 3.7x) |
+| IVF cell-balance Gini | `0.7767` (0.7832 -- 0.8231) | `0.8273` (6.5% off, 1.3x) | `0.373` (52.0% off, 10.1x) |
+
+Effective rank: real `247.4`, `v1_best` `152.9`, step 100,000 **`6.4`**.
+Median 5-NN distance: real `1.205`, `v1_best` `1.159`, step 100,000
+**`0.103`**. For comparison, `v0` at 100,000 steps (from `### Continued to
+100,000 steps` above): LID `13.7`, contrast `2.08`, hubness `1.36`, Gini
+`0.22`, effective rank `84`. `v1` at 100k is far past `v0`'s sheet: a near
+six-dimensional manifold, not a ~14-dimensional one.
+
+Trajectory on the holdout after the resume (`run_metadata.json` `eval`):
+
+| step | fake LID | fake RC | hubness | Gini | score | cov_fro |
+|---|---|---|---|---|---|---|
+| 31000 | 40.3 | 1.4232 | 3.86 | 0.709 | 0.4631 | 0.1904 |
+| 35000 | 32.14 | 1.6126 | 3.18 | 0.674 | 0.7542 | 0.2317 |
+| 40000 | 22.3 | 1.9546 | 2.81 | 0.545 | 1.1964 | 0.2655 |
+| 50000 | 14.11 | 2.9985 | 4.58 | 0.396 | 2.1762 | 0.3509 |
+| 60000 | 9.63 | 5.2571 | 1.95 | 0.332 | 4.0719 | 0.3958 |
+| 70000 | 7.27 | 8.4736 | 3.17 | 0.372 | 6.7031 | 0.5019 |
+| 80000 | 4.9 | 11.5975 | 1.45 | 0.388 | 9.2599 | 0.4874 |
+| 90000 | 4.61 | 13.5976 | 0.87 | 0.392 | 10.8763 | 0.4398 |
+| 100000 | 4.57 | 14.7343 | 0.7 | 0.405 | 11.7926 | 0.4507 |
+
+Monotone throughout: LID `40 -> 4.6`, contrast `1.42 -> 14.7`. The score
+never turns; `cov_fro` also rises (`0.19 -> 0.45`), so the covariance
+selector would not have rescued it either -- its post-resume minimum is
+also step 31,000.
+
+Skip map `W` (256x256) singular values and trunk-versus-skip output energy
+(box, checkpoints, 4,096 fixed latents):
+
+| step | \|\|trunk\|\|^2 | \|\|skip\|\|^2 | skip share | W median sv | W min sv | #sv>0.1 |
+|---|---|---|---|---|---|---|
+| 30000 | 944.3 | 239.8 | 0.202 | 0.918 | 0.028 | 254 |
+| 32000 | 1461.7 | 234.4 | 0.138 | 0.89 | 0.01 | 252 |
+| 40000 | 3411.6 | 207.0 | 0.057 | 0.741 | 0.003 | 243 |
+| 50000 | 8325.7 | 169.4 | 0.02 | 0.491 | 0.0 | 213 |
+| 60000 | 22318.9 | 155.7 | 0.007 | 0.315 | 0.001 | 185 |
+| 70000 | 40125.8 | 94.8 | 0.002 | 0.122 | 0.0 | 141 |
+| 80000 | 26429.9 | 52.0 | 0.002 | 0.073 | 0.0 | 101 |
+| 90000 | 19634.5 | 34.1 | 0.002 | 0.054 | 0.0 | 67 |
+| 100000 | 10500.0 | 27.6 | 0.003 | 0.045 | 0.0 | 50 |
+
+Two phases. First the balance drift seen in the 30k run continues and
+accelerates: trunk energy grows from `944` to `40,000` by step 70,000 while
+the skip's share falls from `20%` to `0.2%`. Then, once the skip term is
+numerically irrelevant, the risk the spec named ("training can lower
+rank(W) only by driving singular values of W to zero") materialises: `W`'s
+median singular value falls from `0.92` to `0.045` and only `50` of `256`
+stay above `0.1` by step 100,000. The full-rank guarantee held exactly as
+long as the skip term mattered, and no longer.
+
+Losses (`run_metadata.json` `metrics`):
+
+| step | g_loss | d_loss | wasserstein | gp |
+|---|---|---|---|---|
+| 30000 | 0.123 | -0.012 | 0.017 | 0.0012 |
+| 50000 | 0.889 | 0.003 | 0.008 | 0.0023 |
+| 70000 | -1.296 | 0.059 | -0.033 | 0.0053 |
+| 100000 | -1.57 | 0.095 | -0.054 | 0.0082 |
+
+The Wasserstein estimate never exceeds `0.06` in magnitude and the gradient
+penalty stays under `0.01` through the entire collapse. By its own loss the
+game is stable and the critic is satisfied while the sample goes from LID
+`40` to LID `4.6`. That is the direct demonstration of the spec's premise: a
+per-vector critic cannot see local dimension, so a six-dimensional sheet
+with the right first two moments is, to it, the corpus.
+
+**Continuing `v1` to 100,000 steps made it worse at every step and ended in
+collapse:** LID `5.2`, contrast `15.4`, effective rank `6.4`, past `v0`'s own
+100k sheet. The selected checkpoint stays step 20,000 of the 30k run,
+because nothing after it came within 40x of its score, and `cov_fro` agrees.
+The longer budget answered the open question from the 30k section above --
+the real-like checkpoint was a transient, not a slow convergence -- and
+added the second half of the mechanism: after the balance drift starves the
+skip term, `W` itself loses rank. More steps on this generator are not a
+lever. Next rung, as before and now with the loss trace as evidence: the
+neighbourhood-aware critic.
 
 ## Gate
 

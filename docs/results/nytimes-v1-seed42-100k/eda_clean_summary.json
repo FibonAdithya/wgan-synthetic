@@ -1,0 +1,233 @@
+{
+  "real_path": "/workspace/data-cache/nytimes_250k_l2_clean.npy",
+  "synthetic_paths": [
+    "v1_best=runs/nytimes/v1_seed42_100k/synthetic_50k_best.npy",
+    "v1_step100000=runs/nytimes/v1_seed42_100k/synthetic_50k_step100000.npy"
+  ],
+  "preprocess": "l2",
+  "seed": 42,
+  "ann_settings": {
+    "k": 100,
+    "k_hub": 10,
+    "max_rows": 20000,
+    "nlist": 256,
+    "metric": "angular"
+  },
+  "knn_settings": {
+    "k": 5,
+    "max_rows": 20000
+  },
+  "stats": [
+    {
+      "name": "real",
+      "num_vectors": 50000,
+      "dim": 256,
+      "value_mean": 0.00029404458473436534,
+      "value_std": 0.062499307096004486,
+      "value_min": -0.324775367975235,
+      "value_max": 0.31607556343078613,
+      "exact_zero_fraction": 0.0,
+      "negative_fraction": 0.4981146875,
+      "norm_mean": 1.0,
+      "norm_std": 2.203599258621125e-08,
+      "duplicate_row_fraction": 0.0,
+      "median_pairwise_distance": 1.403799295425415,
+      "median_5nn_distance": 1.2048945426940918,
+      "effective_rank": 247.4195556640625,
+      "lid_median": 55.97422906108723,
+      "relative_contrast_median": 1.2705326473698406,
+      "hubness_skew": 2.5287887763407393,
+      "ivf_gini": 0.7767078125,
+      "lid_discarded_queries": 0,
+      "ann_measured_rows": 20000,
+      "ann_measured_k": 100,
+      "ann_measured_nlist": 256
+    },
+    {
+      "name": "v1_best",
+      "num_vectors": 50000,
+      "dim": 256,
+      "value_mean": 0.0005246287910267711,
+      "value_std": 0.06249779835343361,
+      "value_min": -0.3242073059082031,
+      "value_max": 0.3254838287830353,
+      "exact_zero_fraction": 0.0,
+      "negative_fraction": 0.496256796875,
+      "norm_mean": 1.0,
+      "norm_std": 2.150067679451695e-08,
+      "duplicate_row_fraction": 0.0,
+      "median_pairwise_distance": 1.4078688621520996,
+      "median_5nn_distance": 1.158959150314331,
+      "effective_rank": 152.90118408203125,
+      "lid_median": 62.577738705879014,
+      "relative_contrast_median": 1.2418609031342513,
+      "hubness_skew": 10.367834014860533,
+      "ivf_gini": 0.827325390625,
+      "lid_discarded_queries": 0,
+      "ann_measured_rows": 20000,
+      "ann_measured_k": 100,
+      "ann_measured_nlist": 256
+    },
+    {
+      "name": "v1_step100000",
+      "num_vectors": 50000,
+      "dim": 256,
+      "value_mean": 0.0003159831394441426,
+      "value_std": 0.06249919906258583,
+      "value_min": -0.27645495533943176,
+      "value_max": 0.30045387148857117,
+      "exact_zero_fraction": 0.0,
+      "negative_fraction": 0.49413671875,
+      "norm_mean": 1.0,
+      "norm_std": 2.1753654877443296e-08,
+      "duplicate_row_fraction": 0.0,
+      "median_pairwise_distance": 1.4830464124679565,
+      "median_5nn_distance": 0.10320106893777847,
+      "effective_rank": 6.3836669921875,
+      "lid_median": 5.233797511194965,
+      "relative_contrast_median": 15.396157719181637,
+      "hubness_skew": 0.8049030047610972,
+      "ivf_gini": 0.37295742187500003,
+      "lid_discarded_queries": 0,
+      "ann_measured_rows": 20000,
+      "ann_measured_k": 100,
+      "ann_measured_nlist": 256
+    }
+  ],
+  "worst_dimensions": {
+    "v1_best": [
+      {
+        "dim": 43,
+        "wasserstein1": 0.008861200803461162
+      },
+      {
+        "dim": 70,
+        "wasserstein1": 0.006168787507097633
+      },
+      {
+        "dim": 224,
+        "wasserstein1": 0.006979994918907128
+      },
+      {
+        "dim": 199,
+        "wasserstein1": 0.003491926905166306
+      },
+      {
+        "dim": 60,
+        "wasserstein1": 0.012821164328018003
+      },
+      {
+        "dim": 149,
+        "wasserstein1": 0.0047658970212367344
+      },
+      {
+        "dim": 92,
+        "wasserstein1": 0.0024161613933191967
+      },
+      {
+        "dim": 233,
+        "wasserstein1": 0.003830686096223111
+      },
+      {
+        "dim": 128,
+        "wasserstein1": 0.005091893036100787
+      },
+      {
+        "dim": 188,
+        "wasserstein1": 0.004918496124487272
+      },
+      {
+        "dim": 52,
+        "wasserstein1": 0.0061106151267211065
+      },
+      {
+        "dim": 193,
+        "wasserstein1": 0.0031518045983022725
+      },
+      {
+        "dim": 227,
+        "wasserstein1": 0.0020672358461746162
+      },
+      {
+        "dim": 78,
+        "wasserstein1": 0.005558660495575908
+      },
+      {
+        "dim": 7,
+        "wasserstein1": 0.0031137756742411274
+      },
+      {
+        "dim": 18,
+        "wasserstein1": 0.003032107876429757
+      }
+    ],
+    "v1_step100000": [
+      {
+        "dim": 43,
+        "wasserstein1": 0.07090461816540047
+      },
+      {
+        "dim": 70,
+        "wasserstein1": 0.0693678784733774
+      },
+      {
+        "dim": 224,
+        "wasserstein1": 0.05978686362612133
+      },
+      {
+        "dim": 199,
+        "wasserstein1": 0.04795795137625604
+      },
+      {
+        "dim": 60,
+        "wasserstein1": 0.04766305394420979
+      },
+      {
+        "dim": 149,
+        "wasserstein1": 0.04507624262536563
+      },
+      {
+        "dim": 92,
+        "wasserstein1": 0.04370421314263385
+      },
+      {
+        "dim": 233,
+        "wasserstein1": 0.042577987763550755
+      },
+      {
+        "dim": 128,
+        "wasserstein1": 0.04013457277479564
+      },
+      {
+        "dim": 188,
+        "wasserstein1": 0.039506372301314846
+      },
+      {
+        "dim": 52,
+        "wasserstein1": 0.038537099274933956
+      },
+      {
+        "dim": 193,
+        "wasserstein1": 0.036582999027855556
+      },
+      {
+        "dim": 227,
+        "wasserstein1": 0.03637886870066317
+      },
+      {
+        "dim": 78,
+        "wasserstein1": 0.03626682573572532
+      },
+      {
+        "dim": 7,
+        "wasserstein1": 0.03599177496543696
+      },
+      {
+        "dim": 18,
+        "wasserstein1": 0.03570717196380254
+      }
+    ]
+  },
+  "report_html": "runs/nytimes/v1_seed42_100k/eda_clean/eda_report.html",
+  "png_files": []
+}

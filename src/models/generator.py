@@ -464,4 +464,11 @@ def build_generator(model_cfg: Mapping[str, Any], output_dim: int) -> nn.Module:
             gate_kernel=int(model_cfg.get("gate_kernel", 3)),
             noise_kernel_sigma=float(model_cfg.get("noise_kernel_sigma", 0.65)),
         )
+    if kind == "linear_skip":
+        return LinearSkipGenerator(
+            **common,
+            skip_dim=model_cfg.get("skip_dim"),
+            skip_init=str(model_cfg.get("skip_init", "orthogonal")),
+            skip_init_gain=float(model_cfg.get("skip_init_gain", 1.0)),
+        )
     raise ValueError(f"Unknown generator_type: {kind}")

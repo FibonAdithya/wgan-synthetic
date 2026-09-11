@@ -168,6 +168,79 @@ def test_select_on_rejects_unknown_values(tmp_path):
         train(cfg)
 
 
+def test_gate_fake_side_failure_on_one_eval_is_contained_and_the_run_completes(
+    tmp_path, monkeypatch
+):
+    """A transient fake-side failure must not take the whole run down: only
+    the eval it happened on scores inf, and a later, working eval can still
+    be selected as best -- unlike a gate that fails on every evaluation
+    (see test_gate_run_raises_when_every_evaluation_scored_inf below), which
+    has selected nothing and must not exit silently."""
+    import src.train.train_wgan_gp as train_mod
+
+    cfg = make_config(tmp_path, "mlp")
+    cfg["training"]["select_on"] = "gate"
+    cfg["training"]["num_gen_steps"] = 6
+    cfg["training"]["eval_every"] = 2
+
+    real_gate_statistics = train_mod.gate_statistics
+    calls = {"n": 0}
+
+    def flaky(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            # The first call is the real side (computed once, before the
+            # loop); the second is the first fake-side eval. Only that one
+            # fails -- every other call, including the real side and every
+            # later fake-side eval, delegates normally.
+            raise RuntimeError("boom")
+        return real_gate_statistics(*args, **kwargs)
+
+    monkeypatch.setattr(train_mod, "gate_statistics", flaky)
+
+    ckpt_path, meta = train_mod.train(cfg)
+
+    evals = meta["eval"]
+    assert len(evals) == 3
+    assert evals[0]["gate_error"] == "RuntimeError: boom"
+    assert evals[0]["selection_score"] == math.inf
+    for e in evals[1:]:
+        assert "gate_error" not in e
+        assert math.isfinite(e["selection_score"])
+    assert (tmp_path / "mlp" / "run_metadata.json").exists()
+
+    best = torch.load(ckpt_path, weights_only=False)
+    best_step = min(evals[1:], key=lambda e: e["selection_score"])["step"]
+    assert best["step"] == best_step
+
+
+def test_gate_run_raises_when_every_evaluation_scored_inf(tmp_path, monkeypatch):
+    import src.train.train_wgan_gp as train_mod
+
+    cfg = make_config(tmp_path, "mlp")
+    cfg["training"]["select_on"] = "gate"
+    cfg["training"]["num_gen_steps"] = 4
+    cfg["training"]["eval_every"] = 2
+
+    real_gate_statistics = train_mod.gate_statistics
+    calls = {"n": 0}
+
+    def none_lid(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return real_gate_statistics(*args, **kwargs)
+        stats = dict(real_gate_statistics(*args, **kwargs))
+        stats["lid_median"] = None
+        return stats
+
+    monkeypatch.setattr(train_mod, "gate_statistics", none_lid)
+
+    with pytest.raises(RuntimeError, match="no checkpoint was selected"):
+        train_mod.train(cfg)
+
+    assert (tmp_path / "mlp" / "run_metadata.json").exists()
+
+
 def test_resume_refuses_a_checkpoint_selected_under_a_different_selector(tmp_path):
     cfg = make_config(tmp_path, "mlp")
     cfg["training"]["save_every"] = 2

@@ -27,6 +27,7 @@ from src.models.generator import build_generator
 from src.train.gpu_lock import claim_gpu, gpu_lock_key
 from src.train.log_ratio import LogRatioTarget, log_ratio_penalty
 from src.train.selection import (
+    LOGGED,
     SELECTORS,
     gate_statistics,
     prefixed,
@@ -349,10 +350,14 @@ def save_checkpoint(
     resume needs and the model files do not carry. The EMA shadow matters
     most: at decay 0.999 a resume that loses it silently restarts a
     thousand-step average, and since best_generator.pt is chosen from EMA
-    weights the damage only shows up in the final artifact. `select_on` and
-    `best_score` record which selector chose `best_generator.pt` and its
-    running best, so a resume under a different selector is refused rather
-    than silently mixing two scores.
+    weights the damage only shows up in the final artifact. `best_cov` is
+    the running minimum of `cov_fro` over every evaluation so far, not the
+    `cov_fro` of the checkpoint this call is saving -- it keeps tracking
+    under `select_on: gate` too, so the two selectors can be compared after
+    the fact (see `src/train/selection.py`). `select_on` and `best_score`
+    record which selector chose `best_generator.pt` and its running best, so
+    a resume under a different selector is refused rather than silently
+    mixing two scores.
     """
     if generator_weights not in ("live", "ema"):
         raise ValueError(
@@ -519,14 +524,6 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
         )
     best_score = float("inf")
     metric = data_cfg.get("metric", "l2")
-    # Real-side gate statistics are a property of the holdout, not of the
-    # step: computed once, repeated into every eval entry so each is
-    # self-describing.
-    real_gate = (
-        gate_statistics(x_holdout, metric=metric, seed=seed)
-        if select_on == "gate"
-        else None
-    )
 
     start_step = 0
     if resume is not None:
@@ -580,6 +577,20 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
             ema_params = {k: v.to(device) for k, v in ckpt["ema_params"].items()}
 
     run_meta["resumed_from_step"] = start_step
+
+    # Real-side gate statistics are a property of the holdout, not of the
+    # step: computed once, repeated into every eval entry so each is
+    # self-describing. Measured after the resume refusals above, so an
+    # invalid --resume fails fast without paying for a ~2 s k-NN pass.
+    real_gate = (
+        gate_statistics(x_holdout, metric=metric, seed=seed)
+        if select_on == "gate"
+        else None
+    )
+    # Whether a best_generator.pt has been written this run (or was already
+    # written before a resume). inf < inf is False, so under `gate` a run
+    # where every evaluation scores inf never sets this -- checked below.
+    best_checkpoint_written = best_score < float("inf")
 
     for step in range(start_step + 1, num_gen_steps + 1):
         d_loss_val = 0.0
@@ -722,10 +733,23 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
                 stats = tensor_stats(x_holdout, fake_holdout)
                 stats.update(collapse_stats(fake_holdout))
                 if select_on == "gate":
-                    fake_gate = gate_statistics(fake_holdout, metric=metric, seed=seed)
-                    stats.update(prefixed(fake_gate, "gate_fake_"))
-                    stats.update(prefixed(real_gate, "gate_real_"))
-                    stats["selection_score"] = selection_score(fake_gate, real_gate)
+                    # The real side is computed once outside the loop and is
+                    # not wrapped: a failure there means the holdout itself
+                    # is broken, which should stop the run. A fake-side
+                    # failure is a property of this one checkpoint and must
+                    # not take the whole run down with it.
+                    try:
+                        fake_gate = gate_statistics(
+                            fake_holdout, metric=metric, seed=seed
+                        )
+                    except Exception as e:
+                        stats["gate_error"] = f"{type(e).__name__}: {e}"
+                        stats.update({f"gate_fake_{key}": None for key in LOGGED})
+                        stats["selection_score"] = math.inf
+                    else:
+                        stats.update(prefixed(fake_gate, "gate_fake_"))
+                        stats.update(prefixed(real_gate, "gate_real_"))
+                        stats["selection_score"] = selection_score(fake_gate, real_gate)
                 stats["step"] = step
                 run_meta.setdefault("eval", []).append(stats)
                 print(json.dumps({"eval": stats}))
@@ -762,6 +786,7 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
                         select_on=select_on,
                         best_score=best_score,
                     )
+                    best_checkpoint_written = True
 
         if step % save_every == 0:
             # Outside the EMA swap: this one holds live weights throughout.
@@ -786,6 +811,12 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
 
     with (out_dir / "run_config.yaml").open("w", encoding="utf-8") as f:
         yaml.safe_dump(config, f, sort_keys=False)
+
+    if select_on == "gate" and not best_checkpoint_written:
+        raise RuntimeError(
+            f"{out_dir}: every evaluation scored inf under select_on='gate'; "
+            "no checkpoint was selected as best_generator.pt"
+        )
 
     return out_dir / "best_generator.pt", run_meta
 

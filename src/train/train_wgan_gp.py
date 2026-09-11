@@ -26,6 +26,12 @@ from src.models.critic import Critic
 from src.models.generator import build_generator
 from src.train.gpu_lock import claim_gpu, gpu_lock_key
 from src.train.log_ratio import LogRatioTarget, log_ratio_penalty
+from src.train.selection import (
+    SELECTORS,
+    gate_statistics,
+    prefixed,
+    selection_score,
+)
 from src.train.spectrum import spectrum_distance
 
 
@@ -329,6 +335,8 @@ def save_checkpoint(
     ema_params: dict[str, Tensor] | None = None,
     ema_step: int = 0,
     best_cov: float = float("inf"),
+    select_on: str = "cov_fro",
+    best_score: float = float("inf"),
 ) -> None:
     """Write a checkpoint.
 
@@ -341,7 +349,10 @@ def save_checkpoint(
     resume needs and the model files do not carry. The EMA shadow matters
     most: at decay 0.999 a resume that loses it silently restarts a
     thousand-step average, and since best_generator.pt is chosen from EMA
-    weights the damage only shows up in the final artifact.
+    weights the damage only shows up in the final artifact. `select_on` and
+    `best_score` record which selector chose `best_generator.pt` and its
+    running best, so a resume under a different selector is refused rather
+    than silently mixing two scores.
     """
     if generator_weights not in ("live", "ema"):
         raise ValueError(
@@ -357,6 +368,8 @@ def save_checkpoint(
         "ema_params": {k: v.detach().cpu() for k, v in (ema_params or {}).items()},
         "ema_step": int(ema_step),
         "best_cov": float(best_cov),
+        "select_on": select_on,
+        "best_score": float(best_score),
     }
     out_dir.mkdir(parents=True, exist_ok=True)
     torch.save(ckpt, out_dir / f"checkpoint_step_{step}.pt")
@@ -499,6 +512,21 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
     }
 
     best_cov = float("inf")
+    select_on = str(train_cfg.get("select_on", "cov_fro"))
+    if select_on not in SELECTORS:
+        raise ValueError(
+            f"training.select_on must be one of {SELECTORS}, got {select_on!r}"
+        )
+    best_score = float("inf")
+    metric = data_cfg.get("metric", "l2")
+    # Real-side gate statistics are a property of the holdout, not of the
+    # step: computed once, repeated into every eval entry so each is
+    # self-describing.
+    real_gate = (
+        gate_statistics(x_holdout, metric=metric, seed=seed)
+        if select_on == "gate"
+        else None
+    )
 
     start_step = 0
     if resume is not None:
@@ -510,6 +538,12 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
             raise ValueError(
                 f"checkpoint is at step {start_step}, already at or past "
                 f"num_gen_steps={num_gen_steps}; raise the budget to continue"
+            )
+        ckpt_select_on = str(ckpt.get("select_on", "cov_fro"))
+        if ckpt_select_on != select_on:
+            raise ValueError(
+                f"{resume} was selected under select_on={ckpt_select_on!r} but the "
+                f"config says {select_on!r}; a resume cannot mix two selection scores"
             )
         if use_ema:
             saved = ckpt.get("ema_params") or {}
@@ -541,6 +575,7 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
         optim_d.load_state_dict(ckpt["optim_d_state_dict"])
         ema_step = int(ckpt.get("ema_step", 0))
         best_cov = float(ckpt.get("best_cov", float("inf")))
+        best_score = float(ckpt.get("best_score", float("inf")))
         if use_ema:
             ema_params = {k: v.to(device) for k, v in ckpt["ema_params"].items()}
 
@@ -686,11 +721,26 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
                 )
                 stats = tensor_stats(x_holdout, fake_holdout)
                 stats.update(collapse_stats(fake_holdout))
+                if select_on == "gate":
+                    fake_gate = gate_statistics(fake_holdout, metric=metric, seed=seed)
+                    stats.update(prefixed(fake_gate, "gate_fake_"))
+                    stats.update(prefixed(real_gate, "gate_real_"))
+                    stats["selection_score"] = selection_score(fake_gate, real_gate)
                 stats["step"] = step
                 run_meta.setdefault("eval", []).append(stats)
                 print(json.dumps({"eval": stats}))
-                if stats["cov_fro"] < best_cov:
+                # best_cov keeps tracking cov_fro under both selectors so the
+                # two can be compared after the fact.
+                improved_cov = stats["cov_fro"] < best_cov
+                if improved_cov:
                     best_cov = stats["cov_fro"]
+                if select_on == "gate":
+                    improved = stats["selection_score"] < best_score
+                    if improved:
+                        best_score = stats["selection_score"]
+                else:
+                    improved = improved_cov
+                if improved:
                     # Saved from inside the EMA swap: generator_state_dict holds
                     # EMA weights, but optim_g_state_dict (and the critic) are
                     # the LIVE training state -- the optimiser moments belong to
@@ -709,6 +759,8 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
                         ema_params=ema_params,
                         ema_step=ema_step,
                         best_cov=best_cov,
+                        select_on=select_on,
+                        best_score=best_score,
                     )
 
         if step % save_every == 0:
@@ -725,6 +777,8 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
                 ema_params=ema_params,
                 ema_step=ema_step,
                 best_cov=best_cov,
+                select_on=select_on,
+                best_score=best_score,
             )
 
     with (out_dir / "run_metadata.json").open("w", encoding="utf-8") as f:

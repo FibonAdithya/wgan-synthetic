@@ -3,6 +3,7 @@ import math
 import pytest
 import torch
 
+from src.train.selection import selection_score
 from src.train.train_wgan_gp import train
 
 
@@ -107,3 +108,74 @@ def test_training_resumes_on_live_weights_after_ema_eval(tmp_path):
 def test_mlp_config_without_generator_type_still_trains(tmp_path):
     ckpt_path, _ = train(make_config(tmp_path, None))
     assert ckpt_path.exists()
+
+
+def test_select_on_defaults_to_cov_fro_and_records_it(tmp_path):
+    cfg = make_config(tmp_path, "mlp")
+    ckpt_path, meta = train(cfg)
+    best = torch.load(ckpt_path, weights_only=False)
+    assert best["select_on"] == "cov_fro"
+    assert "gate_fake_lid_median" not in meta["eval"][0]
+
+
+def test_select_on_gate_logs_gate_statistics_and_picks_the_lowest_score(tmp_path):
+    cfg = make_config(tmp_path, "mlp")
+    cfg["training"]["select_on"] = "gate"
+    cfg["training"]["num_gen_steps"] = 6
+    cfg["training"]["eval_every"] = 2
+    ckpt_path, meta = train(cfg)
+
+    evals = meta["eval"]
+    assert len(evals) == 3
+    for e in evals:
+        for stat in (
+            "lid_median",
+            "relative_contrast_median",
+            "hubness_skew",
+            "ivf_gini",
+        ):
+            assert f"gate_fake_{stat}" in e and f"gate_real_{stat}" in e
+        # The logged score must be the score of the logged statistics, fake
+        # against real in that order: pins the trainer to the module's
+        # function and catches a swapped or mis-keyed call.
+        fake = {
+            k[len("gate_fake_") :]: v
+            for k, v in e.items()
+            if k.startswith("gate_fake_")
+        }
+        real = {
+            k[len("gate_real_") :]: v
+            for k, v in e.items()
+            if k.startswith("gate_real_")
+        }
+        assert e["selection_score"] == selection_score(fake, real)
+    # real-side statistics are computed once and repeated, not re-drawn
+    assert all(
+        e["gate_real_lid_median"] == evals[0]["gate_real_lid_median"] for e in evals
+    )
+
+    best = torch.load(ckpt_path, weights_only=False)
+    assert best["select_on"] == "gate"
+    best_step = min(evals, key=lambda e: e["selection_score"])["step"]
+    assert best["step"] == best_step
+    assert best["best_score"] == pytest.approx(min(e["selection_score"] for e in evals))
+
+
+def test_select_on_rejects_unknown_values(tmp_path):
+    cfg = make_config(tmp_path, "mlp")
+    cfg["training"]["select_on"] = "vibes"
+    with pytest.raises(ValueError, match="select_on"):
+        train(cfg)
+
+
+def test_resume_refuses_a_checkpoint_selected_under_a_different_selector(tmp_path):
+    cfg = make_config(tmp_path, "mlp")
+    cfg["training"]["save_every"] = 2
+    train(cfg)
+    live_ckpt = tmp_path / "mlp" / "checkpoint_step_2.pt"
+    assert live_ckpt.exists()
+    cfg2 = make_config(tmp_path, "mlp")
+    cfg2["training"]["select_on"] = "gate"
+    cfg2["training"]["num_gen_steps"] = 8
+    with pytest.raises(ValueError, match="select_on"):
+        train(cfg2, resume=str(live_ckpt))

@@ -321,17 +321,18 @@ both arms. Any write-up of a v4 result must lead with those.
 
 ### `generator_type`
 
-The architecture axis in the `model` config block, accepting `mlp` (default),
-`gated`, `structured_gated`, and `linear_skip`. It sits underneath the variant
-numbering: v0, v1 and v1_5 all use `mlp` and differ only in training
-settings.
+The architecture axis in the `model` config block. Four values are built:
+`mlp` (default), `gated`, `structured_gated`, and `linear_skip`. It sits
+underneath the variant numbering: on SIFT, v0, v1 and v1_5 all use `mlp`
+and differ only in training settings.
 
-A third value, `spherical`, is planned and not built. It is phase (b) of the
+A fifth value, `spherical`, is planned and not built. It is phase (b) of the
 multi-dataset design: a generator whose output is unit-norm by construction
 rather than by a normalization applied afterwards, for the four `angular`
-families. Until it exists, `deep`, `glove`, `nytimes` and `openai` all start
-their ladders on `mlp`, and any dataset page naming `spherical` is describing
-the intended rung, not a trained one.
+families. Until it exists, `deep`, `glove` and `openai` all start their
+ladders on `mlp` (`nytimes` moved to `linear_skip` at its v1), and any
+dataset page naming `spherical` is describing the intended rung, not a
+trained one.
 
 Checkpoints do not record `generator_type` — the architecture is rebuilt from
 the run config at load time. A checkpoint is therefore only loadable
@@ -409,6 +410,25 @@ The holdout is smaller than a family's canonical N, so `gate_*` values rank
 checkpoints within one run and are not the family's profile. Checkpoints
 record `select_on` and `best_score`; a resume under a different selector is
 refused.
+
+Both sides are measured with exact-zero rows dropped (`zero_rows` in the
+logged statistics is the count) -- a zero row sits at the origin rather than
+on the sphere, and on NYTimes it roughly halves the reference LID. On the
+shipped 12,500-row holdout the reference reads about 5.6% above the
+canonical 20,000-row LID for NYTimes, which is acceptable for a selector
+that only ranks checkpoints of one run against each other and is not the
+family's profile.
+
+A fake-side `gate_statistics` failure is caught and logged as `gate_error`
+on that eval, with `selection_score: inf`; it does not stop the run.
+`selection_score` is also `inf` when more than half the fake side's queries
+were discarded from the LID/contrast estimators. A `select_on: gate` run in
+which every evaluation scores `inf` -- so no checkpoint was ever written --
+raises after `run_metadata.json` and `run_config.yaml` are written.
+
+`run_metadata.json` can therefore contain `Infinity` for `selection_score`
+and `best_score`. Python's `json` module reads that back fine; it is not
+strict JSON, so a consumer that insists on the spec will choke on it.
 
 Training entrypoint:
 

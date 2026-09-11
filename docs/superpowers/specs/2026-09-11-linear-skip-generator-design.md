@@ -99,14 +99,18 @@ this family Gini is mostly a k-means artefact. Lower is better; the
 checkpoint with the lowest score is written as `best_generator.pt`, and
 `best_score` replaces `best_cov` in the checkpoint's resume state under a
 key that names which selector produced it, so a resume cannot silently mix
-the two.
+the two. Exact-zero rows are dropped from both sides before measuring: the
+real NYTimes holdout carries seven of them, and a zero row sits at the
+origin rather than on the sphere, which corrupts every one of these
+statistics.
 
 The holdout is 5% of the training file (12,500 rows for `nytimes_250k`),
 below the canonical 20,000. The selection is relative between checkpoints
 of one run, so this is acceptable; the numbers it logs are not the family's
 profile and must not be copied into a dataset page. Cost: one 12,500-row
-brute-force k-NN per evaluation, ~10 s on CPU; at `eval_every: 1000` over
-30,000 steps that is 5 minutes on a 35-minute run.
+brute-force k-NN per evaluation, measured at 2.2 s on CPU (not the ~10 s
+assumed above); at `eval_every: 1000` over 30,000 steps that is 30
+evaluations, about 70 s total on a 35-minute run.
 
 ### The rung
 

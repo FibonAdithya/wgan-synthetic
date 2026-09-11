@@ -2,7 +2,7 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from src.models.generator import GatedGenerator, Generator
+from src.models.generator import GatedGenerator, Generator, LinearSkipGenerator
 
 LATENT = 16
 OUTPUT = 128
@@ -166,3 +166,113 @@ def test_float32_output_is_unchanged_by_dtype_handling(gen):
     b = gen(z)
     assert a.dtype == torch.float32
     assert torch.equal(a, b)
+
+
+# --- linear_skip -----------------------------------------------------------
+
+
+def _cov_rank(x: torch.Tensor, floor: float = 1e-6) -> int:
+    x = x - x.mean(dim=0, keepdim=True)
+    eig = torch.linalg.eigvalsh(x.T @ x / (x.shape[0] - 1))
+    return int((eig > floor).sum())
+
+
+def test_linear_skip_output_shape():
+    torch.manual_seed(0)
+    gen = LinearSkipGenerator(
+        latent_dim=48, output_dim=32, hidden_dims=[16, 16], skip_dim=32
+    )
+    out = gen(torch.randn(64, 48))
+    assert out.shape == (64, 32)
+    assert gen.trunk_latent_dim == 16 and gen.skip_dim == 32
+
+
+def test_linear_skip_with_trunk_zeroed_is_the_skip_map():
+    torch.manual_seed(0)
+    gen = LinearSkipGenerator(
+        latent_dim=48, output_dim=32, hidden_dims=[16, 16], skip_dim=32
+    )
+    last = gen.trunk.net[-1]
+    with torch.no_grad():
+        last.weight.zero_()
+        last.bias.zero_()
+    z = torch.randn(8, 48)
+    expected = z[:, 16:] @ gen.skip.weight.T
+    assert torch.allclose(gen(z), expected, atol=1e-6)
+
+
+def test_linear_skip_output_is_full_rank_where_mlp_is_not():
+    # The discriminating claim of the design: the skip path gives the output
+    # distribution full rank by construction, where an MLP of the same width
+    # collapses. 4096 latents, covariance rank measured against a floor.
+    #
+    # The MLP's bound is the width of its last hidden layer (16), not the
+    # latent (8): the output is Linear(16 -> 64) applied to a 16-vector, and a
+    # piecewise-linear map of an 8-d latent fills all 16 of those directions.
+    # Measured at rank 16 on three seeds during the plan audit, so `<= 8`
+    # would fail; `<= 16 < 64` is the bound that actually holds.
+    torch.manual_seed(0)
+    n, out_dim = 4096, 64
+    mlp = Generator(latent_dim=8, output_dim=out_dim, hidden_dims=[16, 16])
+    skip = LinearSkipGenerator(
+        latent_dim=8 + out_dim,
+        output_dim=out_dim,
+        hidden_dims=[16, 16],
+        skip_dim=out_dim,
+    )
+    with torch.no_grad():
+        rank_mlp = _cov_rank(mlp(torch.randn(n, 8)))
+        rank_skip = _cov_rank(skip(torch.randn(n, 8 + out_dim)))
+    assert rank_mlp <= 16 < out_dim  # bounded by the last hidden width
+    assert rank_skip == out_dim  # the skip map supplies all 64
+
+
+def test_linear_skip_identity_init_is_the_identity():
+    gen = LinearSkipGenerator(
+        latent_dim=40,
+        output_dim=32,
+        hidden_dims=[16],
+        skip_dim=32,
+        skip_init="identity",
+    )
+    assert torch.equal(gen.skip.weight, torch.eye(32))
+
+
+def test_linear_skip_orthogonal_init_has_orthonormal_columns():
+    torch.manual_seed(0)
+    gen = LinearSkipGenerator(
+        latent_dim=40, output_dim=32, hidden_dims=[16], skip_dim=32, skip_init_gain=2.0
+    )
+    w = gen.skip.weight
+    assert torch.allclose(w.T @ w, 4.0 * torch.eye(32), atol=1e-5)
+
+
+@pytest.mark.parametrize(
+    "kwargs, match",
+    [
+        (dict(latent_dim=32, output_dim=32, hidden_dims=[16], skip_dim=32), "skip_dim"),
+        (
+            dict(
+                latent_dim=48,
+                output_dim=32,
+                hidden_dims=[16],
+                skip_dim=16,
+                skip_init="identity",
+            ),
+            "identity",
+        ),
+        (
+            dict(
+                latent_dim=48,
+                output_dim=32,
+                hidden_dims=[16],
+                skip_dim=32,
+                skip_init="nope",
+            ),
+            "skip_init",
+        ),
+    ],
+)
+def test_linear_skip_rejects_bad_config(kwargs, match):
+    with pytest.raises(ValueError, match=match):
+        LinearSkipGenerator(**kwargs)

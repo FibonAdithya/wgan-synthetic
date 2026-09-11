@@ -29,6 +29,74 @@ class Generator(nn.Module):
         return self.net(z)
 
 
+class LinearSkipGenerator(nn.Module):
+    """An MLP trunk plus a full-rank linear map from a separate latent block.
+
+    The latent of size `latent_dim` is split: the first `latent_dim -
+    skip_dim` entries feed the trunk (a plain `Generator`), the last
+    `skip_dim` entries feed a bias-free linear map `W`. Output is the sum:
+
+        x = trunk(z[:, :t]) + W z[:, t:]        t = latent_dim - skip_dim
+
+    Why: the trunk's Jacobian has rank about 15 on every family measured, so
+    its samples lie on a low-dimensional sheet that a per-vector critic
+    cannot see and that ANN-difficulty statistics read as "too easy". With
+    the skip term, d x / d z_skip = W, so the output's local dimension is at
+    least rank(W) whatever the trunk does; the trunk is left to supply the
+    structure a Gaussian lacks. See
+    docs/superpowers/specs/2026-09-11-linear-skip-generator-design.md.
+
+    The split lives here rather than in a second latent argument so that
+    every sampling site (`sample_generator`, `src.sample.generate`) keeps
+    drawing `randn(n, latent_dim)` and checkpoints keep loading from
+    `run_config.yaml` unchanged.
+    """
+
+    def __init__(
+        self,
+        latent_dim: int,
+        output_dim: int,
+        hidden_dims: Iterable[int],
+        negative_slope: float = 0.2,
+        skip_dim: int | None = None,
+        skip_init: str = "orthogonal",
+        skip_init_gain: float = 1.0,
+    ):
+        super().__init__()
+        skip_dim = output_dim if skip_dim is None else int(skip_dim)
+        if skip_dim <= 0 or skip_dim >= latent_dim:
+            raise ValueError(
+                f"skip_dim must be in (0, latent_dim); got skip_dim={skip_dim}, "
+                f"latent_dim={latent_dim}"
+            )
+        if skip_init not in ("orthogonal", "identity"):
+            raise ValueError(
+                f"skip_init must be 'orthogonal' or 'identity', got {skip_init!r}"
+            )
+        if skip_init == "identity" and skip_dim != output_dim:
+            raise ValueError(
+                f"identity skip_init needs skip_dim == output_dim; got {skip_dim} != {output_dim}"
+            )
+        self.skip_dim = skip_dim
+        self.trunk_latent_dim = latent_dim - skip_dim
+        self.trunk = Generator(
+            latent_dim=self.trunk_latent_dim,
+            output_dim=output_dim,
+            hidden_dims=hidden_dims,
+            negative_slope=negative_slope,
+        )
+        self.skip = nn.Linear(skip_dim, output_dim, bias=False)
+        with torch.no_grad():
+            if skip_init == "identity":
+                self.skip.weight.copy_(torch.eye(output_dim))
+            else:
+                nn.init.orthogonal_(self.skip.weight, gain=skip_init_gain)
+
+    def forward(self, z: torch.Tensor) -> torch.Tensor:
+        t = self.trunk_latent_dim
+        return self.trunk(z[:, :t]) + self.skip(z[:, t:])
+
+
 class GatedGenerator(nn.Module):
     """Generate non-negative unit vectors with a learnable point mass at zero.
 

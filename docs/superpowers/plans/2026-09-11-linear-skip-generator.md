@@ -33,11 +33,12 @@
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `tests/test_generator.py`:
+Change the import at the top of `tests/test_generator.py` to
+`from src.models.generator import GatedGenerator, Generator, LinearSkipGenerator`
+(ruff's isort rule will demand this order), then append:
 
 ```python
 # --- linear_skip -----------------------------------------------------------
-from src.models.generator import LinearSkipGenerator  # noqa: E402
 
 
 def _cov_rank(x: torch.Tensor, floor: float = 1e-6) -> int:
@@ -70,6 +71,12 @@ def test_linear_skip_output_is_full_rank_where_mlp_is_not():
     # The discriminating claim of the design: the skip path gives the output
     # distribution full rank by construction, where an MLP of the same width
     # collapses. 4096 latents, covariance rank measured against a floor.
+    #
+    # The MLP's bound is the width of its last hidden layer (16), not the
+    # latent (8): the output is Linear(16 -> 64) applied to a 16-vector, and a
+    # piecewise-linear map of an 8-d latent fills all 16 of those directions.
+    # Measured at rank 16 on three seeds during the plan audit, so `<= 8`
+    # would fail; `<= 16 < 64` is the bound that actually holds.
     torch.manual_seed(0)
     n, out_dim = 4096, 64
     mlp = Generator(latent_dim=8, output_dim=out_dim, hidden_dims=[16, 16])
@@ -79,8 +86,8 @@ def test_linear_skip_output_is_full_rank_where_mlp_is_not():
     with torch.no_grad():
         rank_mlp = _cov_rank(mlp(torch.randn(n, 8)))
         rank_skip = _cov_rank(skip(torch.randn(n, 8 + out_dim)))
-    assert rank_mlp <= 8            # an 8-d latent cannot make more than 8 directions
-    assert rank_skip == out_dim     # the skip map supplies all 64
+    assert rank_mlp <= 16 < out_dim  # bounded by the last hidden width
+    assert rank_skip == out_dim  # the skip map supplies all 64
 
 
 def test_linear_skip_identity_init_is_the_identity():
@@ -220,12 +227,11 @@ git commit -m "feat(models): LinearSkipGenerator, an MLP trunk plus a full-rank 
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `tests/test_generator_factory.py`:
+Add `LinearSkipGenerator,` to the parenthesised `from src.models.generator import (...)`
+block at the top of `tests/test_generator_factory.py` (alphabetical: after `Generator,`),
+then append:
 
 ```python
-from src.models.generator import LinearSkipGenerator  # noqa: E402
-
-
 def test_linear_skip_defaults_skip_dim_to_output_dim():
     cfg = dict(BASE_CFG, generator_type="linear_skip", latent_dim=16 + 128)
     generator = build_generator(cfg, output_dim=128)
@@ -482,11 +488,11 @@ def prefixed(stats: Mapping[str, float | int | None], prefix: str) -> dict[str, 
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `~/TIG/wgan-synthetic/.venv/bin/python -m pytest tests/test_selection.py -q`
-Expected: 9 passed.
+Expected: 10 passed (7 named tests plus 3 parametrised cases).
 
 - [ ] **Step 5: Mutation check**
 
-Change `total += abs(...)` to `total -= abs(...)`. Run the tests. Expected: `test_score_is_the_sum_of_normalised_lid_and_contrast_gaps` and `test_score_prefers_the_checkpoint_nearer_real_on_both` FAIL. Restore, re-run: 9 passed.
+Change `total += abs(...)` to `total -= abs(...)`. Run the tests. Expected: `test_score_is_the_sum_of_normalised_lid_and_contrast_gaps` and `test_score_prefers_the_checkpoint_nearer_real_on_both` FAIL. Restore, re-run: 10 passed.
 
 - [ ] **Step 6: Lint, format, commit**
 
@@ -534,7 +540,12 @@ def test_select_on_gate_logs_gate_statistics_and_picks_the_lowest_score(tmp_path
     for e in evals:
         for stat in ("lid_median", "relative_contrast_median", "hubness_skew", "ivf_gini"):
             assert f"gate_fake_{stat}" in e and f"gate_real_{stat}" in e
-        assert math.isfinite(e["selection_score"]) or e["selection_score"] == math.inf
+        # The logged score must be the score of the logged statistics, fake
+        # against real in that order: pins the trainer to the module's
+        # function and catches a swapped or mis-keyed call.
+        fake = {k[len("gate_fake_"):]: v for k, v in e.items() if k.startswith("gate_fake_")}
+        real = {k[len("gate_real_"):]: v for k, v in e.items() if k.startswith("gate_real_")}
+        assert e["selection_score"] == selection_score(fake, real)
     # real-side statistics are computed once and repeated, not re-drawn
     assert all(e["gate_real_lid_median"] == evals[0]["gate_real_lid_median"] for e in evals)
 
@@ -564,6 +575,9 @@ def test_resume_refuses_a_checkpoint_selected_under_a_different_selector(tmp_pat
     with pytest.raises(ValueError, match="select_on"):
         train(cfg2, resume=str(live_ckpt))
 ```
+
+Add `from src.train.selection import selection_score` to the imports at the top of
+`tests/test_train_smoke.py` (after the `src.train.train_wgan_gp` import; ruff will order it).
 
 The smoke fixture's holdout is `256 * 0.2 = 51` rows, so `ann_difficulty.compute` clamps `k` to 50 and `nlist` to 25; that is fine for a smoke test, and `selection_score` may legitimately be `inf` if every query is discarded on a degenerate step, which the test allows.
 
@@ -619,7 +633,9 @@ Extend the docstring's list of resume state with one sentence: `select_on` and `
 
 Note: `train_cfg` is already bound earlier in `train` (it is used for `gpu_memory_fraction`); if the name in scope at that point differs, use `config["training"]`. `data_cfg` is bound at ~line 417.
 
-3d. In the resume block, after `best_cov = float(ckpt.get("best_cov", float("inf")))`:
+3d. In the resume block, the refusal belongs with the other cheap refusals -- the block's
+own comment says "cheap refusals first, before any load_state_dict call does wasted work".
+Insert directly after the `start_step >= num_gen_steps` refusal (before the `use_ema` check):
 
 ```python
         ckpt_select_on = str(ckpt.get("select_on", "cov_fro"))
@@ -628,6 +644,11 @@ Note: `train_cfg` is already bound earlier in `train` (it is used for `gpu_memor
                 f"{resume} was selected under select_on={ckpt_select_on!r} but the "
                 f"config says {select_on!r}; a resume cannot mix two selection scores"
             )
+```
+
+and after `best_cov = float(ckpt.get("best_cov", float("inf")))`:
+
+```python
         best_score = float(ckpt.get("best_score", float("inf")))
 ```
 
@@ -763,6 +784,11 @@ Copy `scripts/nytimes_v0_seed42_job.sh` and change: the header comment (v1), `RU
   --output-dir "$RUN/eda_clean" $CANON --no-png --plotlyjs cdn
 mkdir -p "$KEEP" && cp -r "$RUN"/. "$KEEP"/ && ls -la "$KEEP"
 ```
+
+This tail deliberately drops v0's `eda_as_shipped` report and its `check_gate` line: the
+spec's success criterion is read against the cleaned corpus only, and the as-shipped
+comparison was shown meaningless on the v0 page (the generator has no zero rows). Keep the
+`test -f "$REAL" && test -f "$CLEAN"` line and the training line as they are.
 
 Then `bash -n scripts/nytimes_v1_seed42_job.sh && chmod +x scripts/nytimes_v1_seed42_job.sh`.
 

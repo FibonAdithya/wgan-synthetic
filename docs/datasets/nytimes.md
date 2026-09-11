@@ -200,7 +200,7 @@ the cleaned figures are what the corpus looks like without the artefact.
 |---|---|---|---|---|
 | `v0` | plain WGAN-GP | `configs/nytimes/v0_seed42.yaml`, instrument of `configs/nytimes/v0.yaml` | `runs/nytimes/v0_seed42` (box: `/workspace/nytimes-v0/v0_seed42`) | trained -- n=1 seed, misses the gate on every statistic; see `## v0, measured` |
 | `v0` at 100k steps | same rung, budget raised | `configs/nytimes/v0_seed42_100k.yaml`, resumed from the row above | `runs/nytimes/v0_seed42_100k` (box: `/workspace/nytimes-v0/v0_seed42_100k`) | trained -- gate statistics worse than at 30k; see `### Continued to 100,000 steps` |
-| `v1` | + linear skip path (`generator_type: linear_skip`) and `select_on: gate` | `configs/nytimes/v1.yaml`; box instrument `configs/nytimes/v1_seed42.yaml` | `runs/nytimes/v1_seed42` | not trained |
+| `v1` | + linear skip path (`generator_type: linear_skip`) and `select_on: gate` | `configs/nytimes/v1.yaml`; box instrument `configs/nytimes/v1_seed42.yaml` | `runs/nytimes/v1_seed42` (box: `/workspace/nytimes-v1/v1_seed42`) | trained -- n=1 seed, misses the gate on LID and hubness, contrast within 3%; see `## v1, measured` |
 
 Train `v0`:
 
@@ -322,6 +322,134 @@ by a low-dimensional cloud with the right mean and covariance envelope. The
 missing constraint is on local structure, which is what the later ladder
 rungs (`distance_reg_alpha`, `lid_reg`, `spectrum_reg`, all `0.0` in `v0`)
 exist to supply. Choosing one is a ladder decision.
+
+## v1, measured
+
+Trained 2026-09-11 on `tig-gpu` (RTX 3060) as one gpuq job,
+`wgan-synthetic-20260911T134101Z-32dbda`
+(`scripts/nytimes_v1_seed42_job.sh` at commit `a9ea30f`): 30,000 generator
+steps of `configs/nytimes/v1_seed42.yaml` (`generator_type: linear_skip`,
+`select_on: gate`), submitted 13:41:01Z and complete at 14:19:17Z -- **38
+minutes wall for the whole job** (training, two 50,000-row samples and one
+`eda_report`), against v0's 37 minutes for training alone, so the extra
+12,500-row holdout k-NN each eval adds under `select_on: gate` cost nothing
+measurable. No `gate_error` on any eval; `resumed_from_step` 0; EMA is off in
+this config, so every checkpoint holds live weights. 50,000 samples at
+sampling seed 42 were drawn from `best_generator.pt` (the gate selector's
+pick, step 20,000, `best_score` `0.0114`) and from the step-30,000
+checkpoint, measured together against the cleaned real corpus in one
+`eda_report` invocation at the canonical conditions. The summaries,
+`run_config.yaml` and `run_metadata.json` are committed under
+`docs/results/nytimes-v1-seed42/`; the raw samples are gitignored under
+`runs/nytimes/v1_seed42/`.
+
+The parenthesised figure after each `v1` value follows the same convention
+`v0`'s section uses: distance from real in units of the real corpus's own
+ten-draw spread (the range in the real column). Alongside it is the percentage
+off real median the spec's 3% bar is stated in, since that is the number the
+success criterion is measured against; both are computed from the same
+`docs/datasets/nytimes_noise_floor.json` range as `v0`'s table.
+
+| Statistic | real, cleaned (10-draw range) | `v1_best` (step 20,000, gate-selected) | step 30,000 |
+|---|---|---|---|
+| LID median | `55.97` (54.97 -- 56.86) | `62.58` (11.8% off, 3.5x) | `45.8` (18.2% off, 5.4x) |
+| Relative contrast | `1.271` (1.265 -- 1.276) | `1.242` (2.3% off, 2.7x) | `1.42` (11.8% off, 13.9x) |
+| Hubness skew | `2.529` (2.315 -- 2.779) | `10.37` (310.0% off, 16.9x) | `5.164` (104.2% off, 5.7x) |
+| IVF cell-balance Gini | `0.7767` (0.7832 -- 0.8231) | `0.8273` (6.5% off, 1.3x) | `0.7239` (6.8% off, 1.3x) |
+
+Effective rank: real `247.4`, `v1_best` `152.9`, step 30,000 `95.7`. Median
+5-NN distance: real `1.205`, `v1_best` `1.159`, step 30,000 `1.017`. Both sit
+much closer to real than `v0` ever got (effective rank `84` at step 30,000
+on the as-shipped corpus) -- the skip path is doing the full-rank-output job
+the design asked of it.
+
+**The gate selector picked step 20,000 (score `0.0114`); `cov_fro` would have
+picked step 3,000** (`cov_fro` `0.0365`, whose gate score is `0.2774` -- a
+Gaussian-like checkpoint reading holdout LID `72`, contrast `1.17`). The
+reference the selector measured against (12,500-row holdout, 7 exact-zero
+rows dropped) reads LID `58.97`, contrast `1.241`, hubness `2.11`, Gini
+`0.813`; that reference is `5.4%` above the canonical 20k-row real median of
+`55.97`, and the selected step reads `59.32` on the holdout but `62.58` at
+20k rows -- two different measurement conditions, which is why "score
+`0.011`" and "`11.8%` off" both describe the same checkpoint without
+contradicting each other.
+
+Trajectory on the holdout (`run_metadata.json` `eval`, full table there):
+
+| step | fake LID | fake RC | hubness | Gini | score | cov_fro |
+|---|---|---|---|---|---|---|
+| 1000 | 64.39 | 1.1925 | 2.04 | 0.765 | 0.1312 | 0.0424 |
+| 3000 | 71.99 | 1.1709 | 11.87 | 0.867 | 0.2774 | 0.0365 |
+| 10000 | 62.95 | 1.2079 | 13.46 | 0.847 | 0.0943 | 0.0874 |
+| 15000 | 60.4 | 1.2385 | 8.27 | 0.861 | 0.0264 | 0.1147 |
+| 20000 | 59.32 | 1.2345 | 7.02 | 0.841 | 0.0114 | 0.1152 |
+| 21000 | 55.77 | 1.2475 | 5.69 | 0.843 | 0.0593 | 0.1194 |
+| 25000 | 51.56 | 1.2829 | 5.45 | 0.807 | 0.1593 | 0.1386 |
+| 30000 | 42.56 | 1.4024 | 4.74 | 0.761 | 0.4081 | 0.1835 |
+
+The generator starts at the Gaussian's numbers (LID `72` / contrast `1.17`
+around steps 2,000--7,000, close to the Gaussian row's `82.5` / `1.158` on
+this page) and drifts monotonically toward `v0`'s sheet (LID `42.6` /
+contrast `1.40` at step 30,000; `v0` read `14` / `2.08` at the same step). It
+passes through the real point around step 20,000--21,000 and does not stay
+there. The gate selector caught the crossing; `cov_fro` would have caught the
+Gaussian end instead.
+
+Skip map `W` (256x256) singular values, live weights, 4,096 fixed latents:
+
+| step | max | median | min | # singular values > 0.1 |
+|---|---|---|---|---|
+| 1000 | 2.08 | 0.837 | 0.464 | 256 |
+| 10000 | 1.721 | 0.905 | 0.24 | 256 |
+| 20000 | 1.473 | 0.979 | 0.091 | 255 |
+| 30000 | 1.561 | 0.918 | 0.028 | 254 |
+
+`W` stays full rank throughout training. The design's rank argument held --
+rank is not what moved.
+
+Trunk-versus-skip output energy (mean squared norm over the same 4,096
+latents) and the skip term's share of the pre-normalisation output:
+
+| step | \|\|trunk\|\|^2 | \|\|skip\|\|^2 | skip share | \|cos(trunk, skip)\| |
+|---|---|---|---|---|
+| 1000 | 24.7 | 250.3 | 0.91 | 0.053 |
+| 8000 | 115.3 | 256.0 | 0.689 | 0.046 |
+| 15000 | 145.8 | 257.2 | 0.638 | 0.048 |
+| 20000 | 213.6 | 254.3 | 0.544 | 0.047 |
+| 26000 | 415.1 | 247.1 | 0.373 | 0.047 |
+| 30000 | 944.3 | 239.8 | 0.202 | 0.045 |
+
+The skip term's energy stays pinned near `256` (orthogonal `W`, unit
+latents) while the trunk's grows `38x` over the run. After the trainer's L2
+normalisation, the residual's share of each output vector falls from `91%`
+to `20%`. The noise-sweep on this page found LID `56` at noise-to-signal
+`1.4`; this run crosses that ratio near step 20,000 and keeps going. The two
+terms stay orthogonal (`cos` `0.05` throughout), so this is a balance drift
+between two terms that never learn to interact, not the trunk learning to
+cancel the skip.
+
+**`v1` misses the bar.** At the selected checkpoint, contrast is within `3%`
+of real (`2.3%`) but LID is `11.8%` high, hubness skew is `10.4` against a
+real range topping out at `2.78` and worse than the noise-sweep bound of
+`4.0`, and Gini sits just above the real range. The architecture did what the
+spec claimed: the output stays full rank (`W`'s singular values never
+collapse), the generator reaches LID `72` at step 3,000 instead of the `14`
+`v0` was stuck near, and the gate selector found a checkpoint that passes
+through the real LID/contrast point -- something no `v0` checkpoint ever did.
+The real-side cleaning was necessary to see any of this: without it the
+reference LID the selector measures against is `29.9`, not `59`. But the
+checkpoint that matches is a transient. The trunk-to-skip balance is
+unconstrained under a per-vector critic, so the trunk's output energy climbs
+monotonically (`38x` over the run) while the skip's holds still, and the
+"real-like" checkpoint is a way station on the trunk's path back to `v0`'s
+sheet, not a stable point. Per the spec's own rule for this outcome: the
+quantity that drifted (the trunk/skip energy balance, read only pairwise
+through the residual) is one a per-vector critic cannot see, so the next
+rung is the neighbourhood-aware critic (approach B), not another change to
+this generator. Pinning the skip share (or the trunk's output scale) is worth
+trying as a cheap diagnostic to see whether hubness comes down on its own,
+but it is a diagnostic, not a rung -- it does not give the critic the
+neighbourhood information the failure mode needs.
 
 ## Gate
 

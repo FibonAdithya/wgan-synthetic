@@ -54,7 +54,7 @@ bands; the pages are the source of truth for anything family-specific.
 | `gist` | 960 | `l2` | non-negative dense float, little zero mass, high ambient dim | `mlp` | `docs/datasets/gist.md` |
 | `deep` | 96 | `angular` | dense signed unit-norm image embeddings | `mlp` today, `spherical` when built | `docs/datasets/deep.md` |
 | `glove` | 100 | `angular` | dense signed word vectors, strong density gradient | `mlp` today, `spherical` when built | `docs/datasets/glove.md` |
-| `nytimes` | 256 | `angular` | dense signed document embeddings, strong topic clusters | `mlp` at v0, `linear_skip` from v1 (v1, v2 and v2b trained, none meeting the bar), `spherical` still planned | `docs/datasets/nytimes.md` |
+| `nytimes` | 256 | `angular` | dense signed document embeddings, strong topic clusters | `mlp` at v0, `linear_skip` from v1 (v1, v2, v2b and v2c trained, none meeting the bar), `spherical` still planned | `docs/datasets/nytimes.md` |
 | `openai` | 1536 | `angular` | unit-norm text embeddings, very high ambient dim, low intrinsic dim | `mlp` today, `spherical` when built | `docs/datasets/openai.md` |
 
 ### Fetching
@@ -230,7 +230,7 @@ independent, a variant number means nothing across families: SIFT's `v2` and
 a future GIST `v2` are unrelated, and only ever compare within one dataset.
 Each family's ladder and its status live in its page under `docs/datasets/`.
 SIFT and DEEP have trained rungs above `v0`; GloVe has a trained `v0` and
-nothing above it; NYTimes has trained rungs at `v1`, `v2` and `v2b` above
+nothing above it; NYTimes has trained rungs at `v1`, `v2`, `v2b` and `v2c` above
 `v0`, none of which yet reproduces the corpus's search difficulty; the other
 two have a `v0` baseline config only.
 

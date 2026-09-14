@@ -202,7 +202,7 @@ the cleaned figures are what the corpus looks like without the artefact.
 | `v0` at 100k steps | same rung, budget raised | `configs/nytimes/v0_seed42_100k.yaml`, resumed from the row above | `runs/nytimes/v0_seed42_100k` (box: `/workspace/nytimes-v0/v0_seed42_100k`) | trained -- gate statistics worse than at 30k; see `### Continued to 100,000 steps` |
 | `v1` | + linear skip path (`generator_type: linear_skip`) and `select_on: gate` | `configs/nytimes/v1.yaml`; box instrument `configs/nytimes/v1_seed42.yaml` | `runs/nytimes/v1_seed42` (box: `/workspace/nytimes-v1/v1_seed42`) | trained -- n=1 seed, misses the gate on LID and hubness, contrast within 3%; see `## v1, measured` |
 | `v1` at 100k steps | same rung, budget raised | `configs/nytimes/v1_seed42_100k.yaml`, resumed from the row above | `runs/nytimes/v1_seed42_100k` (box: `/workspace/nytimes-v1/v1_seed42_100k`) | trained -- collapses; gate statistics worse at every step after 30k; see `### Continued to 100,000 steps` under v1 |
-| `v2` | + neighbourhood-aware critic (`critic_type: neighbourhood`, k 20, floor 0.01) and `drop_zero_rows: true`; duplicates kept | `configs/nytimes/v2.yaml`; box instrument `configs/nytimes/v2_seed42.yaml` | `runs/nytimes/v2_seed42` (box: `/workspace/nytimes-v2/v2_seed42`) | planned -- spec `docs/superpowers/specs/2026-09-14-neighbourhood-critic-design.md` |
+| `v2` | + neighbourhood-aware critic (`critic_type: neighbourhood`, k 20, floor 0.01) and `drop_zero_rows: true`; duplicates kept | `configs/nytimes/v2.yaml`; box instrument `configs/nytimes/v2_seed42.yaml` | `runs/nytimes/v2_seed42` (box: `/workspace/nytimes-v2/v2_seed42`) | trained -- n=1 seed, misses the gate on LID, hubness and Gini, contrast within 3%; no collapse (effective rank 244 at 30k) but drifts to the Gaussian end instead; see `## v2, measured` |
 
 Train `v0`:
 
@@ -561,6 +561,119 @@ added the second half of the mechanism: after the balance drift starves the
 skip term, `W` itself loses rank. More steps on this generator are not a
 lever. Next rung, as before and now with the loss trace as evidence: the
 neighbourhood-aware critic.
+
+## v2, measured
+
+Trained 2026-09-14 on `tig-gpu` (RTX 3060) as one gpuq job,
+`wgan-synthetic-20260914T112830Z-6af631`
+(`scripts/nytimes_v2_seed42_job.sh` at commit `9711fe6`): 30,000 generator
+steps of `configs/nytimes/v2_seed42.yaml` (`v1` plus `critic_type:
+neighbourhood`, k 20, floor 0.01, and `drop_zero_rows: true`; every other
+key byte-identical to `v1`, which `tests/test_nytimes_configs.py` pins).
+Submitted 11:28:30Z with the card idle; the job's last log write is
+12:26:57Z, so **58 minutes wall for the whole job** against `v1`'s 38: the
+critic's 512x512 within-batch distance matrix on every critic step is the
+difference. No `gate_error` on any eval; `resumed_from_step` 0; the
+trainer dropped `197` exact-zero rows at load (`run_metadata.json`
+`data.dropped_zero_rows`), leaving 237,313 training rows and a 12,490-row
+holdout. 50,000 samples at sampling seed 42 were drawn from
+`best_generator.pt` (the gate selector's pick, **step 7,000**, `best_score`
+`0.0225`) and from the step-30,000 checkpoint, measured together against
+the cleaned real corpus in one `eda_report` invocation at the canonical
+conditions. The summaries, `run_config.yaml` and `run_metadata.json` are
+committed under `docs/results/nytimes-v2-seed42/` (sha256 verified
+against the box copy line for line); checkpoints and samples stay on the
+box.
+
+Same convention as the `v1` table: distance from real in units of the real
+corpus's ten-draw spread, and the percentage off the real median the spec's
+3% bar is stated in, both from `docs/datasets/nytimes_noise_floor.json`
+(`zero_and_duplicate_rows_removed`).
+
+| Statistic | real, cleaned (10-draw range) | `v2_best` (step 7,000, gate-selected) | step 30,000 |
+|---|---|---|---|
+| LID median | `55.97` (54.97 -- 56.86) | `61.61` (10.1% off, 3.0x) | `77.23` (38.0% off, 11.2x) |
+| Relative contrast | `1.271` (1.265 -- 1.276) | `1.241` (2.3% off, 2.8x) | `1.167` (8.2% off, 9.6x) |
+| Hubness skew | `2.529` (2.315 -- 2.779) | `18.75` (641% off, 35.0x) | `6.98` (176% off, 9.6x) |
+| IVF cell-balance Gini | `0.7767` (0.7832 -- 0.8231) | `0.8605` (10.8% off, 2.1x) | `0.8299` (6.9% off, 1.3x) |
+
+**Misses the bar** on three of four: contrast is inside the 3% allowance
+(as `v1`'s was), LID is 10% high (`v1`: 12% high), and hubness and Gini
+are worse than `v1`'s selected checkpoint (`10.4` and `0.827`). Effective
+rank: real `247.4`, `v2_best` `173.6`, step 30,000 `244.4`. Median 5-NN
+distance: real `1.205`, `v2_best` `1.083`, step 30,000 `1.227`.
+
+**What the critic changed.** `v1` collapsed: LID fell monotonically
+through the real point and kept going (`42.6` at 30k, `5.2` at 100k). `v2`
+does not collapse. After step 3,000 the holdout LID never reads below
+`56.6` and the step-30,000 sample has effective rank `244` of 256 and a
+median 5-NN distance above real's -- it is the Gaussian end of the ladder
+(this page's Gaussian row reads LID `82.5`, contrast `1.158`; step 30,000
+reads `77.2` / `1.167` at canonical conditions). The generator went the
+other way: from step 14,000 the holdout LID climbs from `57` to `75--78`
+and stays there, with the Wasserstein estimate under `0.01` and the
+gradient penalty at `0.003`, i.e. the critic is satisfied by a
+near-Gaussian sample whose local dimension is 30% above real's.
+
+Trajectory on the holdout (`run_metadata.json` `eval`, full table there;
+the reference this selector measured against reads LID `59.44`, contrast
+`1.240`, hubness `2.30`, Gini `0.816`, `near_duplicate_fraction` `0.022`
+-- a *different* 12,490-row sample than `v1`'s 12,500-row holdout, because
+dropping 197 rows before the split changes the permutation; the two real
+references differ by less than the ten-draw spread on every statistic):
+
+| step | fake LID | fake RC | hubness | Gini | score | skip share | \|\|trunk\|\|^2 | \|\|skip\|\|^2 |
+|---|---|---|---|---|---|---|---|---|
+| 1000 | 66.35 | 3.256 | 25.93 | 0.895 | 1.7429 | 0.0001 | 1,013,711 | 126.5 |
+| 2000 | 43.60 | 10.80 | 9.57 | 0.899 | 7.9801 | 0.0002 | 337,140 | 66.8 |
+| 3000 | 69.30 | 1.1823 | 8.41 | 0.850 | 0.2122 | 0.486 | 119.0 | 112.6 |
+| 5000 | 62.31 | 1.2106 | 7.49 | 0.856 | 0.0716 | 0.813 | 31.2 | 135.7 |
+| 6000 | 63.17 | 1.2275 | 12.11 | 0.856 | 0.0726 | 0.741 | 48.4 | 138.8 |
+| 7000 | 58.38 | 1.2339 | 19.62 | 0.859 | 0.0225 | 0.722 | 54.9 | 143.0 |
+| 8000 | 59.19 | 1.2123 | 11.27 | 0.812 | 0.0263 | 0.833 | 29.8 | 148.7 |
+| 10000 | 56.96 | 1.2283 | 7.75 | 0.810 | 0.0508 | 0.759 | 49.5 | 156.3 |
+| 13000 | 59.13 | 1.2180 | 17.82 | 0.817 | 0.0227 | 0.764 | 52.2 | 168.4 |
+| 15000 | 74.74 | 1.1625 | 6.05 | 0.873 | 0.3196 | 0.917 | 16.6 | 183.1 |
+| 20000 | 76.65 | 1.1591 | 7.38 | 0.879 | 0.3545 | 0.917 | 18.8 | 208.4 |
+| 25000 | 77.03 | 1.1566 | 5.92 | 0.873 | 0.3628 | 0.909 | 21.9 | 218.6 |
+| 30000 | 74.47 | 1.1616 | 5.55 | 0.845 | 0.3158 | 0.867 | 34.2 | 223.7 |
+
+Against the spec's two mechanism checks:
+
+- **Trunk/skip balance.** The energies are now logged per evaluation
+  (`LinearSkipGenerator.component_energies`, 4,096 fixed latents, live
+  weights). The trunk term *explodes* in the first 2,000 steps (mean
+  squared norm `1.0e6` at step 1,000, skip share `0.0001`; the fake
+  `near_duplicate_fraction` reads `0.26` and `0.12` on those two evals,
+  i.e. a quarter of the sample within 0.01 of a neighbour), collapses to
+  `119` by step 3,000, and then shrinks through the run (`55` at the
+  selected step, `13--34` after step 20,000) while the skip term grows
+  monotonically from `113` to `224`. Skip share is not monotone but ends
+  at `0.87--0.94`, the mirror image of `v1`'s drift (`0.91` to `0.20`).
+  The mechanism the critic was built to see -- the balance moving while
+  the Wasserstein estimate sits near zero -- is still present, in the
+  other direction.
+- **Transient check.** The selected step's neighbours read `0.0726` at
+  6,000 (3.2x the selected score) and `0.0263` at 8,000 (1.2x). One side
+  is inside the spec's factor of two, one is not; the score then sits at
+  `0.02--0.07` through step 13,000 before jumping to `0.32` at 15,000 and
+  staying there. Better than `v1`'s 40x cliff, not the plateau the bar
+  asks for.
+
+The gradient penalty at `v1`'s `lambda_gp` 5.0: `gp` reads `0.899` at
+step 1 (`v1`: `0.901`), `0.022` at 250 (`0.025`), oscillates through steps
+500--2,000 (`0.73` at 500, `0.02--0.03` to 2,000, Wasserstein `1.2` at
+750--1,000) while the trunk term is exploding, and settles to `0.002--0.005`
+from step 3,000 on, the same order as `v1`. The summed-score formulation
+did not change the penalty's scale at this k.
+
+Selected checkpoint is not a rung. The neighbourhood critic removed the
+collapse and could not hold the generator at the real point: the
+critic's satisfied state now lies at the Gaussian end, with LID 30% high
+and hubness still the worst statistic at every step (never below `5.2`
+on the holdout against real's `2.3`). Which of the three approaches goes
+next, or whether the selection score needs the hubness term weighted,
+is a human decision per the spec's own rule.
 
 ## Gate
 

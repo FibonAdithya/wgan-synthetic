@@ -203,7 +203,7 @@ the cleaned figures are what the corpus looks like without the artefact.
 | `v1` | + linear skip path (`generator_type: linear_skip`) and `select_on: gate` | `configs/nytimes/v1.yaml`; box instrument `configs/nytimes/v1_seed42.yaml` | `runs/nytimes/v1_seed42` (box: `/workspace/nytimes-v1/v1_seed42`) | trained -- n=1 seed, misses the gate on LID and hubness, contrast within 3%; see `## v1, measured` |
 | `v1` at 100k steps | same rung, budget raised | `configs/nytimes/v1_seed42_100k.yaml`, resumed from the row above | `runs/nytimes/v1_seed42_100k` (box: `/workspace/nytimes-v1/v1_seed42_100k`) | trained -- collapses; gate statistics worse at every step after 30k; see `### Continued to 100,000 steps` under v1 |
 | `v2` | + neighbourhood-aware critic (`critic_type: neighbourhood`, k 20, floor 0.01) and `drop_zero_rows: true`; duplicates kept | `configs/nytimes/v2.yaml`; box instrument `configs/nytimes/v2_seed42.yaml` | `runs/nytimes/v2_seed42` (box: `/workspace/nytimes-v2/v2_seed42`) | trained -- n=1 seed, misses the gate on LID, hubness and Gini, contrast within 3%; no collapse (effective rank 244 at 30k) but drifts to the Gaussian end instead; see `## v2, measured` |
-| `v2b` | `v2` with the critic's neighbours drawn from a bank (`critic_type: neighbourhood_bank`, `critic_bank_size: 16384`) | `configs/nytimes/v2b.yaml`; box instrument `configs/nytimes/v2b_seed42.yaml` | `runs/nytimes/v2b_seed42` (box: `/workspace/nytimes-v2b/v2b_seed42`) | planned |
+| `v2b` | `v2` with the critic's neighbours drawn from a bank (`critic_type: neighbourhood_bank`, `critic_bank_size: 16384`) | `configs/nytimes/v2b.yaml`; box instrument `configs/nytimes/v2b_seed42.yaml` | `runs/nytimes/v2b_seed42` (box: `/workspace/nytimes-v2b/v2b_seed42`) | trained -- n=1 seed, misses the gate on LID, contrast and hubness, Gini in range; the selected checkpoint is a transient; drifts to the Gaussian end like v2; see `## v2b, measured` |
 
 Train `v0`:
 
@@ -675,6 +675,154 @@ and hubness still the worst statistic at every step (never below `5.2`
 on the holdout against real's `2.3`). Which of the three approaches goes
 next, or whether the selection score needs the hubness term weighted,
 is a human decision per the spec's own rule.
+
+## v2b, measured
+
+Trained 2026-09-14 on `tig-gpu` (RTX 3060) as one gpuq job,
+`wgan-synthetic-20260914T133700Z-fe6d99`, commit
+`8ad5d941fe18ed190cbefeebf577d5a54e9d4cfa`: 30,000 generator steps of
+`configs/nytimes/v2b_seed42.yaml` (`v2` plus `critic_type:
+neighbourhood_bank`, `critic_bank_size: 16384`; every other key
+byte-identical to `v2`). Submitted 13:37:00Z; the job's stderr log was
+created 13:37:15Z and its stdout last written 14:43:25Z, so **66 minutes
+10 seconds wall for the whole job** (train 30,000 steps, two 50,000-vector
+samplings, the EDA report), against `v2`'s 58 minutes 27 seconds. State
+`done`, exit `0`. `resumed_from_step` 0; the trainer dropped the same
+`197` exact-zero rows as `v2` at load (`data.dropped_zero_rows` in
+`run_metadata.json`), leaving 237,313 training rows and a 12,490-row
+holdout. 50,000 samples at sampling seed 42 were drawn from
+`best_generator.pt` (the gate selector's pick, **step 2,000**, `best_score`
+`0.1329`) and from the step-30,000 checkpoint, measured together against
+the cleaned real corpus in one `eda_report` invocation at the canonical
+conditions. The summaries, `run_config.yaml` and `run_metadata.json` are
+committed under `docs/results/nytimes-v2b-seed42/` (sha256 verified
+against the box copy line for line); checkpoints and samples stay on the
+box.
+
+Same convention as `v2`'s table: distance from real in units of the real
+corpus's ten-draw spread, and the percentage off the real median the
+spec's 3% bar is stated in, both from
+`docs/datasets/nytimes_noise_floor.json`
+(`zero_and_duplicate_rows_removed`).
+
+| Statistic | real, cleaned (10-draw range) | `v2b_best` (step 2,000, gate-selected) | step 30,000 |
+|---|---|---|---|
+| LID median | `55.97` (54.97 -- 56.86) | `68.13` (21.7% off) | `76.54` (36.7% off) |
+| Relative contrast | `1.271` (1.265 -- 1.276) | `1.197` (5.8% off) | `1.17` (7.9% off) |
+| Hubness skew | `2.529` (2.315 -- 2.779) | `18.51` (631.8% off) | `5.876` (132.4% off) |
+| IVF cell-balance Gini | `0.7767` (0.7832 -- 0.8231) | `0.811` (in range) | `0.8438` (8.6% off) |
+
+**Misses the bar** on three of four: only Gini falls inside the band.
+LID is 21.7% off (`v2`'s selected checkpoint: 10.1% off) and contrast is
+5.8% off, outside the spec's 3% allowance that would otherwise excuse it
+(`v2`'s selected checkpoint cleared that allowance at 2.3% off). Hubness
+skew is worse than every prior rung's selected checkpoint (`v0`: `1.1x`
+the range width; `v1`: `10.4`; `v2`: `18.75`; `v2b`: `18.51`, no better
+than `v2`). Effective rank: real `247.4`, `v2b_best` `196.3`, step 30,000
+`238.7` -- no collapse. Median 5-NN distance: real `1.205`, `v2b_best`
+`1.19`, step 30,000 `1.214`.
+
+**The selected checkpoint is a transient.** The gate selects step 2,000 at
+score `0.1329`; its logged neighbours read `0.3084` at step 1,000 (2.3x)
+and `0.1484` at step 3,000 (1.1x) -- one side breaks the spec's factor of
+two, so the bar's no-transient clause fails. `cov_fro`, the non-gate
+diagnostic this page tracks alongside the selector, would have picked step
+28,000 instead -- the two diagnostics disagree, as they did on `v0`.
+
+Trajectory on the holdout (`run_metadata.json` `eval`, every logged step;
+the reference this selector measured against reads LID `59.44`, contrast
+`1.24`, hubness `2.30`, Gini `0.816`, `near_duplicate_fraction` `0.022`):
+
+| step | fake LID | fake RC | hubness | Gini | score | skip share | trunk energy | skip energy | real near-dup | fake near-dup |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1000 | 74.2 | 1.164 | 1.37 | 0.851 | 0.308 | 0.983 | 4 | 255 | 0.022 | 0.0 |
+| 2000 | 65.1 | 1.192 | 12.43 | 0.839 | 0.133 | 0.914 | 24 | 257 | 0.022 | 0.0 |
+| 3000 | 65.8 | 1.188 | 11.74 | 0.812 | 0.148 | 0.904 | 27 | 258 | 0.022 | 0.0 |
+| 4000 | 66.5 | 1.185 | 3.44 | 0.828 | 0.163 | 0.924 | 22 | 260 | 0.022 | 0.0 |
+| 5000 | 67.4 | 1.182 | 7.35 | 0.826 | 0.180 | 0.925 | 21 | 262 | 0.022 | 0.0 |
+| 6000 | 69.2 | 1.177 | 4.42 | 0.832 | 0.214 | 0.925 | 21 | 265 | 0.022 | 0.0 |
+| 7000 | 69.7 | 1.175 | 5.29 | 0.824 | 0.225 | 0.925 | 22 | 266 | 0.022 | 0.0 |
+| 8000 | 70.8 | 1.173 | 4.43 | 0.848 | 0.245 | 0.926 | 21 | 268 | 0.022 | 0.0 |
+| 9000 | 71.7 | 1.171 | 4.25 | 0.847 | 0.261 | 0.926 | 21 | 270 | 0.022 | 0.0 |
+| 10000 | 72.2 | 1.169 | 6.96 | 0.851 | 0.271 | 0.924 | 22 | 271 | 0.022 | 0.0 |
+| 11000 | 72.1 | 1.169 | 4.25 | 0.856 | 0.270 | 0.912 | 26 | 272 | 0.022 | 0.0 |
+| 12000 | 73.0 | 1.168 | 7.17 | 0.856 | 0.285 | 0.926 | 22 | 273 | 0.022 | 0.0 |
+| 13000 | 73.2 | 1.167 | 10.06 | 0.851 | 0.290 | 0.918 | 24 | 274 | 0.022 | 0.0 |
+| 14000 | 73.9 | 1.165 | 7.82 | 0.856 | 0.304 | 0.916 | 25 | 276 | 0.022 | 0.0 |
+| 15000 | 73.5 | 1.166 | 6.15 | 0.883 | 0.296 | 0.907 | 29 | 277 | 0.022 | 0.0 |
+| 16000 | 73.7 | 1.165 | 5.56 | 0.845 | 0.300 | 0.913 | 27 | 278 | 0.022 | 0.0 |
+| 17000 | 73.5 | 1.165 | 6.76 | 0.858 | 0.297 | 0.913 | 27 | 279 | 0.022 | 0.0 |
+| 18000 | 74.2 | 1.164 | 5.70 | 0.863 | 0.310 | 0.906 | 29 | 280 | 0.022 | 0.0 |
+| 19000 | 73.5 | 1.165 | 6.05 | 0.879 | 0.296 | 0.902 | 31 | 281 | 0.022 | 0.0 |
+| 20000 | 73.5 | 1.165 | 6.49 | 0.859 | 0.297 | 0.895 | 33 | 283 | 0.022 | 0.0 |
+| 21000 | 74.1 | 1.164 | 6.80 | 0.844 | 0.308 | 0.902 | 31 | 286 | 0.022 | 0.0 |
+| 22000 | 74.1 | 1.164 | 5.86 | 0.844 | 0.307 | 0.900 | 32 | 287 | 0.022 | 0.0 |
+| 23000 | 73.4 | 1.166 | 5.47 | 0.856 | 0.294 | 0.893 | 35 | 289 | 0.022 | 0.0 |
+| 24000 | 74.5 | 1.162 | 5.19 | 0.858 | 0.316 | 0.896 | 34 | 291 | 0.022 | 0.0 |
+| 25000 | 73.9 | 1.164 | 5.68 | 0.859 | 0.305 | 0.892 | 36 | 292 | 0.022 | 0.0 |
+| 26000 | 73.2 | 1.165 | 6.31 | 0.859 | 0.291 | 0.875 | 42 | 294 | 0.022 | 0.0 |
+| 27000 | 73.4 | 1.165 | 5.90 | 0.831 | 0.295 | 0.873 | 43 | 295 | 0.022 | 0.0 |
+| 28000 | 74.4 | 1.162 | 4.56 | 0.852 | 0.315 | 0.878 | 41 | 297 | 0.022 | 0.0 |
+| 29000 | 73.9 | 1.163 | 5.73 | 0.856 | 0.304 | 0.864 | 47 | 299 | 0.022 | 0.0 |
+| 30000 | 73.8 | 1.164 | 4.63 | 0.845 | 0.302 | 0.864 | 47 | 302 | 0.022 | 0.0 |
+
+**Near-duplicate fraction holds flat.** The real column reads `0.022` at
+every evaluation and the fake column reads `0.0` at every evaluation --
+the critic did not teach the generator to make near-copies of the bank.
+The real figure is counted against the 12,490-row holdout only, not
+against the training rows the corpus's duplicates sit in; it sits well
+under the corpus's own duplicate rate of 14.1% (`## Source`, "41,031
+upstream rows are exact repeats of another row").
+
+**`fake_bank_filled_step` is `32`** -- `critic_bank_size` `16384` divided
+by `batch_size` `512`, exactly as designed: the ring fills after 32
+generator steps and the within-batch fallback governs only those first 32
+steps of a 30,000-step run.
+
+**Trunk/skip balance does not collapse and is not monotone.** Trunk energy
+runs `4` to `47` across the 30 evaluations (never above 47, against `v1`'s
+climb through the hundreds of thousands and `v2`'s spike to `1.0e6` in the
+first 2,000 steps); it rises and falls rather than moving in one
+direction, so the bar's non-monotonicity clause holds. Skip share starts
+at `0.983` and ends at `0.864` -- the same direction as `v1`'s drift
+(`0.91` to `0.20`) but far short of it: `v2b`'s skip term stays dominant
+throughout, where `v1`'s collapsed into the trunk. `v2`'s skip share moved
+the opposite way, from near zero up to `0.87`. `v2b` sits between the two:
+its skip share declines like `v1`'s but never approaches `v1`'s collapse,
+and never inverts to match `v2`'s recovery.
+
+**The Wasserstein trace shows no visible sawtooth, and none is expected
+to be visible.** The fake ring's period is 32 generator steps
+(`fake_bank_filled_step`); `log_every` is `250`. A period of 32 sits
+entirely inside one logging window, so a sawtooth at that period cannot
+appear in the logged trace regardless of whether the ring is producing
+one underneath it. The logged values move by a mean absolute change of
+`0.008` between consecutive entries, with a standard deviation of
+`0.00645` over the last 40 logged values -- a noisy, non-collapsing trace,
+consistent with the non-monotone trunk energy above it.
+
+**Per-step cost.** `v2b`'s whole-job wall time (3,970 seconds) divided by
+its 30,000 generator steps is `0.1323` seconds/step; `v2`'s whole-job wall
+time (3,507 seconds, from its 58-minute-27-second figure above) divided by
+its 30,000 steps is `0.1169` seconds/step. `v2b` costs about 13% more per
+step than `v2` (MEASURED from the two jobs' wall-clock figures above,
+2026-09-14). The bank critic scores every real and fake row against a
+fixed 16,384-row bank rather than `v2`'s 512-row within-batch matrix,
+which is consistent with the added cost.
+
+`v2b` is not a rung. It misses the gate on LID (21.7% off, outside the 3%
+allowance), on relative contrast (5.8% off, also outside the 3%
+allowance), and on hubness skew (631.8% off, the worst of any rung's
+selected checkpoint so far). It clears Gini. Its selected checkpoint is a
+transient by the spec's own factor-of-two test. Like `v2`, it does not
+collapse (effective rank `196.3` at the selected step, `238.7` at
+30,000, against real's `247.4`) and instead drifts to the Gaussian end:
+LID climbs from the mid-60s to the mid-70s and contrast falls from
+`1.2` to `1.16` over the run, the same direction `v2` moved in and close
+to `v2`'s own endpoint (LID `77.2`, contrast `1.167` at step 30,000).
+Which of the three approaches goes next is a human decision per the
+spec's own rule; this page states only that `v2b` misses the bar and on
+which statistics.
 
 ## Gate
 

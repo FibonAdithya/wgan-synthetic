@@ -605,7 +605,7 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
     # separate generator so the training stream is exactly what it was.
     energy_probe = None
     if isinstance(generator, LinearSkipGenerator):
-        probe_rng = torch.Generator(device=device.type)
+        probe_rng = torch.Generator(device=device)
         probe_rng.manual_seed(seed)
         energy_probe = torch.randn(4096, latent_dim, generator=probe_rng, device=device)
     # Whether a best_generator.pt has been written this run (or was already

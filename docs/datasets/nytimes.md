@@ -716,9 +716,9 @@ spec's 3% bar is stated in, both from
 LID is 21.7% off (`v2`'s selected checkpoint: 10.1% off) and contrast is
 5.8% off, outside the spec's 3% allowance that would otherwise excuse it
 (`v2`'s selected checkpoint cleared that allowance at 2.3% off). Hubness
-skew is worse than every prior rung's selected checkpoint (`v0`: `1.1x`
-the range width; `v1`: `10.4`; `v2`: `18.75`; `v2b`: `18.51`, no better
-than `v2`). Effective rank: real `247.4`, `v2b_best` `196.3`, step 30,000
+skew is level with `v2`'s selected checkpoint (`18.51` against `18.75`)
+and worse than `v0`'s and `v1`'s (`2.035` and `10.4`). Effective rank:
+real `247.4`, `v2b_best` `196.3`, step 30,000
 `238.7` -- no collapse. Median 5-NN distance: real `1.205`, `v2b_best`
 `1.19`, step 30,000 `1.214`.
 
@@ -781,8 +781,9 @@ steps of a 30,000-step run.
 
 **Trunk/skip balance does not collapse and is not monotone.** Trunk energy
 runs `4` to `47` across the 30 evaluations (never above 47, against `v1`'s
-climb through the hundreds of thousands and `v2`'s spike to `1.0e6` in the
-first 2,000 steps); it rises and falls rather than moving in one
+climb into the tens of thousands -- `944` at step 30,000, `40,126` at step
+70,000 of the continuation -- and `v2`'s spike to `1.0e6` in the first
+2,000 steps); it rises and falls rather than moving in one
 direction, so the bar's non-monotonicity clause holds. Skip share starts
 at `0.983` and ends at `0.864` -- the same direction as `v1`'s drift
 (`0.91` to `0.20`) but far short of it: `v2b`'s skip term stays dominant
@@ -796,10 +797,11 @@ to be visible.** The fake ring's period is 32 generator steps
 (`fake_bank_filled_step`); `log_every` is `250`. A period of 32 sits
 entirely inside one logging window, so a sawtooth at that period cannot
 appear in the logged trace regardless of whether the ring is producing
-one underneath it. The logged values move by a mean absolute change of
-`0.008` between consecutive entries, with a standard deviation of
-`0.00645` over the last 40 logged values -- a noisy, non-collapsing trace,
-consistent with the non-monotone trunk energy above it.
+one underneath it. Across all 120 consecutive deltas of the run's 121
+logged values, the mean absolute change between entries is `0.009`; over
+just the last 40 logged values it is `0.006`, with a standard deviation of
+`0.00645` on that same window -- a noisy, non-collapsing trace, consistent
+with the non-monotone trunk energy above it.
 
 **Per-step cost.** `v2b`'s whole-job wall time (3,970 seconds) divided by
 its 30,000 generator steps is `0.1323` seconds/step; `v2`'s whole-job wall
@@ -812,8 +814,8 @@ which is consistent with the added cost.
 
 `v2b` is not a rung. It misses the gate on LID (21.7% off, outside the 3%
 allowance), on relative contrast (5.8% off, also outside the 3%
-allowance), and on hubness skew (631.8% off, the worst of any rung's
-selected checkpoint so far). It clears Gini. Its selected checkpoint is a
+allowance), and on hubness skew (631.8% off, level with `v2`'s selected
+checkpoint and worse than `v0`'s and `v1`'s). It clears Gini. Its selected checkpoint is a
 transient by the spec's own factor-of-two test. Like `v2`, it does not
 collapse (effective rank `196.3` at the selected step, `238.7` at
 30,000, against real's `247.4`) and instead drifts to the Gaussian end:

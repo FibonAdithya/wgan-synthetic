@@ -362,7 +362,7 @@ split happens inside the generator. First used by `configs/nytimes/v1.yaml`.
 ### `critic_type`
 
 The critic axis in the `model` config block, built by `build_critic` in
-`src/models/critic.py`. Three values: `per_vector` (default; the `Critic` MLP
+`src/models/critic.py`. Four values: `per_vector` (default; the `Critic` MLP
 scoring one row at a time, every config before NYTimes v2), `neighbourhood`
 (`NeighbourhoodCritic`: the same MLP on each row concatenated with its
 within-batch neighbourhood profile, `critic_k` entries of sorted, floored
@@ -374,7 +374,11 @@ training split and a fake row's from a ring of the last
 is what `gradient_penalty` scores, query the union. A real row that is
 itself in the bank is excluded by index, so genuine duplicates stay
 visible. Checkpoints store the bank's row indices, not its rows, and the
-fake ring refills after a resume).
+fake ring refills after a resume), and `neighbourhood_set`
+(`SetNeighbourhoodCritic`: one EdgeConv layer over each row's k
+within-batch neighbour differences, pooled, then the MLP head; it learns
+its own neighbourhood features and reads no distances, so
+`critic_distance_floor` is unused).
 
 Why: a per-vector critic cannot see local dimension, so a low-rank sheet
 with the right covariance envelope is, to it, the corpus. NYTimes v1
@@ -386,10 +390,12 @@ batch-dependent critic (its docstring says so).
 
 | Config key | Default | Meaning |
 |---|---|---|
-| `model.critic_type` | `per_vector` | Which critic class. `neighbourhood` and `neighbourhood_bank` require `training.amp: false` (real and fake rows would otherwise reach the critic at different precisions). |
+| `model.critic_type` | `per_vector` | Which critic class. `neighbourhood`, `neighbourhood_bank` and `neighbourhood_set` require `training.amp: false` (real and fake rows would otherwise reach the critic at different precisions). |
 | `model.critic_k` | `20` | Neighbour depth; the profile has `critic_k` entries. Must be below `training.batch_size`. |
 | `model.critic_distance_floor` | `0.01` | Every neighbour distance the critic reads is clamped from below here, so an exact copy reads as a bounded "tight pair" rather than `-inf`. The gate's `near_duplicate_fraction` uses the same constant. |
 | `model.critic_bank_size` | `16384` | `neighbourhood_bank` only: rows in each of the real bank and the fake ring. Must exceed `critic_k` and not exceed the training split. `run_metadata.json` records it as `critic_bank_size` and the first step the ring was full as `fake_bank_filled_step`. |
+| `model.critic_edge_dim` | `128` | Width of the edge MLP. |
+| `model.critic_edge_pool` | `max` | max or mean over the k edges. |
 | `data.preprocess.drop_zero_rows` | `false` | Drop exact-zero rows at load, before the train/holdout split; count in `run_metadata.json` under `data.dropped_zero_rows`. Duplicates are never dropped. |
 
 Checkpoints do not record `critic_type` either; like the generator, the

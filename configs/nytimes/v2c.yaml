@@ -1,0 +1,64 @@
+# NYTIMES v2c -- v2 with the feature extractor changed from a hand-chosen
+# distance profile to a learned one: one EdgeConv layer over each row's 20
+# within-batch neighbour differences (x_j - x_i), max-pooled, then the same
+# MLP head. One change from v2:
+#
+#   1. model.critic_type: neighbourhood -> neighbourhood_set
+#      (critic_edge_dim: 128, critic_edge_pool: max)
+#
+# Why: the spread of the neighbour differences is the local tangent
+# structure, whose singular spectrum is what a collapsed sheet loses; this
+# critic can read it directly rather than through the log-ratio profile.
+# critic_distance_floor is unused by this class (selection is by ordering).
+# See approach 3 in
+# docs/superpowers/specs/2026-09-14-neighbourhood-critic-design.md.
+seed: 42
+device: auto
+output_dir: runs/nytimes/v2c
+
+data:
+  real_path: data/nytimes_250k.npy
+  format: npy
+  metric: angular
+  descriptor_dim: 256
+  holdout_fraction: 0.05
+  synthetic_if_missing: false
+  synthetic_num_vectors: 100000
+  preprocess:
+    center: false
+    whiten: false
+    l2_normalize: true
+    drop_zero_rows: true
+
+model:
+  # 256 trunk + 256 skip. The generator splits the latent itself.
+  latent_dim: 512
+  generator_hidden_dims: [512, 1024, 1024]
+  critic_hidden_dims: [1024, 512, 256]
+  negative_slope: 0.2
+  generator_type: linear_skip
+  skip_dim: 256
+  skip_init: orthogonal
+  skip_init_gain: 1.0
+  critic_type: neighbourhood_set
+  critic_edge_dim: 128
+  critic_edge_pool: max
+  critic_k: 20
+  critic_distance_floor: 0.01
+
+training:
+  batch_size: 512
+  num_gen_steps: 30000
+  n_critic: 3
+  lr_g: 1.0e-4
+  lr_d: 1.0e-4
+  betas: [0.0, 0.9]
+  lambda_gp: 5.0
+  distance_reg_alpha: 0.0
+  distance_reg_max_points: 256
+  num_workers: 0
+  amp: false
+  log_every: 250
+  eval_every: 1000
+  save_every: 2000
+  select_on: gate

@@ -97,3 +97,31 @@ def test_v2b_job_script_runs_the_v2b_seed42_config():
     script = (ROOT.parent.parent / "scripts" / "nytimes_v2b_seed42_job.sh").read_text()
     assert "configs/nytimes/v2b_seed42.yaml" in script
     assert "runs/nytimes/v2b_seed42" in script
+
+
+def test_v2c_is_v2_plus_the_set_critic():
+    v2 = _flatten(_load("v2.yaml"))
+    v2c = _flatten(_load("v2c.yaml"))
+    assert v2c.pop("model.critic_type") == "neighbourhood_set"
+    assert v2c.pop("model.critic_edge_dim") == 128
+    assert v2c.pop("model.critic_edge_pool") == "max"
+    assert v2c.pop("output_dir") == "runs/nytimes/v2c"
+    v2.pop("model.critic_type")
+    v2.pop("output_dir")
+    assert v2c == v2
+
+
+def test_v2c_seed42_is_v2c_with_an_absolute_real_path_and_its_own_output_dir():
+    v2c = _flatten(_load("v2c.yaml"))
+    inst = _flatten(_load("v2c_seed42.yaml"))
+    assert inst.pop("output_dir") == "runs/nytimes/v2c_seed42"
+    assert inst.pop("data.real_path").startswith("/workspace/")
+    v2c.pop("output_dir")
+    v2c.pop("data.real_path")
+    assert inst == v2c
+
+
+def test_v2c_job_script_runs_the_v2c_seed42_config():
+    script = (ROOT.parent.parent / "scripts" / "nytimes_v2c_seed42_job.sh").read_text()
+    assert "configs/nytimes/v2c_seed42.yaml" in script
+    assert "runs/nytimes/v2c_seed42" in script

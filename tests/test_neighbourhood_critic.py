@@ -155,21 +155,26 @@ def test_profile_is_log_ratios_then_log_scale():
 
 
 def test_critic_features_and_scores_are_float32_safe_under_autocast():
-    """Catches the profile inheriting fp16 from an enclosing autocast region
-    (features would be bfloat16, and the expanded-square form cancels
-    catastrophically), and a forward that downcasts x before profiling."""
+    """Catches the neighbour maths running under an enclosing autocast (the
+    bf16 cross term is promoted back to float32, so dtype alone cannot see
+    it) and a forward that rounds x before profiling: both move the features
+    by ~1e-3 against a float64 oracle; the clean path is within 1e-6."""
     torch.manual_seed(0)
     critic = NeighbourhoodCritic(input_dim=8, hidden_dims=[6], k=3)
     x = _unit_batch(8, n=16, dim=8)
-    with torch.no_grad():
-        reference = critic(x)
+    # Independent float64 oracle: cdist is fine here, it is the test, not the implementation.
+    full = torch.cdist(x.double(), x.double())
+    full.fill_diagonal_(float("inf"))
+    r64, _ = torch.topk(full, 3, dim=1, largest=False, sorted=True)
+    oracle = profile_features(r64.clamp(min=critic.distance_floor)).float()
     with torch.autocast("cpu", dtype=torch.bfloat16, enabled=True):
         assert neighbourhood_distances(x, k=3, floor=0.01).dtype == torch.float32
-        assert critic.features(x).dtype == torch.float32
+        phi = critic.features(x)
         with torch.no_grad():
             scored = critic(x)
+    assert phi.dtype == torch.float32
+    torch.testing.assert_close(phi, oracle, atol=1e-5, rtol=0.0)
     assert torch.isfinite(scored).all()
-    torch.testing.assert_close(scored.float(), reference, atol=5e-2, rtol=5e-2)
 
 
 def test_critic_emits_one_score_per_row():

@@ -510,6 +510,7 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
             "num_train": int(x_train.shape[0]),
             "num_holdout": int(x_holdout.shape[0]),
             "descriptor_dim": descriptor_dim,
+            "dropped_zero_rows": int(preprocess_state.dropped_zero_rows),
         },
         "preprocess_state": preprocess_state.to_serializable(),
         "gpu": gpu_meta,

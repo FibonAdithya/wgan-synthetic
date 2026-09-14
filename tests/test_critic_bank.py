@@ -156,6 +156,27 @@ def test_real_population_reads_the_real_bank():
     torch.testing.assert_close(critic(x, population="real"), expected)
 
 
+def test_mixed_population_reads_the_union_of_both_banks():
+    """Catches: the mixed path reading one bank instead of the union.
+    The expected score is recomputed by hand from the real and fake banks
+    concatenated; the union must also differ from either bank scored alone."""
+    critic = _filled(_bank_critic())
+    critic.set_real_bank(_rows(4, 40, 6), draw_real_bank_indices(40, 20, seed=0))
+    x = _rows(5, 5, 6)
+    r = neighbourhood_distances(
+        x, 3, 0.01, bank=torch.cat([critic.real_bank, critic.fake_bank], dim=0)
+    )
+    expected = critic.mlp(torch.cat([x, profile_features(r)], dim=1))
+
+    torch.testing.assert_close(critic(x, population="mixed"), expected)
+    assert not torch.allclose(
+        critic(x, population="mixed"), critic(x, population="fake")
+    ), "the union must differ from the fake bank alone"
+    assert not torch.allclose(
+        critic(x, population="mixed"), critic(x, population="real")
+    ), "the union must differ from the real bank alone"
+
+
 def test_a_real_row_in_the_bank_does_not_see_its_own_copy():
     """Catches: `row_to_slot` built as the identity instead of through the
     drawn indices (the bank is a permutation, so slot != row), or `row_ids`

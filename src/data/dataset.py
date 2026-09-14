@@ -227,6 +227,20 @@ class NumpyTensorDataset(Dataset):
         return self.x[idx]
 
 
+class IndexedTensorDataset(NumpyTensorDataset):
+    """`NumpyTensorDataset` that also yields each row's index into `x`.
+
+    The bank-neighbourhood critic excludes a real row's own bank slot by
+    index, so the trainer must know which training row each batch row is.
+    The default collate turns the ints into a `(batch,)` long tensor. Used
+    only when the critic is the bank type; every other critic keeps the
+    plain dataset and plain tensor batches.
+    """
+
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, int]:
+        return self.x[idx], idx
+
+
 def build_training_data(
     descriptor_path: str | None,
     file_format: str,

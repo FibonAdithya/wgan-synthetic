@@ -17,12 +17,19 @@ from torch.amp import GradScaler, autocast
 from torch.utils.data import DataLoader, Dataset, RandomSampler
 
 from src.data.dataset import (
+    IndexedTensorDataset,
     NumpyTensorDataset,
     PreprocessConfig,
     build_training_data,
 )
 from src.device import cuda_device_index, resolve_device
-from src.models.critic import DEFAULT_DISTANCE_FLOOR, build_critic
+from src.models.critic import (
+    DEFAULT_DISTANCE_FLOOR,
+    BankNeighbourhoodCritic,
+    build_critic,
+    draw_real_bank_indices,
+    score_population,
+)
 from src.models.generator import LinearSkipGenerator, build_generator
 from src.train.gpu_lock import claim_gpu, gpu_lock_key
 from src.train.log_ratio import LogRatioTarget, log_ratio_penalty
@@ -123,6 +130,14 @@ def build_dataloader(
         generator=loader_generator,
         worker_init_fn=partial(seed_dataloader_worker, base_seed=seed),
     )
+
+
+def split_batch(batch: Tensor | list | tuple) -> tuple[Tensor, Tensor | None]:
+    """Rows and, from an `IndexedTensorDataset`, their training indices."""
+    if isinstance(batch, (list, tuple)):
+        rows, ids = batch
+        return rows, ids
+    return batch, None
 
 
 def gradient_penalty(
@@ -474,7 +489,10 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
     optim_g = torch.optim.Adam(generator.parameters(), lr=lr_g, betas=betas)
     optim_d = torch.optim.Adam(critic.parameters(), lr=lr_d, betas=betas)
 
-    dataset = NumpyTensorDataset(x_train)
+    bank_critic = isinstance(critic, BankNeighbourhoodCritic)
+    dataset = (
+        IndexedTensorDataset(x_train) if bank_critic else NumpyTensorDataset(x_train)
+    )
     num_workers = int(train_cfg.get("num_workers", 0))
     loader = build_dataloader(
         dataset,
@@ -590,6 +608,22 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
 
     run_meta["resumed_from_step"] = start_step
 
+    if bank_critic:
+        # The real bank is a fixed subset of the training split, drawn once
+        # per run seed. A resume takes the indices load_state_dict restored
+        # from the checkpoint rather than redrawing, so the bank the critic
+        # was trained against is the bank it continues against. The fake
+        # ring is not checkpointed; it refills within bank_size / batch_size
+        # generator steps, during which fake rows fall back to within-batch
+        # profiles, and `fake_bank_filled_step` records when that ended.
+        indices = (
+            critic.real_bank_indices.cpu()
+            if resume is not None
+            else draw_real_bank_indices(x_train.shape[0], critic.bank_size, seed)
+        )
+        critic.set_real_bank(dataset.x, indices)
+        run_meta["critic_bank_size"] = critic.bank_size
+
     # Real-side gate statistics are a property of the holdout, not of the
     # step: computed once, repeated into every eval entry so each is
     # self-describing. Measured after the resume refusals above, so an
@@ -625,15 +659,17 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
                 data_iter = iter(loader)
                 real_batch = next(data_iter)
 
+            real_batch, real_ids = split_batch(real_batch)
             real = real_batch.to(device)
+            real_ids = None if real_ids is None else real_ids.to(device)
             batch_size = real.shape[0]
             z = torch.randn(batch_size, latent_dim, device=device)
 
             optim_d.zero_grad(set_to_none=True)
             with autocast("cuda", enabled=amp):
                 fake = normalize_l2(generator(z).detach())
-                d_real = critic(real)
-                d_fake = critic(fake)
+                d_real = score_population(critic, real, "real", row_ids=real_ids)
+                d_fake = score_population(critic, fake, "fake")
                 gp = gradient_penalty(critic, real, fake, device=device)
                 d_loss = -(d_real.mean() - d_fake.mean()) + lambda_gp * gp
 
@@ -654,13 +690,14 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
         except StopIteration:
             data_iter = iter(loader)
             real_batch = next(data_iter)
+        real_batch, _ = split_batch(real_batch)
         batch_size = real_batch.shape[0]
 
         optim_g.zero_grad(set_to_none=True)
         with autocast("cuda", enabled=amp):
             z = torch.randn(batch_size, latent_dim, device=device)
             fake = normalize_l2(generator(z))
-            adv_loss = -critic(fake).mean()
+            adv_loss = -score_population(critic, fake, "fake").mean()
             g_loss = adv_loss
             # Transferred once and shared: the regularizers all want the same
             # batch, and doing it per-branch pays for a host-to-device copy per
@@ -718,6 +755,13 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
         scaler_g.scale(g_loss).backward()
         scaler_g.step(optim_g)
         scaler_g.update()
+
+        if bank_critic:
+            # After the score, never before: the batch just scored must not
+            # find itself in the ring at the floor.
+            critic.write_fake(fake.detach())
+            if critic.fake_bank_full and "fake_bank_filled_step" not in run_meta:
+                run_meta["fake_bank_filled_step"] = step
 
         if use_ema:
             ema_update(ema_params, generator, ema_decay)

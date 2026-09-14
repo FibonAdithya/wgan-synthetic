@@ -33,7 +33,7 @@ V2_DELTA = {
 }
 
 
-def test_v2_is_v1_plus_the_two_stated_changes():
+def test_v2_is_v1_plus_the_four_stated_changes():
     """Catches any v2 key drifting from v1 beyond the four stated changes."""
     v1 = _flatten(_load("v1.yaml"))
     v2 = _flatten(_load("v2.yaml"))

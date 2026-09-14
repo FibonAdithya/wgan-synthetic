@@ -378,7 +378,7 @@ batch-dependent critic (its docstring says so).
 
 | Config key | Default | Meaning |
 |---|---|---|
-| `model.critic_type` | `per_vector` | Which critic class. |
+| `model.critic_type` | `per_vector` | Which critic class. `neighbourhood` requires `training.amp: false` (real and fake rows would otherwise reach the critic at different precisions). |
 | `model.critic_k` | `20` | Neighbour depth; the profile has `critic_k` entries. Must be below `training.batch_size`. |
 | `model.critic_distance_floor` | `0.01` | Every neighbour distance the critic reads is clamped from below here, so an exact copy reads as a bounded "tight pair" rather than `-inf`. The gate's `near_duplicate_fraction` uses the same constant. |
 | `data.preprocess.drop_zero_rows` | `false` | Drop exact-zero rows at load, before the train/holdout split; count in `run_metadata.json` under `data.dropped_zero_rows`. Duplicates are never dropped. |

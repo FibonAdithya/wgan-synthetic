@@ -137,6 +137,11 @@ class NeighbourhoodCritic(nn.Module):
     batch's *summed* score, which includes how row i moves every other
     row's features. That is the intended Lipschitz constraint for a
     minibatch-dependent critic; do not "fix" it back to per-row.
+
+    Requires `training.amp: false`. The neighbour maths runs in float32
+    regardless, but under autocast the trainer hands the critic fp16-rounded
+    fake rows and fp32 real rows, and a profile difference of that origin is
+    not a difference in the data.
     """
 
     def __init__(

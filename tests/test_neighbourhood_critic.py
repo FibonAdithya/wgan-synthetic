@@ -154,13 +154,22 @@ def test_profile_is_log_ratios_then_log_scale():
     assert phi.shape == (1, 3)
 
 
-def test_profile_runs_in_float32_under_autocast():
-    """Catches the profile inheriting fp16 from an enclosing autocast region,
-    where the expanded-square form cancels catastrophically."""
+def test_critic_features_and_scores_are_float32_safe_under_autocast():
+    """Catches the profile inheriting fp16 from an enclosing autocast region
+    (features would be bfloat16, and the expanded-square form cancels
+    catastrophically), and a forward that downcasts x before profiling."""
+    torch.manual_seed(0)
+    critic = NeighbourhoodCritic(input_dim=8, hidden_dims=[6], k=3)
     x = _unit_batch(8, n=16, dim=8)
+    with torch.no_grad():
+        reference = critic(x)
     with torch.autocast("cpu", dtype=torch.bfloat16, enabled=True):
-        r = neighbourhood_distances(x, k=3, floor=0.01)
-    assert r.dtype == torch.float32
+        assert neighbourhood_distances(x, k=3, floor=0.01).dtype == torch.float32
+        assert critic.features(x).dtype == torch.float32
+        with torch.no_grad():
+            scored = critic(x)
+    assert torch.isfinite(scored).all()
+    torch.testing.assert_close(scored.float(), reference, atol=5e-2, rtol=5e-2)
 
 
 def test_critic_emits_one_score_per_row():

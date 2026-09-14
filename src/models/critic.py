@@ -484,6 +484,8 @@ class SetNeighbourhoodCritic(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         idx = neighbourhood_indices(x, self.k)
         a = self.pooled(x, idx)
+        # Defensive, a no-op under amp: false; unlike NeighbourhoodCritic.features
+        # the edge MLP's output dtype is not float32-guaranteed.
         return self.mlp(torch.cat([x, a.to(x.dtype)], dim=1))
 
 

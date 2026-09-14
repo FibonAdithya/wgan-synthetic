@@ -2,7 +2,7 @@
 # One gpuq job: train NYTimes v2c (seed 42), sample it, and measure it against
 # the cleaned real corpus.
 #
-#   gpuq submit --project wgan-synthetic --commit <sha> --branch nytimes-eda \
+#   gpuq submit --project wgan-synthetic --commit <sha> --branch nytimes-v2c \
 #     --lane gpu --timeout-s 10800 -- bash scripts/nytimes_v2c_seed42_job.sh
 #
 # runs/ is gitignored, so nothing here is declared as a --artifact; the run

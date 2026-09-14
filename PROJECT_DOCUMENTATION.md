@@ -399,9 +399,9 @@ batch-dependent critic (its docstring says so).
 | `data.preprocess.drop_zero_rows` | `false` | Drop exact-zero rows at load, before the train/holdout split; count in `run_metadata.json` under `data.dropped_zero_rows`. Duplicates are never dropped. |
 
 Checkpoints do not record `critic_type` either; like the generator, the
-critic is rebuilt from `run_config.yaml`, and the per-vector and
-neighbourhood state dicts do not cross-load. The bank critic's state dict is
-the neighbourhood critic's plus `real_bank_indices`.
+critic is rebuilt from `run_config.yaml`, and the per-vector, neighbourhood
+and set state dicts do not cross-load. The bank critic's state dict is the
+neighbourhood critic's plus `real_bank_indices`.
 
 ## Optimizer and training setup
 

@@ -83,15 +83,32 @@ def test_unknown_type_raises_naming_the_value():
 
 def test_state_dicts_do_not_cross_load():
     """A resume must not silently load per-vector weights into the
-    neighbourhood critic or vice versa."""
+    neighbourhood critic or vice versa, and likewise for the set critic."""
     a = build_critic(dict(BASE_CFG, critic_type="per_vector"), input_dim=12)
     b = build_critic(
         dict(BASE_CFG, critic_type="neighbourhood", critic_k=4), input_dim=12
+    )
+    c = build_critic(
+        dict(
+            BASE_CFG,
+            critic_type="neighbourhood_set",
+            critic_k=4,
+            critic_edge_dim=8,
+        ),
+        input_dim=12,
     )
     with pytest.raises(RuntimeError):
         a.load_state_dict(b.state_dict())
     with pytest.raises(RuntimeError):
         b.load_state_dict(a.state_dict())
+    with pytest.raises(RuntimeError):
+        a.load_state_dict(c.state_dict())
+    with pytest.raises(RuntimeError):
+        c.load_state_dict(a.state_dict())
+    with pytest.raises(RuntimeError):
+        b.load_state_dict(c.state_dict())
+    with pytest.raises(RuntimeError):
+        c.load_state_dict(b.state_dict())
 
 
 def test_neighbourhood_set_reads_edge_dim_and_pool_from_the_config():

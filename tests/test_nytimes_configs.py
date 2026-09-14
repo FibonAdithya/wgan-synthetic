@@ -125,3 +125,10 @@ def test_v2c_job_script_runs_the_v2c_seed42_config():
     script = (ROOT.parent.parent / "scripts" / "nytimes_v2c_seed42_job.sh").read_text()
     assert "configs/nytimes/v2c_seed42.yaml" in script
     assert "runs/nytimes/v2c_seed42" in script
+
+
+def test_v2c_requires_amp_off():
+    """The set critic requires `training.amp: false`; the equality-with-v2
+    test above only pins it transitively."""
+    assert _flatten(_load("v2c.yaml"))["training.amp"] is False
+    assert _flatten(_load("v2c_seed42.yaml"))["training.amp"] is False

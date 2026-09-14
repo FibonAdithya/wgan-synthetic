@@ -258,6 +258,10 @@ class AnnMetrics:
     k: int
     nlist: int
     discarded_queries: int
+    # Distance from each measured row to its nearest other row, one entry
+    # per row, before survivor_mask. Optional so hand-built fixtures that
+    # predate it still construct; compute() always fills it.
+    nearest_distance: np.ndarray | None = None
 
 
 def _subsample(x: np.ndarray, max_rows: int, seed: int) -> np.ndarray:
@@ -318,6 +322,7 @@ def compute(
         k=k_eff,
         nlist=nlist_eff,
         discarded_queries=int((~survivors).sum()),
+        nearest_distance=dist[:, 0].copy(),
     )
 
 

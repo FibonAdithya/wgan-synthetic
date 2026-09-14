@@ -78,6 +78,7 @@ def test_gate_statistics_returns_the_four_statistics_and_the_discard_count():
         "relative_contrast_median",
         "hubness_skew",
         "ivf_gini",
+        "near_duplicate_fraction",
         "lid_discarded_queries",
         "zero_rows",
         "measured_rows",
@@ -86,6 +87,36 @@ def test_gate_statistics_returns_the_four_statistics_and_the_discard_count():
     assert stats["lid_discarded_queries"] == 0
     assert stats["zero_rows"] == 0
     assert stats["measured_rows"] == 300
+
+
+def test_gate_statistics_logs_the_fraction_of_rows_within_the_floor_of_a_neighbour():
+    """Catches the diagnostic reading a survivor-masked column (copies are
+    exactly the rows the mask drops) or the wrong column of dist."""
+    rng = np.random.default_rng(3)
+    x = rng.standard_normal((200, 16)).astype(np.float32)
+    x /= np.linalg.norm(x, axis=1, keepdims=True)
+    for i in range(1, 6):
+        x[i] = x[0]  # rows 0..5 each have a neighbour at distance 0: 6 of 200
+    stats = gate_statistics(x, metric="angular", seed=0)
+    assert stats["near_duplicate_fraction"] == pytest.approx(0.03)
+
+
+def test_near_duplicate_fraction_uses_the_given_floor():
+    """Catches the floor keyword accepted and ignored, or the default hard-coded."""
+    rng = np.random.default_rng(4)
+    x = rng.standard_normal((200, 16)).astype(np.float32)
+    x /= np.linalg.norm(x, axis=1, keepdims=True)
+    # Random unit vectors in 16-D sit far above 0.01 from each other, and
+    # far below 3.0 (the diameter of the unit sphere is 2).
+    assert (
+        gate_statistics(x, metric="angular", seed=0)["near_duplicate_fraction"] == 0.0
+    )
+    assert (
+        gate_statistics(x, metric="angular", seed=0, distance_floor=3.0)[
+            "near_duplicate_fraction"
+        ]
+        == 1.0
+    )
 
 
 def test_gate_statistics_drops_exact_zero_rows_and_reports_the_counts():
@@ -107,6 +138,7 @@ def test_gate_statistics_drops_exact_zero_rows_and_reports_the_counts():
         "relative_contrast_median",
         "hubness_skew",
         "ivf_gini",
+        "near_duplicate_fraction",
         "lid_discarded_queries",
     ):
         assert with_zeros[key] == without_zeros[key]

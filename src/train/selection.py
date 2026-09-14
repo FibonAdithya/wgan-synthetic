@@ -26,6 +26,7 @@ from collections.abc import Mapping
 import numpy as np
 
 from src.eval import ann_difficulty
+from src.models.critic import DEFAULT_DISTANCE_FLOOR
 
 SELECTORS = ("cov_fro", "gate")
 
@@ -41,6 +42,7 @@ LOGGED = (
     "relative_contrast_median",
     "hubness_skew",
     "ivf_gini",
+    "near_duplicate_fraction",
     "lid_discarded_queries",
     "zero_rows",
     "measured_rows",
@@ -52,7 +54,11 @@ MAX_DISCARD_FRACTION = 0.5
 
 
 def gate_statistics(
-    x: np.ndarray, *, metric: str, seed: int
+    x: np.ndarray,
+    *,
+    metric: str,
+    seed: int,
+    distance_floor: float = DEFAULT_DISTANCE_FLOOR,
 ) -> dict[str, float | int | None]:
     """The four ANN-difficulty statistics of `x`, plus the LID discard count.
 
@@ -67,6 +73,13 @@ def gate_statistics(
     artefact, not a legitimate query. `zero_rows` and `measured_rows` are
     logged so a run's metadata says how much of the holdout the statistics
     were actually measured on.
+
+    `near_duplicate_fraction` is the share of measured rows whose nearest
+    other row is within `distance_floor`, the same constant the
+    neighbourhood critic floors its distances at. It is logged, not
+    scored: it says whether a run learned to make near-copies. Measured on
+    the holdout, so the real-side figure is far below the corpus's 14%
+    (a copy is only counted if its twin is also in the holdout).
     """
     x = np.ascontiguousarray(x, dtype=np.float32)
     norms = np.linalg.norm(x, axis=1)
@@ -85,6 +98,11 @@ def gate_statistics(
     s = ann_difficulty.summary(m)
     s["zero_rows"] = zero_rows
     s["measured_rows"] = int(measured.shape[0])
+    s["near_duplicate_fraction"] = (
+        float(np.mean(m.nearest_distance <= distance_floor))
+        if m.nearest_distance is not None and m.nearest_distance.size
+        else None
+    )
     return {k: s[k] for k in LOGGED}
 
 

@@ -22,7 +22,7 @@ from src.data.dataset import (
     build_training_data,
 )
 from src.device import cuda_device_index, resolve_device
-from src.models.critic import build_critic
+from src.models.critic import DEFAULT_DISTANCE_FLOOR, build_critic
 from src.models.generator import build_generator
 from src.train.gpu_lock import claim_gpu, gpu_lock_key
 from src.train.log_ratio import LogRatioTarget, log_ratio_penalty
@@ -461,6 +461,9 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
     train_cfg = config["training"]
     latent_dim = int(model_cfg["latent_dim"])
     descriptor_dim = int(data_cfg["descriptor_dim"])
+    gate_distance_floor = float(
+        model_cfg.get("critic_distance_floor", DEFAULT_DISTANCE_FLOOR)
+    )
 
     generator = build_generator(model_cfg, output_dim=descriptor_dim).to(device)
     critic = build_critic(model_cfg, input_dim=descriptor_dim).to(device)
@@ -592,7 +595,9 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
     # self-describing. Measured after the resume refusals above, so an
     # invalid --resume fails fast without paying for a ~2 s k-NN pass.
     real_gate = (
-        gate_statistics(x_holdout, metric=metric, seed=seed)
+        gate_statistics(
+            x_holdout, metric=metric, seed=seed, distance_floor=gate_distance_floor
+        )
         if select_on == "gate"
         else None
     )
@@ -749,7 +754,10 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
                     # not take the whole run down with it.
                     try:
                         fake_gate = gate_statistics(
-                            fake_holdout, metric=metric, seed=seed
+                            fake_holdout,
+                            metric=metric,
+                            seed=seed,
+                            distance_floor=gate_distance_floor,
                         )
                     except Exception as e:
                         stats["gate_error"] = f"{type(e).__name__}: {e}"

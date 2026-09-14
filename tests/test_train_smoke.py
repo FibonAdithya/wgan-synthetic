@@ -143,6 +143,20 @@ def test_neighbourhood_critic_trains_and_its_checkpoint_reloads(tmp_path):
     rebuilt.load_state_dict(saved["critic_state_dict"])
 
 
+def test_set_critic_trains_and_its_checkpoint_reloads(tmp_path):
+    from src.models.critic import SetNeighbourhoodCritic, build_critic
+
+    cfg = make_config(tmp_path, "mlp")
+    cfg["model"].update(critic_type="neighbourhood_set", critic_k=5, critic_edge_dim=16)
+    ckpt_path, meta = train(cfg)
+    for entry in meta["metrics"]:
+        assert math.isfinite(entry["d_loss"]) and math.isfinite(entry["gp"])
+    saved = torch.load(ckpt_path, weights_only=False)
+    rebuilt = build_critic(cfg["model"], input_dim=16)
+    assert isinstance(rebuilt, SetNeighbourhoodCritic)
+    rebuilt.load_state_dict(saved["critic_state_dict"])
+
+
 def test_run_metadata_records_dropped_zero_rows(tmp_path):
     """Catches the count not reaching run_metadata"""
     cfg = make_config(tmp_path, "mlp")

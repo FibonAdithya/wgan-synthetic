@@ -487,7 +487,12 @@ class SetNeighbourhoodCritic(nn.Module):
         return self.mlp(torch.cat([x, a.to(x.dtype)], dim=1))
 
 
-CRITIC_TYPES = ("per_vector", "neighbourhood", "neighbourhood_bank")
+CRITIC_TYPES = (
+    "per_vector",
+    "neighbourhood",
+    "neighbourhood_bank",
+    "neighbourhood_set",
+)
 
 
 def build_critic(model_cfg: Mapping[str, Any], input_dim: int) -> nn.Module:
@@ -521,6 +526,17 @@ def build_critic(model_cfg: Mapping[str, Any], input_dim: int) -> nn.Module:
                 model_cfg.get("critic_distance_floor", DEFAULT_DISTANCE_FLOOR)
             ),
             bank_size=int(model_cfg.get("critic_bank_size", 16384)),
+            **common,
+        )
+    if kind == "neighbourhood_set":
+        return SetNeighbourhoodCritic(
+            input_dim=input_dim,
+            k=int(model_cfg.get("critic_k", DEFAULT_K)),
+            distance_floor=float(
+                model_cfg.get("critic_distance_floor", DEFAULT_DISTANCE_FLOOR)
+            ),
+            edge_dim=int(model_cfg.get("critic_edge_dim", 128)),
+            edge_pool=str(model_cfg.get("critic_edge_pool", "max")),
             **common,
         )
     raise ValueError(f"Unknown critic_type: {kind!r}; expected one of {CRITIC_TYPES}")

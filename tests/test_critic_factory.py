@@ -9,6 +9,7 @@ from src.models.critic import (
     CRITIC_TYPES,
     Critic,
     NeighbourhoodCritic,
+    SetNeighbourhoodCritic,
     build_critic,
 )
 
@@ -17,7 +18,12 @@ BASE_CFG = {"critic_hidden_dims": [16, 8], "negative_slope": 0.2}
 
 def test_the_documented_types():
     """Catches a type added to or dropped from the tuple without the docs table changing"""
-    assert CRITIC_TYPES == ("per_vector", "neighbourhood", "neighbourhood_bank")
+    assert CRITIC_TYPES == (
+        "per_vector",
+        "neighbourhood",
+        "neighbourhood_bank",
+        "neighbourhood_set",
+    )
 
 
 def test_missing_critic_type_defaults_to_the_per_vector_critic():
@@ -53,14 +59,19 @@ def test_neighbourhood_defaults_k_20_and_floor_0_01():
     assert (critic.k, critic.distance_floor) == (20, 0.01)
 
 
-def test_negative_slope_reaches_both_classes():
+def test_negative_slope_reaches_every_class():
     """Catches negative_slope dropped on one branch"""
     for kind in CRITIC_TYPES:
         critic = build_critic(
             dict(BASE_CFG, critic_type=kind, negative_slope=0.31), input_dim=6
         )
         net = critic.net if isinstance(critic, Critic) else critic.mlp.net
-        slopes = {m.negative_slope for m in net if isinstance(m, torch.nn.LeakyReLU)}
+        modules = list(net)
+        if isinstance(critic, SetNeighbourhoodCritic):
+            modules += list(critic.edge)
+        slopes = {
+            m.negative_slope for m in modules if isinstance(m, torch.nn.LeakyReLU)
+        }
         assert slopes == {0.31}, kind
 
 
@@ -81,3 +92,21 @@ def test_state_dicts_do_not_cross_load():
         a.load_state_dict(b.state_dict())
     with pytest.raises(RuntimeError):
         b.load_state_dict(a.state_dict())
+
+
+def test_neighbourhood_set_reads_edge_dim_and_pool_from_the_config():
+    cfg = dict(
+        BASE_CFG,
+        critic_type="neighbourhood_set",
+        critic_k=4,
+        critic_edge_dim=32,
+        critic_edge_pool="mean",
+    )
+    critic = build_critic(cfg, input_dim=12)
+    assert isinstance(critic, SetNeighbourhoodCritic)
+    assert (critic.k, critic.edge_dim, critic.edge_pool) == (4, 32, "mean")
+
+
+def test_neighbourhood_set_defaults_edge_dim_128_and_max_pool():
+    critic = build_critic(dict(BASE_CFG, critic_type="neighbourhood_set"), input_dim=12)
+    assert (critic.edge_dim, critic.edge_pool) == (128, "max")

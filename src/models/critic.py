@@ -220,6 +220,11 @@ class BankNeighbourhoodCritic(NeighbourhoodCritic):
     the ring starts empty again; the trainer records the step at which it
     first fills.
 
+    Requires `training.amp: false`, as the parent does: under autocast the
+    ring would hold fp16-rounded generator rows widened to float32 while the
+    real bank holds exact training rows, turning the precision asymmetry
+    into a persistent property of the two banks.
+
     Checkpoints carry `real_bank_indices` (persistent) and neither bank
     (non-persistent): the trainer rebuilds the real bank from the split.
     """

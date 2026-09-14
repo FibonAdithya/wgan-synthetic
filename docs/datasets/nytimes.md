@@ -707,10 +707,10 @@ spec's 3% bar is stated in, both from
 
 | Statistic | real, cleaned (10-draw range) | `v2b_best` (step 2,000, gate-selected) | step 30,000 |
 |---|---|---|---|
-| LID median | `55.97` (54.97 -- 56.86) | `68.13` (21.7% off) | `76.54` (36.7% off) |
-| Relative contrast | `1.271` (1.265 -- 1.276) | `1.197` (5.8% off) | `1.17` (7.9% off) |
-| Hubness skew | `2.529` (2.315 -- 2.779) | `18.51` (631.8% off) | `5.876` (132.4% off) |
-| IVF cell-balance Gini | `0.7767` (0.7832 -- 0.8231) | `0.811` (in range) | `0.8438` (8.6% off) |
+| LID median | `55.97` (54.97 -- 56.86) | `68.13` (21.7% off, 6.4x) | `76.54` (36.7% off, 10.9x) |
+| Relative contrast | `1.271` (1.265 -- 1.276) | `1.197` (5.8% off, 6.8x) | `1.17` (7.9% off, 9.3x) |
+| Hubness skew | `2.529` (2.315 -- 2.779) | `18.51` (631.8% off, 34.5x) | `5.876` (132.4% off, 7.2x) |
+| IVF cell-balance Gini | `0.7767` (0.7832 -- 0.8231) | `0.811` (in range, 0.9x) | `0.8438` (8.6% off, 1.7x) |
 
 **Misses the bar** on three of four: only Gini falls inside the band.
 LID is 21.7% off (`v2`'s selected checkpoint: 10.1% off) and contrast is
@@ -799,18 +799,24 @@ entirely inside one logging window, so a sawtooth at that period cannot
 appear in the logged trace regardless of whether the ring is producing
 one underneath it. Across all 120 consecutive deltas of the run's 121
 logged values, the mean absolute change between entries is `0.009`; over
-just the last 40 logged values it is `0.006`, with a standard deviation of
-`0.00645` on that same window -- a noisy, non-collapsing trace, consistent
-with the non-monotone trunk energy above it.
+just the last 40 logged values it is `0.006`, and those 40 values
+themselves have a standard deviation of `0.00645` -- a noisy,
+non-collapsing trace, consistent with the non-monotone trunk energy above
+it.
 
 **Per-step cost.** `v2b`'s whole-job wall time (3,970 seconds) divided by
 its 30,000 generator steps is `0.1323` seconds/step; `v2`'s whole-job wall
 time (3,507 seconds, from its 58-minute-27-second figure above) divided by
-its 30,000 steps is `0.1169` seconds/step. `v2b` costs about 13% more per
-step than `v2` (MEASURED from the two jobs' wall-clock figures above,
-2026-09-14). The bank critic scores every real and fake row against a
-fixed 16,384-row bank rather than `v2`'s 512-row within-batch matrix,
-which is consistent with the added cost.
+its 30,000 steps is `0.1169` seconds/step. The two bases are not the same
+kind of interval: `v2b`'s 66 minutes 10 seconds runs from the job log's
+creation (13:37:15Z) to its last write (14:43:25Z), while `v2`'s figure
+runs from submission (11:28:30Z) to its last write (12:26:57Z), so `v2`'s
+basis includes its submit-to-start gap; the conclusion below (about +13%
+per step) is unchanged. `v2b` costs about 13% more per step than `v2`
+(MEASURED from the two jobs' wall-clock figures above, 2026-09-14). The
+bank critic scores every real and fake row against a fixed 16,384-row bank
+rather than `v2`'s 512-row within-batch matrix, which is consistent with
+the added cost.
 
 `v2b` is not a rung. It misses the gate on LID (21.7% off, outside the 3%
 allowance), on relative contrast (5.8% off, also outside the 3%
@@ -819,12 +825,19 @@ checkpoint and worse than `v0`'s and `v1`'s). It clears Gini. Its selected check
 transient by the spec's own factor-of-two test. Like `v2`, it does not
 collapse (effective rank `196.3` at the selected step, `238.7` at
 30,000, against real's `247.4`) and instead drifts to the Gaussian end:
-LID climbs from the mid-60s to the mid-70s and contrast falls from
-`1.2` to `1.16` over the run, the same direction `v2` moved in and close
-to `v2`'s own endpoint (LID `77.2`, contrast `1.167` at step 30,000).
-Which of the three approaches goes next is a human decision per the
-spec's own rule; this page states only that `v2b` misses the bar and on
-which statistics.
+LID climbs from the mid-60s after the step-1,000 evaluation (74.2) to the
+mid-70s and contrast falls from `1.19` to `1.16` over the run, the same
+direction `v2` moved in and close to `v2`'s own endpoint (LID `77.2`,
+contrast `1.167` at step 30,000). Which of the three approaches goes next
+is a human decision per the spec's own rule; this page states only that
+`v2b` misses the bar and on which statistics. One structural difference
+from `v2` is worth weighing when the next rung is chosen: within a critic
+step the trainer evaluates three different maps, real rows against the
+real bank, fake rows against the ring, and the gradient penalty's
+interpolates against the union, so the penalty bounds the union map while
+the two maps whose difference is the loss are constrained only
+indirectly; whether that explains the early transient is not measured
+here.
 
 ## Gate
 

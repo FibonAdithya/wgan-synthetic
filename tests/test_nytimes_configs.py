@@ -77,7 +77,7 @@ def test_v2b_is_v2_plus_the_neighbour_source():
         assert v2b.pop(key) == value, key
     assert v2b.pop("output_dir") == "runs/nytimes/v2b"
     v2.pop("output_dir")
-    v2.pop("model.critic_type")
+    assert v2.pop("model.critic_type") == "neighbourhood"
     assert v2b == v2
 
 

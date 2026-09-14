@@ -6,8 +6,9 @@
 #      unchanged. Real rows are profiled against a fixed 16k-row subset of
 #      the training split, fake rows against a ring of the last 32 generator
 #      batches, so the profile is measured at a scale closer to the gate's
-#      100-NN in 250k and exact copies are visible to the critic for about
-#      3% of real rows rather than 0.15%.
+#      100-NN in 250k and exact copies are visible to the critic for
+#      roughly 3% of real rows (ESTIMATE, extrapolated from the 3.4% the
+#      spec measured at a 20k bank) rather than 0.15%.
 #
 # Everything else is v2's: the linear-skip generator, drop_zero_rows: true
 # (duplicates kept), gate-aware selection, 30k steps.

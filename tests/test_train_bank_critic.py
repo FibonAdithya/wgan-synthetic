@@ -82,3 +82,37 @@ def test_resume_rebuilds_the_real_bank_from_the_checkpoint_not_from_the_seed(tmp
     n_train = meta_first["data"]["num_train"]
     redraw = draw_real_bank_indices(n_train, BANK_SIZE, seed=1)
     assert not torch.equal(drawn_at_seed_0, redraw), "the mutation must be observable"
+
+
+def test_fake_ring_is_written_after_the_generator_step_scores_the_batch(
+    tmp_path, monkeypatch
+):
+    """Catches: the ring write moved above the generator-step score. If a
+    batch found itself in the ring, every fake row would read its own copy
+    at the floor, a constant tight-pair feature on the fake side only."""
+    cfg = make_bank_config(tmp_path)
+    batch_size = cfg["training"]["batch_size"]
+    n_critic = cfg["training"]["n_critic"]
+    num_gen_steps = cfg["training"]["num_gen_steps"]
+
+    recorded = []
+    original_forward = BankNeighbourhoodCritic.forward
+
+    def forward_recording_fake_bank_fill(self, x, population="mixed", row_ids=None):
+        if population == "fake":
+            recorded.append(self.fake_rows_written)
+        return original_forward(self, x, population=population, row_ids=row_ids)
+
+    monkeypatch.setattr(
+        BankNeighbourhoodCritic, "forward", forward_recording_fake_bank_fill
+    )
+
+    train(cfg)
+
+    # Each generator step makes n_critic fake calls in the critic loop plus
+    # one in the generator step, all before that step's ring write.
+    expected = [
+        s * batch_size for s in range(num_gen_steps) for _ in range(n_critic + 1)
+    ]
+    assert expected == [0, 0, 0, 32, 32, 32, 64, 64, 64, 96, 96, 96]
+    assert recorded == expected

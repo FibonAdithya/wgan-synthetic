@@ -3,7 +3,7 @@
 # the cleaned real corpus.
 #
 #   gpuq submit --project wgan-synthetic --commit <sha> --branch nytimes-v2b \
-#     --lane gpu -- bash scripts/nytimes_v2b_seed42_job.sh
+#     --lane gpu --timeout-s 10800 -- bash scripts/nytimes_v2b_seed42_job.sh
 #
 # runs/ is gitignored, so nothing here is declared as a --artifact; the run
 # directory is copied to /workspace/nytimes-v2b at the end instead, the way

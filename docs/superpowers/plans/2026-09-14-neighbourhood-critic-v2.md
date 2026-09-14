@@ -296,11 +296,22 @@ def test_self_is_excluded_by_index():
     assert r.min() > 0.5
 
 
+def _batch_with_an_exact_copy(seed: int, n: int, dim: int) -> torch.Tensor:
+    """Rows 0 and 1 are the same one-hot vector. One-hot, not a random unit
+    row: the expanded-square distance of a random copy rounds to ~1e-7, not
+    0, so a test built on it would pass even without the clamp. For a
+    one-hot pair sq + sq - 2*dot is exactly 1 + 1 - 2 = 0."""
+    x = _unit_batch(seed, n, dim)
+    x[0] = 0.0
+    x[0, 0] = 1.0
+    x[1] = x[0]
+    return x
+
+
 def test_exact_copies_read_as_the_floor_not_zero_or_nan():
     """Catches a lost clamp (would be 0, then log gives -inf) and a clamp
     applied after sqrt (gradient at sqrt(0) is infinite)."""
-    x = _unit_batch(2, n=8, dim=5)
-    x[1] = x[0]
+    x = _batch_with_an_exact_copy(2, n=8, dim=5)
     r = neighbourhood_distances(x, k=2, floor=0.01)
     assert r[0, 0].item() == pytest.approx(0.01, abs=1e-8)
     assert r[1, 0].item() == pytest.approx(0.01, abs=1e-8)
@@ -309,9 +320,7 @@ def test_exact_copies_read_as_the_floor_not_zero_or_nan():
 
 def test_floor_gradient_is_finite_through_a_copy():
     """Catches sqrt-before-clamp: d sqrt(0)/dx is inf and poisons the batch."""
-    x = _unit_batch(3, n=8, dim=5).requires_grad_(True)
-    with torch.no_grad():
-        x[1] = x[0]
+    x = _batch_with_an_exact_copy(3, n=8, dim=5).requires_grad_(True)
     r = neighbourhood_distances(x, k=2, floor=0.01)
     r.sum().backward()
     assert torch.isfinite(x.grad).all()
@@ -464,10 +473,11 @@ def neighbourhood_distances(
             f"need at least k={k} neighbour candidates per row, got {n_candidates} "
             f"({'within-batch, batch of ' + str(x.shape[0]) if bank is None else 'bank'})"
         )
-    d2 = _masked_squared_distances(x, bank, self_index)
-    r2, _ = torch.topk(d2, k, dim=1, largest=False, sorted=True)
-    r2 = r2.clamp(min=float(floor) ** 2)
-    return r2.sqrt()
+    with torch.autocast(device_type=x.device.type, enabled=False):
+        d2 = _masked_squared_distances(x, bank, self_index)
+        r2, _ = torch.topk(d2, k, dim=1, largest=False, sorted=True)
+        r2 = r2.clamp(min=float(floor) ** 2)
+        return r2.sqrt()
 
 
 def profile_features(r: Tensor) -> Tensor:
@@ -530,6 +540,7 @@ def test_scores_depend_on_the_rest_of_the_batch():
 
     k = n - 1 so every row's profile uses every other row; moving one row
     then changes every other row's r_k or a ratio."""
+    torch.manual_seed(0)
     critic = NeighbourhoodCritic(input_dim=4, hidden_dims=[6], k=7)
     x = _unit_batch(12, n=8, dim=4)
     base = critic(x)
@@ -540,6 +551,7 @@ def test_scores_depend_on_the_rest_of_the_batch():
 
 def test_permuting_the_batch_permutes_the_scores():
     """Catches a topk/gather index bug pairing a row with another's profile."""
+    torch.manual_seed(0)
     critic = NeighbourhoodCritic(input_dim=4, hidden_dims=[6], k=3)
     x = _unit_batch(13, n=10, dim=4)
     perm = torch.randperm(10, generator=torch.Generator().manual_seed(0))
@@ -557,15 +569,20 @@ def test_gradient_penalty_is_finite_and_double_backward_works():
     gp = gradient_penalty(critic, real, fake, device=torch.device("cpu"))
     assert torch.isfinite(gp)
     gp.backward()
-    assert all(
-        p.grad is not None and torch.isfinite(p.grad).all() for p in critic.parameters()
-    )
+    # The head's bias never gets gradient from the penalty (it does not
+    # affect d score / d input), on any critic. Check the first layer, which
+    # the profile feeds, and that whatever grads exist are finite.
+    first = next(m for m in critic.mlp.net if isinstance(m, torch.nn.Linear))
+    assert first.weight.grad is not None and torch.isfinite(first.weight.grad).all()
+    assert first.weight.grad[:, 4:].abs().sum() > 0  # the profile columns
+    assert all(torch.isfinite(p.grad).all() for p in critic.parameters() if p.grad is not None)
 
 
 def test_gradient_penalty_reaches_neighbour_rows():
     """With a batch-dependent critic the per-row gradient is of the summed
     batch score, so it includes how row i moves other rows' features. Catches
     a forward that detaches the profile."""
+    torch.manual_seed(0)
     critic = NeighbourhoodCritic(input_dim=4, hidden_dims=[6], k=7)
     x = _unit_batch(16, n=8, dim=4).requires_grad_(True)
     critic(x)[0].backward()  # only row 0's score...
@@ -874,17 +891,17 @@ def test_gate_statistics_logs_the_fraction_of_rows_within_the_floor_of_a_neighbo
     """Catches the diagnostic reading a survivor-masked column (copies are
     exactly the rows the mask drops) or the wrong column of dist."""
     rng = np.random.default_rng(3)
-    x = rng.standard_normal((100, 16)).astype(np.float32)
+    x = rng.standard_normal((200, 16)).astype(np.float32)
     x /= np.linalg.norm(x, axis=1, keepdims=True)
-    x[1] = x[0]
-    x[2] = x[0]  # rows 0, 1, 2 each have a neighbour at distance 0
+    for i in range(1, 6):
+        x[i] = x[0]  # rows 0..5 each have a neighbour at distance 0: 6 of 200
     stats = gate_statistics(x, metric="angular", seed=0)
     assert stats["near_duplicate_fraction"] == pytest.approx(0.03)
 
 
 def test_near_duplicate_fraction_uses_the_given_floor():
     rng = np.random.default_rng(4)
-    x = rng.standard_normal((100, 16)).astype(np.float32)
+    x = rng.standard_normal((200, 16)).astype(np.float32)
     x /= np.linalg.norm(x, axis=1, keepdims=True)
     # Random unit vectors in 16-D sit far above 0.01 from each other, and
     # far below 3.0 (the diameter of the unit sphere is 2).
@@ -1418,7 +1435,7 @@ In `_masked_squared_distances`, comment out `mask.fill_diagonal_(float("inf"))`.
 
 - [ ] **Step 2: remove the clamp**
 
-In `neighbourhood_distances`, replace `r2 = r2.clamp(min=float(floor) ** 2)` with `pass`. Run `$PY -m pytest tests/test_neighbourhood_critic.py -k "exact_copies or floor_gradient" -v`. Expected: both FAIL (0.0 instead of 0.01; NaN/inf in the gradient). Restore.
+In `neighbourhood_distances`, replace `r2 = r2.clamp(min=float(floor) ** 2)` with `pass`. Run `$PY -m pytest tests/test_neighbourhood_critic.py -k "exact_copies or floor_gradient" -v`. Expected: both FAIL: the one-hot copy's distance is exactly 0.0 instead of 0.01, and `sqrt(0)` puts inf/NaN in the gradient. (The tests use a one-hot copy precisely so this mutation is caught deterministically; a random-unit copy rounds to ~1e-7 and would slip through.) Restore.
 
 - [ ] **Step 3: drop the concatenation**
 
@@ -1465,8 +1482,9 @@ Poll every 10 minutes with a `Monitor`/background loop, not a foreground sleep. 
 
 ```bash
 ssh tig-gpu 'cd /workspace/nytimes-v2/v2_seed42 && ls -l run_metadata.json run_config.yaml eda_clean/summary.json && sha256sum run_metadata.json run_config.yaml eda_clean/summary.json'
+mkdir -p docs/results/nytimes-v2-seed42
 ssh tig-gpu 'cd /workspace/nytimes-v2/v2_seed42 && tar czf - run_metadata.json run_config.yaml eda_clean/summary.json' | tar xzf - -C docs/results/nytimes-v2-seed42/
-sha256sum docs/results/nytimes-v2-seed42/*   # must match the remote hashes
+(cd docs/results/nytimes-v2-seed42 && sha256sum run_metadata.json run_config.yaml eda_clean/summary.json)   # must match the remote hashes line for line
 mv docs/results/nytimes-v2-seed42/eda_clean/summary.json docs/results/nytimes-v2-seed42/eda_clean_summary.json && rmdir docs/results/nytimes-v2-seed42/eda_clean
 ```
 

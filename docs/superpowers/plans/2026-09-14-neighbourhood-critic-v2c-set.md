@@ -229,7 +229,12 @@ def test_gradient_penalty_is_finite_and_double_backward_works():
     gp = gradient_penalty(c, _unit(9, 8, 4), _unit(10, 8, 4), device=torch.device("cpu"))
     assert torch.isfinite(gp)
     gp.backward()
-    assert all(p.grad is not None and torch.isfinite(p.grad).all() for p in c.parameters())
+    # The head's bias never gets gradient from the penalty (it does not
+    # affect d score / d input), on any critic. The edge MLP's first weight
+    # must, since the penalty reaches neighbours through it.
+    first_edge = next(m for m in c.edge if isinstance(m, torch.nn.Linear))
+    assert first_edge.weight.grad is not None and torch.isfinite(first_edge.weight.grad).all()
+    assert all(torch.isfinite(p.grad).all() for p in c.parameters() if p.grad is not None)
 
 
 def test_gradient_reaches_neighbour_rows_through_the_differences():

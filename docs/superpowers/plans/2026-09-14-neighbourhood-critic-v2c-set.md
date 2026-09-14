@@ -6,7 +6,14 @@
 
 **Architecture:** `SetNeighbourhoodCritic` in `src/models/critic.py` finds each row's k within-batch neighbours (same masked distance matrix as the shared change, via a new `neighbourhood_indices`), runs one EdgeConv layer `MLP_edge([x_i, x_j - x_i])` over the k edges, pools over neighbours (max, or mean), and feeds `[x_i, pooled]` to the existing MLP. `forward(x)` keeps the plain calling convention, so the trainer does not change.
 
-**Tech Stack:** Python 3, PyTorch, numpy, pytest, ruff. Local venv `/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/python`; box `/opt/venvs/wgan-synthetic/bin/python`.
+**Tech Stack:** Python 3, PyTorch, numpy, pytest, ruff. Local venv `/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/python`; box `/opt/venvs/wgan-synthetic/bin/python`. Every shell line below assumes
+
+```bash
+PY=/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/python
+RUFF=$(dirname "$PY")/ruff
+```
+
+`ruff` is installed in the venv only, not on `PATH`: bare `make check PYTHON=$PY` stops at `lint` with `make: ruff: No such file or directory` (audit 2026-09-14, measured). Always pass both variables. Baseline at the prerequisite commit: `make check PYTHON=$PY RUFF=$RUFF` green, 847 passed (measured 2026-09-14).
 
 **Spec:** `docs/superpowers/specs/2026-09-14-neighbourhood-critic-design.md`, sections "Shared" and "Approach 3".
 
@@ -14,9 +21,10 @@
 
 ## Global Constraints
 
-- All of the `v2` plan's constraints hold: `Critic` untouched, float32 neighbour maths with autocast disabled, no `torch.cdist`, self excluded by an `inf` mask, explicit `git add` paths, `make check` before each commit.
+- All of the `v2` plan's constraints hold: `Critic` untouched, float32 neighbour maths with autocast disabled, no `torch.cdist`, self excluded by an `inf` mask, explicit `git add` paths, `make format PYTHON=$PY RUFF=$RUFF` then `make check PYTHON=$PY RUFF=$RUFF` before each commit (the line limit is 88; three of the test lines below as first drafted exceeded it and `format-check` fails on that).
 - Neighbour *selection* uses the masked squared distances; the floor plays no part in selection (ordering is unchanged by a lower clamp) and this class reads no distances, only neighbour rows, so `critic_distance_floor` is accepted for interface uniformity and unused. Say so in the docstring.
 - `critic_edge_dim` default `128`; `critic_edge_pool` default `max`, alternative `mean`; anything else raises.
+- `SetNeighbourhoodCritic` requires `training.amp: false` for the same reason `NeighbourhoodCritic` does: the neighbour maths is float32 either way, but under autocast the trainer hands the critic fp16-rounded fake rows and fp32 real rows, and a difference `x_j - x_i` of that origin is not a difference in the data. `v2.yaml` already has `amp: false`; the docstring and the docs table say so.
 - The trainer is not modified by this plan. If the `v2b` plan has landed, its `score()` helper passes nothing to this class (it does not declare `population_aware`).
 
 ## Deviations from the spec
@@ -68,7 +76,9 @@ def _unit(seed, n, dim):
 
 
 def test_indices_match_brute_force_and_exclude_self():
-    """Catches a lost diagonal mask (self would be index 0 of every row)."""
+    """Catches a lost diagonal mask (self would be index 0 of every row).
+    torch.cdist is the brute-force oracle here, as in
+    test_neighbourhood_critic.py; the no-cdist rule is for src/."""
     x = _unit(0, n=9, dim=6)
     idx = neighbourhood_indices(x, k=3)
     full = torch.cdist(x, x)
@@ -115,8 +125,9 @@ def neighbourhood_indices(x: Tensor, k: int) -> Tensor:
             f"need at least k={k} neighbour candidates per row, got {x.shape[0] - 1} "
             f"(within-batch, batch of {x.shape[0]})"
         )
-    d2 = _masked_squared_distances(x, None, None)
-    _, idx = torch.topk(d2, k, dim=1, largest=False, sorted=True)
+    with torch.no_grad():  # indices only; no reason to record the d2 graph
+        d2 = _masked_squared_distances(x, None, None)
+        _, idx = torch.topk(d2, k, dim=1, largest=False, sorted=True)
     return idx
 ```
 
@@ -226,15 +237,22 @@ def test_unknown_pool_raises():
 def test_gradient_penalty_is_finite_and_double_backward_works():
     torch.manual_seed(0)
     c = _set_critic(k=3)
-    gp = gradient_penalty(c, _unit(9, 8, 4), _unit(10, 8, 4), device=torch.device("cpu"))
+    gp = gradient_penalty(
+        c, _unit(9, 8, 4), _unit(10, 8, 4), device=torch.device("cpu")
+    )
     assert torch.isfinite(gp)
     gp.backward()
     # The head's bias never gets gradient from the penalty (it does not
     # affect d score / d input), on any critic. The edge MLP's first weight
     # must, since the penalty reaches neighbours through it.
     first_edge = next(m for m in c.edge if isinstance(m, torch.nn.Linear))
-    assert first_edge.weight.grad is not None and torch.isfinite(first_edge.weight.grad).all()
-    assert all(torch.isfinite(p.grad).all() for p in c.parameters() if p.grad is not None)
+    assert (
+        first_edge.weight.grad is not None
+        and torch.isfinite(first_edge.weight.grad).all()
+    )
+    assert all(
+        torch.isfinite(p.grad).all() for p in c.parameters() if p.grad is not None
+    )
 
 
 def test_gradient_reaches_neighbour_rows_through_the_differences():
@@ -291,6 +309,11 @@ class SetNeighbourhoodCritic(nn.Module):
     Gradients flow through both the query row and the gathered neighbour
     rows, so under `gradient_penalty` the summed-score formulation is what
     bounds how fast a score can change when a neighbour moves.
+
+    Requires `training.amp: false`, as `NeighbourhoodCritic` does: under
+    autocast the trainer hands the critic fp16-rounded fake rows and fp32
+    real rows, and a difference `x_j - x_i` of that origin is not a
+    difference in the data.
     """
 
     def __init__(
@@ -309,7 +332,9 @@ class SetNeighbourhoodCritic(nn.Module):
         if edge_dim < 1:
             raise ValueError(f"critic_edge_dim must be positive, got {edge_dim}")
         if edge_pool not in EDGE_POOLS:
-            raise ValueError(f"critic_edge_pool must be one of {EDGE_POOLS}, got {edge_pool!r}")
+            raise ValueError(
+                f"critic_edge_pool must be one of {EDGE_POOLS}, got {edge_pool!r}"
+            )
         self.k = int(k)
         self.distance_floor = float(distance_floor)
         self.edge_dim = int(edge_dim)
@@ -387,6 +412,19 @@ def test_neighbourhood_set_defaults_edge_dim_128_and_max_pool():
 ```
 
 Amend `test_the_documented_types` to include `"neighbourhood_set"` at the end of the tuple (after `"neighbourhood_bank"` if the `v2b` plan has landed, otherwise after `"neighbourhood"`).
+
+Amend `test_negative_slope_reaches_both_classes`: rename it `test_negative_slope_reaches_every_class`, and make the set critic's *edge* MLP part of what is checked, since the head alone would pass with the slope dropped on the edge layers:
+
+```python
+        net = critic.net if isinstance(critic, Critic) else critic.mlp.net
+        modules = list(net)
+        if isinstance(critic, SetNeighbourhoodCritic):
+            modules += list(critic.edge)
+        slopes = {
+            m.negative_slope for m in modules if isinstance(m, torch.nn.LeakyReLU)
+        }
+        assert slopes == {0.31}, kind
+```
 
 Append to `tests/test_train_smoke.py`:
 
@@ -506,7 +544,7 @@ Run: `$PY -m pytest tests/test_nytimes_configs.py -v`. Expected: `FileNotFoundEr
 
 `scripts/nytimes_v2c_seed42_job.sh`: copy of `scripts/nytimes_v2_seed42_job.sh` with `RUN=runs/nytimes/v2c_seed42`, `KEEP=/workspace/nytimes-v2/v2c_seed42`, config `configs/nytimes/v2c_seed42.yaml`, labels `v2c_best=` / `v2c_step30000=`. `chmod +x`.
 
-`PROJECT_DOCUMENTATION.md`, `### critic_type`: add `neighbourhood_set` with one sentence ("`SetNeighbourhoodCritic`: one EdgeConv layer over each row's k within-batch neighbour differences, pooled, then the MLP head; it learns its own neighbourhood features and reads no distances") and the rows `| model.critic_edge_dim | 128 | Width of the edge MLP. |` and `| model.critic_edge_pool | max | max or mean over the k edges. |`.
+`PROJECT_DOCUMENTATION.md`, `### critic_type`: change "Two values" to "Three values" and add `neighbourhood_set` with one sentence ("`SetNeighbourhoodCritic`: one EdgeConv layer over each row's k within-batch neighbour differences, pooled, then the MLP head; it learns its own neighbourhood features and reads no distances, so `critic_distance_floor` is unused"); in the `model.critic_type` row change "`neighbourhood` requires `training.amp: false`" to "`neighbourhood` and `neighbourhood_set` require `training.amp: false`"; and add the rows `| model.critic_edge_dim | 128 | Width of the edge MLP. |` and `| model.critic_edge_pool | max | max or mean over the k edges. |`.
 
 `docs/datasets/nytimes.md` ladder row:
 
@@ -516,7 +554,7 @@ Run: `$PY -m pytest tests/test_nytimes_configs.py -v`. Expected: `FileNotFoundEr
 
 - [ ] **Step 4: Run the gate**
 
-Run: `make check PYTHON=$PY`. Expected: green.
+Run: `make format PYTHON=$PY RUFF=$RUFF && make check PYTHON=$PY RUFF=$RUFF`. Expected: green.
 
 - [ ] **Step 5: Commit**
 
@@ -531,8 +569,8 @@ git commit -m "configs+docs(nytimes): v2c rung, the learned set critic"
 
 - [ ] In `edge_features`, replace `x_j - x_i` with `x_j`: `test_edge_features_use_the_difference...` must FAIL. Restore.
 - [ ] In `pooled`, replace the max with `e.reshape(e.shape[0], -1)[:, : self.edge_dim]` (a positional slice): `test_pooling_is_invariant_to_neighbour_order[max]` must FAIL. Restore.
-- [ ] In `neighbourhood_indices`, pass a zero mask (comment out the diagonal fill in `_masked_squared_distances` temporarily): `test_indices_match_brute_force_and_exclude_self` must FAIL. Restore.
-- [ ] `git status --short` empty, `make check PYTHON=$PY` green. Record all four outputs.
+- [ ] In `neighbourhood_indices`, pass a zero mask (comment out the diagonal fill in `_masked_squared_distances` temporarily): `test_indices_match_brute_force_and_exclude_self` AND `test_indices_keep_an_exact_copy_as_a_neighbour` must FAIL (measured on the audit prototype: exactly those two in `test_set_critic.py`; the shared `test_neighbourhood_critic.py` suite also goes red, which is expected, the function is shared). Restore.
+- [ ] `git status --short` empty, `make check PYTHON=$PY RUFF=$RUFF` green. Record all four outputs.
 
 ---
 
@@ -544,9 +582,13 @@ Identical to Task 10 of the `v2` plan with `v2c` names: push `nytimes-eda` (prob
 ssh tig-gpu "/opt/gpuq/venv/bin/gpuq submit --project wgan-synthetic --commit $SHA --branch nytimes-eda --lane gpu --timeout-s 10800 -- bash scripts/nytimes_v2c_seed42_job.sh"
 ```
 
-Poll with `gpuq show <id>` on a 10-minute background loop. Expected wall time about 45 minutes (the edge MLP is 512 x 20 x 512 x 128 per critic call, about 0.7 GFLOP; measure it from the job log and record it). Bring back `run_metadata.json`, `run_config.yaml`, `eda_clean/summary.json` by streamed tar with hashes verified, into `docs/results/nytimes-v2c-seed42/`. Build the claim table, then write `## v2c, measured` in `docs/datasets/nytimes.md` in the shape of `## v1, measured`, reporting the spec's bar per statistic, the `skip_share` trace, the 2x-neighbour check on the selection score, and `near_duplicate_fraction` real against fake. If the run diverges or the gradient penalty climbs above 1, rerun once with `critic_edge_pool: mean` as its own instrument config (`v2c_mean_seed42.yaml`, output dir `runs/nytimes/v2c_mean_seed42`) and report both. Commit locally.
+Poll with `gpuq show <id>` on a 10-minute background loop. Expected wall time: ESTIMATE (unverified) 60 to 90 minutes. `v2` took 58 minutes (measured, job `wgan-synthetic-20260914T112830Z-6af631`) and this critic does strictly more work per call (the edge MLP is 512 x 20 x 512 x 128, about 0.7 GFLOP, an estimate, plus its double backward); the 10,800 s timeout leaves headroom. Record the measured wall time from `gpuq show` and label it as such. Bring back `run_metadata.json`, `run_config.yaml`, `eda_clean/summary.json` by streamed tar with hashes verified, into `docs/results/nytimes-v2c-seed42/`, laid out exactly as `docs/results/nytimes-v2-seed42/` is (three files, `summary.json` renamed to `eda_clean_summary.json` at the top level, no `eda_clean/` subdirectory). Build the claim table, then write `## v2c, measured` in `docs/datasets/nytimes.md` in the shape of `## v1, measured`, reporting the spec's bar per statistic, the `skip_share` trace, the 2x-neighbour check on the selection score, and `near_duplicate_fraction` real against fake. If the run diverges or the gradient penalty climbs above 1, rerun once with `critic_edge_pool: mean` as its own instrument config (`v2c_mean_seed42.yaml`, output dir `runs/nytimes/v2c_mean_seed42`) and report both. Commit locally.
 
 ---
+
+## Audit record (2026-09-14)
+
+Prototyped Tasks 1 and 2 verbatim in the scratchpad against the prerequisite commit: 16 tests pass; mutation `x_j` for `x_j - x_i` fails exactly the translation test; the positional-slice mutation fails both `test_pooling_is_invariant_to_neighbour_order` cases and `test_max_and_mean_pools_both_build_and_differ`; the lost diagonal mask fails both index tests. All measured. Fixes applied to this plan: `RUFF` for `make check`, three lines wrapped to 88 columns, `no_grad` around the index search, the `amp: false` requirement in docstring and docs, the slope test extended to the edge MLP, the wall-time estimate labelled, the results-directory layout pinned to `v2`'s.
 
 ## Self-review
 

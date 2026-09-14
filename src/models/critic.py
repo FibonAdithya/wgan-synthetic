@@ -404,6 +404,89 @@ def score_population(
     return critic(x)
 
 
+EDGE_POOLS = ("max", "mean")
+
+
+class SetNeighbourhoodCritic(nn.Module):
+    """One EdgeConv layer (Wang et al., DGCNN) over each row's k within-batch
+    neighbours, pooled, then the per-vector MLP on `[x_i, pooled_i]`.
+
+        e_ij = MLP_edge([x_i, x_j - x_i])     j in kNN(i), 2D -> H -> H
+        a_i  = pool_j e_ij                     max (default) or mean
+        s_i  = MLP_out([x_i, a_i])             D + H -> 1
+
+    `x_j - x_i` is the local difference; its spread over j is the local
+    tangent structure, whose singular spectrum is exactly what a collapsed
+    sheet loses. Unlike `NeighbourhoodCritic` this class reads no
+    distances, so it learns its own neighbourhood features. `distance_floor`
+    is accepted for interface uniformity and unused: neighbour selection is
+    by ordering, which a lower clamp does not change, and nothing here
+    divides by a distance.
+
+    Gradients flow through both the query row and the gathered neighbour
+    rows, so under `gradient_penalty` the summed-score formulation is what
+    bounds how fast a score can change when a neighbour moves.
+
+    Requires `training.amp: false`, as `NeighbourhoodCritic` does: under
+    autocast the trainer hands the critic fp16-rounded fake rows and fp32
+    real rows, and a difference `x_j - x_i` of that origin is not a
+    difference in the data.
+    """
+
+    def __init__(
+        self,
+        input_dim: int,
+        hidden_dims: Iterable[int],
+        k: int = DEFAULT_K,
+        distance_floor: float = DEFAULT_DISTANCE_FLOOR,
+        edge_dim: int = 128,
+        edge_pool: str = "max",
+        negative_slope: float = 0.2,
+    ):
+        super().__init__()
+        if k < 1:
+            raise ValueError(f"critic_k must be positive, got {k}")
+        if edge_dim < 1:
+            raise ValueError(f"critic_edge_dim must be positive, got {edge_dim}")
+        if edge_pool not in EDGE_POOLS:
+            raise ValueError(
+                f"critic_edge_pool must be one of {EDGE_POOLS}, got {edge_pool!r}"
+            )
+        self.k = int(k)
+        self.distance_floor = float(distance_floor)
+        self.edge_dim = int(edge_dim)
+        self.edge_pool = str(edge_pool)
+        self.edge = nn.Sequential(
+            nn.Linear(2 * input_dim, self.edge_dim),
+            nn.LeakyReLU(negative_slope=negative_slope, inplace=True),
+            nn.Linear(self.edge_dim, self.edge_dim),
+            nn.LeakyReLU(negative_slope=negative_slope, inplace=True),
+        )
+        self.mlp = Critic(
+            input_dim=input_dim + self.edge_dim,
+            hidden_dims=hidden_dims,
+            negative_slope=negative_slope,
+        )
+
+    def edge_features(self, x: Tensor, idx: Tensor) -> Tensor:
+        """`(n, k, edge_dim)`: MLP_edge on `[x_i, x_j - x_i]` for each edge."""
+        k = idx.shape[1]
+        x_j = x[idx]  # (n, k, D), differentiable in x
+        x_i = x[:, None, :].expand(-1, k, -1)
+        return self.edge(torch.cat([x_i, x_j - x_i], dim=2))
+
+    def pooled(self, x: Tensor, idx: Tensor) -> Tensor:
+        e = self.edge_features(x, idx)
+        if self.edge_pool == "max":
+            return e.max(dim=1).values
+        return e.mean(dim=1)
+
+    def forward(self, x: Tensor) -> Tensor:
+        idx = neighbourhood_indices(x, self.k)
+        a = self.pooled(x, idx)
+        return self.mlp(torch.cat([x, a.to(x.dtype)], dim=1))
+
+
 CRITIC_TYPES = ("per_vector", "neighbourhood", "neighbourhood_bank")
 
 

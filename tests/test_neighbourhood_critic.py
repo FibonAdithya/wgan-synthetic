@@ -13,9 +13,11 @@ import torch
 from src.models.critic import (
     DEFAULT_DISTANCE_FLOOR,
     DEFAULT_K,
+    NeighbourhoodCritic,
     neighbourhood_distances,
     profile_features,
 )
+from src.train.train_wgan_gp import gradient_penalty
 
 
 def _unit_batch(seed: int, n: int, dim: int) -> torch.Tensor:
@@ -159,3 +161,96 @@ def test_profile_runs_in_float32_under_autocast():
     with torch.autocast("cpu", dtype=torch.bfloat16, enabled=True):
         r = neighbourhood_distances(x, k=3, floor=0.01)
     assert r.dtype == torch.float32
+
+
+def test_critic_emits_one_score_per_row():
+    """Catches a wrong squeeze or reduction axis."""
+    critic = NeighbourhoodCritic(input_dim=5, hidden_dims=[8, 4], k=3)
+    assert critic(_unit_batch(10, n=7, dim=5)).shape == (7,)
+
+
+def test_critic_input_width_is_dim_plus_k():
+    """Catches the profile computed but not concatenated."""
+    critic = NeighbourhoodCritic(input_dim=5, hidden_dims=[8], k=3)
+    first = next(m for m in critic.mlp.net if isinstance(m, torch.nn.Linear))
+    assert first.in_features == 5 + 3
+
+
+def test_features_have_width_k():
+    """Catches a features() that returns the distances' shape with an extra
+    column."""
+    critic = NeighbourhoodCritic(input_dim=5, hidden_dims=[8], k=4)
+    assert critic.features(_unit_batch(11, n=9, dim=5)).shape == (9, 4)
+
+
+def test_scores_depend_on_the_rest_of_the_batch():
+    """The mirror image of test_critic.py's independence test. Catches the
+    class silently degenerating to per-vector (features not wired).
+
+    k = n - 1 so every row's profile uses every other row; moving one row
+    then changes every other row's r_k or a ratio."""
+    torch.manual_seed(0)
+    critic = NeighbourhoodCritic(input_dim=4, hidden_dims=[6], k=7)
+    x = _unit_batch(12, n=8, dim=4)
+    base = critic(x)
+    moved = x.clone()
+    moved[7] = moved[7] + 1.0
+    assert (critic(moved)[:7] - base[:7]).abs().max() > 1e-6
+
+
+def test_permuting_the_batch_permutes_the_scores():
+    """Catches a topk/gather index bug pairing a row with another's profile."""
+    torch.manual_seed(0)
+    critic = NeighbourhoodCritic(input_dim=4, hidden_dims=[6], k=3)
+    x = _unit_batch(13, n=10, dim=4)
+    perm = torch.randperm(10, generator=torch.Generator().manual_seed(0))
+    torch.testing.assert_close(critic(x[perm]), critic(x)[perm], atol=1e-5, rtol=1e-5)
+
+
+def test_gradient_penalty_is_finite_and_double_backward_works():
+    """Catches a non-differentiable op in the profile path: the penalty
+    needs d(grad norm)/d(params), i.e. create_graph=True through topk,
+    clamp, sqrt and log."""
+    torch.manual_seed(0)
+    critic = NeighbourhoodCritic(input_dim=4, hidden_dims=[6], k=3)
+    real = _unit_batch(14, n=8, dim=4)
+    fake = _unit_batch(15, n=8, dim=4)
+    gp = gradient_penalty(critic, real, fake, device=torch.device("cpu"))
+    assert torch.isfinite(gp)
+    gp.backward()
+    # The head's bias never gets gradient from the penalty (it does not
+    # affect d score / d input), on any critic. Check the first layer, which
+    # the profile feeds, and that whatever grads exist are finite.
+    first = next(m for m in critic.mlp.net if isinstance(m, torch.nn.Linear))
+    assert first.weight.grad is not None and torch.isfinite(first.weight.grad).all()
+    assert first.weight.grad[:, 4:].abs().sum() > 0  # the profile columns
+    assert all(
+        torch.isfinite(p.grad).all() for p in critic.parameters() if p.grad is not None
+    )
+
+
+def test_gradient_penalty_reaches_neighbour_rows():
+    """With a batch-dependent critic the per-row gradient is of the summed
+    batch score, so it includes how row i moves other rows' features. Catches
+    a forward that detaches the profile."""
+    torch.manual_seed(0)
+    critic = NeighbourhoodCritic(input_dim=4, hidden_dims=[6], k=7)
+    x = _unit_batch(16, n=8, dim=4).requires_grad_(True)
+    critic(x)[0].backward()  # only row 0's score...
+    # ...yet other rows get gradient, because they are row 0's neighbours.
+    assert x.grad[1:].abs().sum() > 0
+
+
+def test_rejects_k_below_two_and_nonpositive_floor():
+    """k=1 leaves no ratio entries; the profile would be scale only."""
+    with pytest.raises(ValueError, match="k"):
+        NeighbourhoodCritic(input_dim=4, hidden_dims=[6], k=1)
+    with pytest.raises(ValueError, match="floor"):
+        NeighbourhoodCritic(input_dim=4, hidden_dims=[6], k=3, distance_floor=0.0)
+
+
+def test_forward_refuses_a_batch_no_larger_than_k():
+    """Catches silent truncation of k in forward."""
+    critic = NeighbourhoodCritic(input_dim=4, hidden_dims=[6], k=5)
+    with pytest.raises(ValueError, match="k"):
+        critic(_unit_batch(17, n=5, dim=4))

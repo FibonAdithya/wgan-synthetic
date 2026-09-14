@@ -126,8 +126,20 @@ def build_dataloader(
 
 
 def gradient_penalty(
-    critic: Critic, real: Tensor, fake: Tensor, device: torch.device
+    critic: nn.Module, real: Tensor, fake: Tensor, device: torch.device
 ) -> Tensor:
+    """WGAN-GP penalty on row-wise interpolates of `real` and `fake`.
+
+    The gradient is of the *summed* critic output with respect to each
+    interpolated row. For a per-vector critic that is each row's own score
+    gradient. For a batch-dependent critic (`NeighbourhoodCritic` and its
+    relatives) it also includes how row i moves every other row's
+    neighbourhood features; the penalty then bounds the Lipschitz constant
+    of the summed batch score, one row at a time. That is the intended
+    formulation for a minibatch-dependent critic, and the interpolated batch
+    mixing real and fake neighbourhoods is fine: the penalty is about the
+    critic's smoothness, not the population the batch came from.
+    """
     batch_size = real.shape[0]
     alpha = torch.rand(batch_size, 1, device=device)
     alpha = alpha.expand_as(real)
@@ -326,7 +338,7 @@ def ema_weights(
 
 def save_checkpoint(
     generator: nn.Module,
-    critic: Critic,
+    critic: nn.Module,
     optim_g: torch.optim.Optimizer,
     optim_d: torch.optim.Optimizer,
     out_dir: Path,

@@ -118,3 +118,53 @@ def profile_features(r: Tensor) -> Tensor:
     """
     r_k = r[:, -1:]
     return torch.cat([torch.log(r[:, :-1] / r_k), torch.log(r_k)], dim=1)
+
+
+class NeighbourhoodCritic(nn.Module):
+    """The per-vector MLP on `[x_i, phi_i]`, where `phi_i` is row i's
+    within-batch neighbourhood profile (`profile_features` of
+    `neighbourhood_distances`).
+
+    Batch-dependent by design: a per-vector critic cannot see local
+    dimension, so a low-rank sheet with the right covariance envelope is,
+    to it, the corpus (NYTimes v1 collapsed to LID 5 with the Wasserstein
+    estimate under 0.06 throughout). Real rows are profiled among real
+    batch-mates and fake among fake, so the within-batch bias in the
+    distances is identical on both sides and cancels.
+
+    Under `gradient_penalty` the per-row gradient is therefore of the
+    batch's *summed* score, which includes how row i moves every other
+    row's features. That is the intended Lipschitz constraint for a
+    minibatch-dependent critic; do not "fix" it back to per-row.
+    """
+
+    def __init__(
+        self,
+        input_dim: int,
+        hidden_dims: Iterable[int],
+        k: int = DEFAULT_K,
+        distance_floor: float = DEFAULT_DISTANCE_FLOOR,
+        negative_slope: float = 0.2,
+    ):
+        super().__init__()
+        if k < 2:
+            raise ValueError(f"critic_k must be at least 2 (one ratio entry), got {k}")
+        if distance_floor <= 0.0:
+            raise ValueError(
+                f"critic_distance_floor must be positive, got {distance_floor}"
+            )
+        self.k = int(k)
+        self.distance_floor = float(distance_floor)
+        self.mlp = Critic(
+            input_dim=input_dim + self.k,
+            hidden_dims=hidden_dims,
+            negative_slope=negative_slope,
+        )
+
+    def features(self, x: Tensor) -> Tensor:
+        r = neighbourhood_distances(x, self.k, self.distance_floor)
+        return profile_features(r)
+
+    def forward(self, x: Tensor) -> Tensor:
+        phi = self.features(x).to(x.dtype)
+        return self.mlp(torch.cat([x, phi], dim=1))

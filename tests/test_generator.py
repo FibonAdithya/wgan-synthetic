@@ -276,3 +276,30 @@ def test_linear_skip_orthogonal_init_has_orthonormal_columns():
 def test_linear_skip_rejects_bad_config(kwargs, match):
     with pytest.raises(ValueError, match=match):
         LinearSkipGenerator(**kwargs)
+
+
+def test_component_energies_read_the_trunk_and_skip_terms_separately():
+    """Catches the two terms swapped, or the share computed against the
+    normalised output instead of the pre-normalisation sum."""
+    torch.manual_seed(0)
+    gen = LinearSkipGenerator(
+        latent_dim=8, output_dim=6, hidden_dims=[8], negative_slope=0.2, skip_dim=4
+    )
+    z = torch.randn(256, 8)
+    with torch.no_grad():
+        gen.skip.weight.zero_()
+    e = gen.component_energies(z)
+    assert set(e) == {"trunk_energy", "skip_energy", "skip_share", "trunk_skip_abs_cos"}
+    assert e["skip_energy"] == 0.0
+    assert e["skip_share"] == 0.0
+    assert e["trunk_energy"] > 0.0
+
+    with torch.no_grad():
+        torch.nn.init.orthogonal_(gen.skip.weight)
+        for p in gen.trunk.parameters():
+            p.zero_()
+    e = gen.component_energies(z)
+    assert e["trunk_energy"] == 0.0
+    assert e["skip_share"] == 1.0
+    # Orthogonal 6x4 W on 4 unit-variance latents: E||Wz||^2 = 4.
+    assert e["skip_energy"] == pytest.approx(4.0, rel=0.2)

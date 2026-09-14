@@ -5,7 +5,7 @@ from typing import Any
 
 import torch
 import torch.nn.functional as F
-from torch import nn
+from torch import Tensor, nn
 
 
 class Generator(nn.Module):
@@ -95,6 +95,32 @@ class LinearSkipGenerator(nn.Module):
     def forward(self, z: torch.Tensor) -> torch.Tensor:
         t = self.trunk_latent_dim
         return self.trunk(z[:, :t]) + self.skip(z[:, t:])
+
+    @torch.no_grad()
+    def component_energies(self, z: Tensor) -> dict[str, float]:
+        """Mean squared norm of the trunk and skip terms on `z`, the skip
+        term's share of the pre-normalisation output energy, and the mean
+        |cos| between the two terms.
+
+        These are the quantities docs/datasets/nytimes.md measured on v1's
+        checkpoints after the fact: the trunk's energy grew 38x while the
+        skip's held near skip_dim, and the per-vector critic could not see
+        the balance move. Logged per evaluation so a run shows the drift
+        as it happens.
+        """
+        t = self.trunk_latent_dim
+        trunk = self.trunk(z[:, :t]).float()
+        skip = self.skip(z[:, t:]).float()
+        trunk_energy = float((trunk * trunk).sum(dim=1).mean())
+        skip_energy = float((skip * skip).sum(dim=1).mean())
+        total = trunk_energy + skip_energy
+        cos = torch.nn.functional.cosine_similarity(trunk, skip, dim=1, eps=1e-12)
+        return {
+            "trunk_energy": trunk_energy,
+            "skip_energy": skip_energy,
+            "skip_share": skip_energy / total if total > 0.0 else 0.0,
+            "trunk_skip_abs_cos": float(cos.abs().mean()),
+        }
 
 
 class GatedGenerator(nn.Module):

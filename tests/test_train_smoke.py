@@ -51,10 +51,14 @@ def make_config(tmp_path, generator_type):
             # descriptor_dim is 16 here, not SIFT's 128, so the default
             # (4, 4, 8) layout would not tile the output.
             cfg["model"]["layout"] = [2, 2, 4]
+        if generator_type == "linear_skip":
+            cfg["model"]["skip_dim"] = 4  # latent_dim is 8: 4 trunk + 4 skip
     return cfg
 
 
-@pytest.mark.parametrize("generator_type", ["mlp", "gated", "structured_gated"])
+@pytest.mark.parametrize(
+    "generator_type", ["mlp", "gated", "structured_gated", "linear_skip"]
+)
 def test_training_loop_runs(tmp_path, generator_type):
     ckpt_path, meta = train(make_config(tmp_path, generator_type))
     assert ckpt_path.exists()
@@ -68,6 +72,17 @@ def test_gated_eval_reports_zero_negatives(tmp_path):
     _, meta = train(make_config(tmp_path, "gated"))
     assert meta["eval"]
     assert all(entry["negative_fraction"] == 0.0 for entry in meta["eval"])
+
+
+def test_linear_skip_evals_log_the_trunk_skip_balance(tmp_path):
+    """Catches the energies not reaching the eval entry, or reaching it for
+    the wrong generator type."""
+    _, meta = train(make_config(tmp_path, "linear_skip"))
+    for e in meta["eval"]:
+        assert 0.0 <= e["skip_share"] <= 1.0
+        assert math.isfinite(e["trunk_energy"]) and math.isfinite(e["skip_energy"])
+    _, meta_mlp = train(make_config(tmp_path, "mlp"))
+    assert "skip_share" not in meta_mlp["eval"][0]
 
 
 def test_checkpoints_record_their_generator_weight_provenance(tmp_path):

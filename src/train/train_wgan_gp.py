@@ -23,7 +23,7 @@ from src.data.dataset import (
 )
 from src.device import cuda_device_index, resolve_device
 from src.models.critic import DEFAULT_DISTANCE_FLOOR, build_critic
-from src.models.generator import build_generator
+from src.models.generator import LinearSkipGenerator, build_generator
 from src.train.gpu_lock import claim_gpu, gpu_lock_key
 from src.train.log_ratio import LogRatioTarget, log_ratio_penalty
 from src.train.selection import (
@@ -601,6 +601,13 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
         if select_on == "gate"
         else None
     )
+    # Fixed latents for the linear-skip balance readout, drawn from a
+    # separate generator so the training stream is exactly what it was.
+    energy_probe = None
+    if isinstance(generator, LinearSkipGenerator):
+        probe_rng = torch.Generator(device=device.type)
+        probe_rng.manual_seed(seed)
+        energy_probe = torch.randn(4096, latent_dim, generator=probe_rng, device=device)
     # Whether a best_generator.pt has been written this run (or was already
     # written before a resume). inf < inf is False, so under `gate` a run
     # where every evaluation scores inf never sets this -- checked below.
@@ -746,6 +753,8 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
                 )
                 stats = tensor_stats(x_holdout, fake_holdout)
                 stats.update(collapse_stats(fake_holdout))
+                if energy_probe is not None:
+                    stats.update(generator.component_energies(energy_probe))
                 if select_on == "gate":
                     # The real side is computed once outside the loop and is
                     # not wrapped: a failure there means the holdout itself

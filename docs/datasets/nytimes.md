@@ -204,7 +204,7 @@ the cleaned figures are what the corpus looks like without the artefact.
 | `v1` at 100k steps | same rung, budget raised | `configs/nytimes/v1_seed42_100k.yaml`, resumed from the row above | `runs/nytimes/v1_seed42_100k` (box: `/workspace/nytimes-v1/v1_seed42_100k`) | trained -- collapses; gate statistics worse at every step after 30k; see `### Continued to 100,000 steps` under v1 |
 | `v2` | + neighbourhood-aware critic (`critic_type: neighbourhood`, k 20, floor 0.01) and `drop_zero_rows: true`; duplicates kept | `configs/nytimes/v2.yaml`; box instrument `configs/nytimes/v2_seed42.yaml` | `runs/nytimes/v2_seed42` (box: `/workspace/nytimes-v2/v2_seed42`) | trained -- n=1 seed, misses the gate on LID, hubness and Gini, contrast within 3%; no collapse (effective rank 244 at 30k) but drifts to the Gaussian end instead; see `## v2, measured` |
 | `v2b` | `v2` with the critic's neighbours drawn from a bank (`critic_type: neighbourhood_bank`, `critic_bank_size: 16384`) | `configs/nytimes/v2b.yaml`; box instrument `configs/nytimes/v2b_seed42.yaml` | `runs/nytimes/v2b_seed42` (box: `/workspace/nytimes-v2b/v2b_seed42`) | trained -- n=1 seed, misses the gate on LID, contrast and hubness, Gini in range; the selected checkpoint is a transient; drifts to the Gaussian end like v2; see `## v2b, measured` |
-| `v2c` | `v2` with a learned set critic (`critic_type: neighbourhood_set`, EdgeConv 128, max pool) | `configs/nytimes/v2c.yaml`; box instrument `configs/nytimes/v2c_seed42.yaml` | `runs/nytimes/v2c_seed42` (box: `/workspace/nytimes-v2/v2c_seed42`) | planned -- approach 3 of the neighbourhood-critic spec |
+| `v2c` | `v2` with a learned set critic (`critic_type: neighbourhood_set`, EdgeConv 128, max pool) | `configs/nytimes/v2c.yaml`; box instrument `configs/nytimes/v2c_seed42.yaml` | `runs/nytimes/v2c_seed42` (box: `/workspace/nytimes-v2/v2c_seed42`) | trained -- n=1 seed, misses the gate on all four at the selected step (LID 12% high, contrast 3.3% low, hubness 11.9, Gini 0.847); no collapse and no Gaussian drift, LID holds a band around real for the whole run; see `## v2c, measured` |
 
 Train `v0`:
 
@@ -839,6 +839,131 @@ interpolates against the union, so the penalty bounds the union map while
 the two maps whose difference is the loss are constrained only
 indirectly; whether that explains the early transient is not measured
 here.
+
+## v2c, measured
+
+Trained 2026-09-14 on `tig-gpu` (RTX 3060) as one gpuq job,
+`wgan-synthetic-20260914T140229Z-ab664e`
+(`scripts/nytimes_v2c_seed42_job.sh` at commit `9086585`, branch
+`nytimes-v2c`): 30,000 generator steps of `configs/nytimes/v2c_seed42.yaml`
+(`v2` with `critic_type: neighbourhood_set`, `critic_edge_dim` 128,
+`critic_edge_pool` max; every other key byte-identical to `v2`, which
+`tests/test_nytimes_configs.py` pins). Submitted 14:02:29Z behind the `v2b`
+job; the runner created the job's stderr log at 14:43:41Z and the last
+stdout write is 15:50:59Z, so **67 minutes wall for the whole job**
+against `v2`'s 58 and `v1`'s 38 (measured from the log timestamps; the
+plan's estimate was 60 to 90). No `gate_error` on any eval;
+`resumed_from_step` 0; the trainer dropped `197` exact-zero rows at load,
+leaving 237,313 training rows and a 12,490-row holdout, the same split as
+`v2`. 50,000 samples at sampling seed 42 were drawn from
+`best_generator.pt` (the gate selector's pick, **step 4,000**, `best_score`
+`0.0190`, live weights) and from the step-30,000 checkpoint, measured
+together against the cleaned real corpus in one `eda_report` invocation at
+the canonical conditions. The summary, `run_config.yaml` and
+`run_metadata.json` are committed under `docs/results/nytimes-v2c-seed42/`
+(sha256 verified against the box copy line for line); checkpoints and
+samples stay on the box.
+
+Same convention as the `v1` and `v2` tables: distance from real in units
+of the real corpus's ten-draw spread, and the percentage off the real
+median the spec's 3% bar is stated in, both from
+`docs/datasets/nytimes_noise_floor.json` (`zero_and_duplicate_rows_removed`).
+
+| Statistic | real, cleaned (10-draw range) | `v2c_best` (step 4,000, gate-selected) | step 30,000 |
+|---|---|---|---|
+| LID median | `55.97` (54.97 -- 56.86) | `62.73` (12.1% off, 3.6x) | `60.00` (7.2% off, 2.1x) |
+| Relative contrast | `1.271` (1.265 -- 1.276) | `1.229` (3.3% off, 3.9x) | `1.235` (2.8% off, 3.3x) |
+| Hubness skew | `2.529` (2.315 -- 2.779) | `11.87` (369% off, 20.2x) | `10.70` (323% off, 17.6x) |
+| IVF cell-balance Gini | `0.7767` (0.7832 -- 0.8231) | `0.8467` (9.0% off, 1.8x) | `0.8075` (4.0% off, inside the range) |
+
+**Misses the bar on all four at the selected step**: contrast is just
+outside the 3% allowance (`v1` and `v2` were inside at 2.3%), LID is 12%
+high (`v1` 12%, `v2` 10%), hubness is `11.9` (`v1` 10.4, `v2` 18.7), Gini
+`0.847`. The step-30,000 checkpoint is closer to real on all four:
+contrast and Gini are inside the bar, LID is 7% high, hubness `10.7`. Effective rank: real `247.4`, `v2c_best` `210.0`,
+step 30,000 `184.9`. Median 5-NN distance: real `1.205`, `v2c_best`
+`0.605`, step 30,000 `0.850` -- the selected sample's neighbourhoods are
+half as wide as real's at the same local dimension.
+
+**What the set critic changed.** Neither of the two failure modes seen so
+far. `v1` collapsed (LID falling monotonically through real and on to
+`5`); `v2` drifted to the Gaussian end (LID `75--78` from step 14,000).
+`v2c` does neither: after step 3,000 the holdout LID stays between `47.4`
+(step 13,000) and `63.6`, and from step 18,000 it sits in `52.5--58.6`,
+i.e. within 12% of the reference `59.4` for the last 12,000 steps. The
+trunk/skip balance moves the whole run but does not drift: skip share
+oscillates between `0.26` and `0.83` with no trend (`0.81` at 1,000,
+`0.26` at 4,000 and 13,000, `0.82` at 24,000, `0.52` at 30,000), and the
+trunk energy swings `56--868` while the skip energy grows steadily
+`239 -> 394` (one dip, at step 4,000). The critic is reading the balance and pushing
+back each time it moves, which is the behaviour the spec asked for and
+neither earlier critic showed. What it cannot fix is hubness: never below
+`3.38` on the holdout (step 24,000) against real's `2.30`, and worst at
+the LID-matching steps (`15.4` at the selected step 4,000, `12.0` at
+10,000, `11.3` at 27,000). The gate selector, which weights the four
+statistics equally, therefore picked the step where hubness is at its
+worst -- the same observation the `v2` page ends on.
+
+Trajectory on the holdout (`run_metadata.json` `eval`, full table there;
+the reference reads LID `59.44`, contrast `1.240`, hubness `2.30`, Gini
+`0.816`, `near_duplicate_fraction` `0.022`, identical to `v2`'s
+reference since the split is the same):
+
+| step | fake LID | fake RC | hubness | Gini | score | skip share | \|\|trunk\|\|^2 | \|\|skip\|\|^2 |
+|---|---|---|---|---|---|---|---|---|
+| 1000 | 72.10 | 1.1723 | 3.93 | 0.862 | 0.2673 | 0.811 | 55.6 | 239.4 |
+| 2000 | 69.35 | 1.1797 | 4.74 | 0.858 | 0.2150 | 0.756 | 79.5 | 246.2 |
+| 3000 | 68.08 | 1.1840 | 4.79 | 0.843 | 0.1902 | 0.767 | 76.2 | 251.0 |
+| 4000 | 59.15 | 1.2222 | 15.43 | 0.870 | 0.0190 | 0.262 | 697.3 | 247.1 |
+| 5000 | 59.83 | 1.2162 | 6.44 | 0.835 | 0.0255 | 0.463 | 301.1 | 259.1 |
+| 6000 | 63.34 | 1.1978 | 3.48 | 0.811 | 0.0994 | 0.826 | 57.6 | 272.6 |
+| 8000 | 61.87 | 1.2081 | 7.33 | 0.832 | 0.0663 | 0.500 | 287.7 | 287.2 |
+| 10000 | 60.16 | 1.2175 | 12.01 | 0.851 | 0.0300 | 0.430 | 406.4 | 306.6 |
+| 13000 | 47.36 | 1.2874 | 6.06 | 0.737 | 0.2418 | 0.266 | 867.8 | 313.7 |
+| 15000 | 49.77 | 1.2617 | 4.77 | 0.689 | 0.1805 | 0.573 | 248.6 | 333.4 |
+| 18000 | 54.02 | 1.2363 | 4.79 | 0.756 | 0.0939 | 0.685 | 159.2 | 346.4 |
+| 20000 | 53.28 | 1.2430 | 7.65 | 0.790 | 0.1064 | 0.465 | 406.7 | 354.1 |
+| 24000 | 58.06 | 1.2154 | 3.38 | 0.768 | 0.0427 | 0.821 | 81.9 | 375.3 |
+| 27000 | 55.81 | 1.2333 | 11.31 | 0.820 | 0.0662 | 0.450 | 469.4 | 384.2 |
+| 29000 | 58.57 | 1.2185 | 6.93 | 0.801 | 0.0317 | 0.714 | 157.4 | 393.7 |
+| 30000 | 58.03 | 1.2227 | 7.13 | 0.814 | 0.0375 | 0.520 | 364.3 | 394.1 |
+
+Against the spec's two mechanism checks:
+
+- **Trunk/skip balance.** Not monotone in either direction. The trunk
+  term never explodes as `v2`'s did (`v2`: `1.0e6` at step 1,000 with a
+  quarter of the sample within 0.01 of a neighbour; `v2c`: `56` at step
+  1,000 and a fake `near_duplicate_fraction` of exactly `0.0` on all 30
+  evaluations, against real's `0.022`). The set critic keeps the
+  generator away from copies entirely, which also means it never matches
+  the real corpus's 2% of near-duplicate documents.
+- **Transient check.** The selected step's neighbours read `0.1902` at
+  3,000 (10x the selected score) and `0.0255` at 5,000 (1.3x): the
+  selected step is the moment LID first crosses real, a transient by the
+  spec's definition, as `v1`'s and `v2`'s were. The difference is what
+  follows: from step 22,000 the score sits at `0.03--0.08` on every
+  evaluation (`0.0317` at 29,000, `0.0375` at 30,000, both within 2x of
+  the best), a plateau rather than `v1`'s 40x cliff or `v2`'s jump to
+  `0.32`. Had the selector been restricted to the second half of the run
+  it would have picked step 29,000 (`0.0317`), with LID `58.6`, contrast
+  `1.219`, hubness `6.9`, Gini `0.801` on the holdout.
+
+The gradient penalty at `v1`'s `lambda_gp` 5.0: `gp` reads `0.911` at
+step 1 (`v2`: `0.899`), `0.015` at 250, and stays in `0.001--0.016` for
+the entire run (largest logged value `0.0161` at step 25,000), with the
+Wasserstein estimate between `-0.6` and `+0.15`. The plan's fallback
+(rerun with `critic_edge_pool: mean` if `gp` climbs above 1 in the first
+2,000 steps) did not fire.
+
+Selected checkpoint is not a rung. The set critic is the first of the
+three that holds the generator near the real point without collapse or
+drift, and the second half of its run is a plateau the gate selector
+could pick from; what it does not fix is hubness, which is 1.5--6.7x real on the
+holdout (above 2x on 27 of the 30 evaluations) and worst where LID
+matches. Whether the next rung is the
+`v2b` bank critic (running as this was written), a selection score that
+weights hubness, or a hubness-aware term in the critic, is a human
+decision per the spec's own rule.
 
 ## Gate
 

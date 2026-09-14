@@ -358,6 +358,35 @@ split happens inside the generator. First used by `configs/nytimes/v1.yaml`.
 
 ---
 
+### `critic_type`
+
+The critic axis in the `model` config block, built by `build_critic` in
+`src/models/critic.py`. Two values: `per_vector` (default; the `Critic` MLP
+scoring one row at a time, every config before NYTimes v2) and
+`neighbourhood` (`NeighbourhoodCritic`: the same MLP on each row
+concatenated with its within-batch neighbourhood profile, `critic_k`
+entries of sorted, floored k-NN distances expressed as `log(r_i / r_k)`
+plus `log r_k`).
+
+Why: a per-vector critic cannot see local dimension, so a low-rank sheet
+with the right covariance envelope is, to it, the corpus. NYTimes v1
+collapsed to LID 5 with the Wasserstein estimate under 0.06 throughout.
+The neighbourhood critic makes the k-NN profile part of what is
+discriminated. Under it, `gradient_penalty` bounds the gradient of the
+batch's *summed* score per row, which is the intended constraint for a
+batch-dependent critic (its docstring says so).
+
+| Config key | Default | Meaning |
+|---|---|---|
+| `model.critic_type` | `per_vector` | Which critic class. |
+| `model.critic_k` | `20` | Neighbour depth; the profile has `critic_k` entries. Must be below `training.batch_size`. |
+| `model.critic_distance_floor` | `0.01` | Every neighbour distance the critic reads is clamped from below here, so an exact copy reads as a bounded "tight pair" rather than `-inf`. The gate's `near_duplicate_fraction` uses the same constant. |
+| `data.preprocess.drop_zero_rows` | `false` | Drop exact-zero rows at load, before the train/holdout split; count in `run_metadata.json` under `data.dropped_zero_rows`. Duplicates are never dropped. |
+
+Checkpoints do not record `critic_type` either; like the generator, the
+critic is rebuilt from `run_config.yaml`, and the per-vector and
+neighbourhood state dicts do not cross-load.
+
 ## Optimizer and training setup
 
 Default (current promoted config):
@@ -384,7 +413,11 @@ Both are off by default, so v0–v3 behaviour is unchanged when they are absent.
 | `training.lid_reg_max_points` | `256` | Batch subsample the within-batch neighbour search runs on. |
 
 Both terms are logged per step alongside `wasserstein` and `adv_loss`, as
-`distance_reg` and `lid_reg`.
+`distance_reg` and `lid_reg`. `linear_skip` runs also log `trunk_energy`,
+`skip_energy`, `skip_share` and `trunk_skip_abs_cos` on every evaluation
+entry (`LinearSkipGenerator.component_energies`), and every
+`select_on: gate` run logs `gate_real_near_duplicate_fraction` /
+`gate_fake_near_duplicate_fraction`.
 
 `lid_reg_alpha` **cannot be set by analogy to `distance_reg_alpha`.**
 `distance_reg` is one scalar; `log_ratio_penalty` is an L1 *sum* over `k − 1`

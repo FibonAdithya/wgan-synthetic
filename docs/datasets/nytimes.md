@@ -202,6 +202,7 @@ the cleaned figures are what the corpus looks like without the artefact.
 | `v0` at 100k steps | same rung, budget raised | `configs/nytimes/v0_seed42_100k.yaml`, resumed from the row above | `runs/nytimes/v0_seed42_100k` (box: `/workspace/nytimes-v0/v0_seed42_100k`) | trained -- gate statistics worse than at 30k; see `### Continued to 100,000 steps` |
 | `v1` | + linear skip path (`generator_type: linear_skip`) and `select_on: gate` | `configs/nytimes/v1.yaml`; box instrument `configs/nytimes/v1_seed42.yaml` | `runs/nytimes/v1_seed42` (box: `/workspace/nytimes-v1/v1_seed42`) | trained -- n=1 seed, misses the gate on LID and hubness, contrast within 3%; see `## v1, measured` |
 | `v1` at 100k steps | same rung, budget raised | `configs/nytimes/v1_seed42_100k.yaml`, resumed from the row above | `runs/nytimes/v1_seed42_100k` (box: `/workspace/nytimes-v1/v1_seed42_100k`) | trained -- collapses; gate statistics worse at every step after 30k; see `### Continued to 100,000 steps` under v1 |
+| `v2` | + neighbourhood-aware critic (`critic_type: neighbourhood`, k 20, floor 0.01) and `drop_zero_rows: true`; duplicates kept | `configs/nytimes/v2.yaml`; box instrument `configs/nytimes/v2_seed42.yaml` | `runs/nytimes/v2_seed42` (box: `/workspace/nytimes-v2/v2_seed42`) | planned -- spec `docs/superpowers/specs/2026-09-14-neighbourhood-critic-design.md` |
 
 Train `v0`:
 

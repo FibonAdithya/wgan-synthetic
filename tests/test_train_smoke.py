@@ -110,6 +110,33 @@ def test_mlp_config_without_generator_type_still_trains(tmp_path):
     assert ckpt_path.exists()
 
 
+def test_neighbourhood_critic_trains_and_its_checkpoint_reloads(tmp_path):
+    """Catches the trainer not using the factory (the config would be
+    ignored) and a state-dict key mismatch on resume."""
+    from src.models.critic import NeighbourhoodCritic, build_critic
+
+    cfg = make_config(tmp_path, "mlp")
+    cfg["model"]["critic_type"] = "neighbourhood"
+    cfg["model"]["critic_k"] = 5  # batch_size is 32; k must be below it
+    ckpt_path, meta = train(cfg)
+    assert ckpt_path.exists()
+    for entry in meta["metrics"]:
+        assert math.isfinite(entry["d_loss"]) and math.isfinite(entry["gp"])
+    saved = torch.load(ckpt_path, weights_only=False)
+    rebuilt = build_critic(cfg["model"], input_dim=16)
+    assert isinstance(rebuilt, NeighbourhoodCritic)
+    rebuilt.load_state_dict(saved["critic_state_dict"])
+
+
+def test_run_metadata_records_dropped_zero_rows(tmp_path):
+    """Catches the count not reaching run_metadata"""
+    cfg = make_config(tmp_path, "mlp")
+    cfg["data"]["preprocess"]["drop_zero_rows"] = True
+    _, meta = train(cfg)
+    # Synthetic Gaussian data has no zero rows; the key must still be there.
+    assert meta["data"]["dropped_zero_rows"] == 0
+
+
 def test_select_on_defaults_to_cov_fro_and_records_it(tmp_path):
     cfg = make_config(tmp_path, "mlp")
     ckpt_path, meta = train(cfg)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
+from typing import Any
 
 import torch
 from torch import Tensor, nn
@@ -168,3 +169,32 @@ class NeighbourhoodCritic(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         phi = self.features(x).to(x.dtype)
         return self.mlp(torch.cat([x, phi], dim=1))
+
+
+CRITIC_TYPES = ("per_vector", "neighbourhood")
+
+
+def build_critic(model_cfg: Mapping[str, Any], input_dim: int) -> nn.Module:
+    """Build the configured critic, defaulting to the per-vector `Critic`.
+
+    Mirrors `build_generator`: `critic_type` selects the class, the common
+    keys mean the same for every class, and an unknown value fails here
+    rather than silently training the default.
+    """
+    kind = str(model_cfg.get("critic_type", "per_vector"))
+    common = {
+        "hidden_dims": model_cfg["critic_hidden_dims"],
+        "negative_slope": float(model_cfg["negative_slope"]),
+    }
+    if kind == "per_vector":
+        return Critic(input_dim=input_dim, **common)
+    if kind == "neighbourhood":
+        return NeighbourhoodCritic(
+            input_dim=input_dim,
+            k=int(model_cfg.get("critic_k", DEFAULT_K)),
+            distance_floor=float(
+                model_cfg.get("critic_distance_floor", DEFAULT_DISTANCE_FLOOR)
+            ),
+            **common,
+        )
+    raise ValueError(f"Unknown critic_type: {kind!r}; expected one of {CRITIC_TYPES}")

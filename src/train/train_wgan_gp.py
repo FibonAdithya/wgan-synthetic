@@ -22,7 +22,7 @@ from src.data.dataset import (
     build_training_data,
 )
 from src.device import cuda_device_index, resolve_device
-from src.models.critic import Critic
+from src.models.critic import build_critic
 from src.models.generator import build_generator
 from src.train.gpu_lock import claim_gpu, gpu_lock_key
 from src.train.log_ratio import LogRatioTarget, log_ratio_penalty
@@ -463,11 +463,7 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
     descriptor_dim = int(data_cfg["descriptor_dim"])
 
     generator = build_generator(model_cfg, output_dim=descriptor_dim).to(device)
-    critic = Critic(
-        input_dim=descriptor_dim,
-        hidden_dims=model_cfg["critic_hidden_dims"],
-        negative_slope=float(model_cfg["negative_slope"]),
-    ).to(device)
+    critic = build_critic(model_cfg, input_dim=descriptor_dim).to(device)
 
     lr_g = float(train_cfg["lr_g"])
     lr_d = float(train_cfg["lr_d"])

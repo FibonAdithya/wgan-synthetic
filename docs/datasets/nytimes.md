@@ -717,7 +717,7 @@ LID is 21.7% off (`v2`'s selected checkpoint: 10.1% off) and contrast is
 5.8% off, outside the spec's 3% allowance that would otherwise excuse it
 (`v2`'s selected checkpoint cleared that allowance at 2.3% off). Hubness
 skew is level with `v2`'s selected checkpoint (`18.51` against `18.75`)
-and worse than `v0`'s and `v1`'s (`2.035` and `10.4`). Effective rank:
+and worse than `v0`'s and `v1`'s (`1.536` and `10.4`). Effective rank:
 real `247.4`, `v2b_best` `196.3`, step 30,000
 `238.7` -- no collapse. Median 5-NN distance: real `1.205`, `v2b_best`
 `1.19`, step 30,000 `1.214`.

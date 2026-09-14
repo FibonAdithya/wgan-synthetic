@@ -121,6 +121,27 @@ def profile_features(r: Tensor) -> Tensor:
     return torch.cat([torch.log(r[:, :-1] / r_k), torch.log(r_k)], dim=1)
 
 
+def neighbourhood_indices(x: Tensor, k: int) -> Tensor:
+    """Indices of each row's `k` nearest other rows of `x`, nearest first.
+
+    Same masked distance matrix as `neighbourhood_distances`, so self is
+    excluded by index and an exact copy stays a neighbour. Indices carry no
+    gradient; the set critic gathers neighbour rows with them and the
+    gradient flows through the gathered rows.
+    """
+    if k < 1:
+        raise ValueError(f"k must be positive, got {k}")
+    if x.shape[0] - 1 < k:
+        raise ValueError(
+            f"need at least k={k} neighbour candidates per row, got {x.shape[0] - 1} "
+            f"(within-batch, batch of {x.shape[0]})"
+        )
+    with torch.no_grad():  # indices only; no reason to record the d2 graph
+        d2 = _masked_squared_distances(x, None, None)
+        _, idx = torch.topk(d2, k, dim=1, largest=False, sorted=True)
+    return idx
+
+
 class NeighbourhoodCritic(nn.Module):
     """The per-vector MLP on `[x_i, phi_i]`, where `phi_i` is row i's
     within-batch neighbourhood profile (`profile_features` of

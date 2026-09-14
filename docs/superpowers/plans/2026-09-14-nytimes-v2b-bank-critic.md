@@ -63,7 +63,7 @@ The landed `neighbourhood_distances` already takes `bank` and `self_index`, and 
 - Consumes: `NeighbourhoodCritic` (attributes `mlp`, `k`, `distance_floor`), `neighbourhood_distances(x, k, floor, bank=, self_index=)`, `profile_features(r)`, `build_critic`, `CRITIC_TYPES`, `DEFAULT_K`, `DEFAULT_DISTANCE_FLOOR`.
 - Produces:
   - `draw_real_bank_indices(num_rows: int, bank_size: int, seed: int) -> Tensor`: `(bank_size,)` long, distinct, CPU, deterministic in `seed`; raises `ValueError` if `bank_size > num_rows`.
-  - `class BankNeighbourhoodCritic(NeighbourhoodCritic)` with `__init__(self, input_dim, hidden_dims, k=DEFAULT_K, distance_floor=DEFAULT_DISTANCE_FLOOR, negative_slope=0.2, bank_size=16384)`; attributes `bank_size: int`, `real_bank_indices` (persistent long buffer, `(bank_size,)`, `-1` until set), `real_bank` and `fake_bank` (non-persistent float buffers, `(bank_size, input_dim)`), `fake_rows_written: int`, `row_to_slot: Tensor | None`; property `fake_bank_full: bool`; methods `set_real_bank(x_train: Tensor, indices: Tensor) -> None`, `write_fake(rows: Tensor) -> None`, `features(x, population="mixed", row_ids=None) -> (n, k)`, `forward(x, population: str = "mixed", row_ids: Tensor | None = None) -> Tensor` of shape `(n,)`. Raises `ValueError` for `bank_size <= k` and for an unknown `population`; `RuntimeError` when `population="real"` is scored before `set_real_bank`.
+  - `class BankNeighbourhoodCritic(NeighbourhoodCritic)` with `__init__(self, input_dim, hidden_dims, k=DEFAULT_K, distance_floor=DEFAULT_DISTANCE_FLOOR, negative_slope=0.2, bank_size=16384)`; attributes `bank_size: int`, `real_bank_indices` (persistent long buffer, `(bank_size,)`, `-1` until set), `real_bank` and `fake_bank` (non-persistent float buffers, `(bank_size, input_dim)`), `fake_rows_written: int`, `row_to_slot` (non-persistent long buffer, empty until `set_real_bank`, then `(num_train,)` with the bank slot per training row or `-1`); property `fake_bank_full: bool`; methods `set_real_bank(x_train: Tensor, indices: Tensor) -> None`, `write_fake(rows: Tensor) -> None`, `features(x, population="mixed", row_ids=None) -> (n, k)`, `forward(x, population: str = "mixed", row_ids: Tensor | None = None) -> Tensor` of shape `(n,)`. Raises `ValueError` for `bank_size <= k` and for an unknown `population`; `RuntimeError` when `population="real"`, or `population="mixed"` once the ring is full, is scored before `set_real_bank` (property `real_bank_set: bool`).
   - `score_population(critic: nn.Module, x: Tensor, population: str, row_ids: Tensor | None = None) -> Tensor`: routes to `critic(x, population=..., row_ids=...)` for the bank class and to `critic(x)` for every other critic.
   - `CRITIC_TYPES == ("per_vector", "neighbourhood", "neighbourhood_bank")`; `build_critic` reads `critic_bank_size` (default `16384`) for the new type.
 
@@ -194,6 +194,9 @@ def test_bank_critic_scores_one_per_row_in_every_population():
 
 
 def test_bank_critic_rejects_an_unknown_population_and_an_unset_real_bank():
+    """Catches: the `mixed` path silently profiling against an all-zero real
+    bank once the ring is full (it needs no real bank only while it falls
+    back to within-batch)."""
     critic = _bank_critic()
     x = _rows(3, 5, 6)
 
@@ -201,6 +204,11 @@ def test_bank_critic_rejects_an_unknown_population_and_an_unset_real_bank():
         critic(x, population="interpolated")
     with pytest.raises(RuntimeError, match="set_real_bank"):
         critic(x, population="real")
+    assert critic(x, population="mixed").shape == (5,), "within-batch fallback needs no bank"
+
+    _filled(critic)
+    with pytest.raises(RuntimeError, match="set_real_bank"):
+        critic(x, population="mixed")
 
 
 def test_real_population_reads_the_real_bank():
@@ -307,8 +315,10 @@ def test_fake_bank_write_rejects_a_batch_larger_than_the_bank():
 
 
 def test_fake_bank_write_detaches_and_does_not_hold_the_graph():
-    """Catches: storing generator outputs with their graph attached, which
-    keeps every past generator step alive on the device."""
+    """Catches: dropping both the `@torch.no_grad()` decorator and the
+    `.detach()` (either alone suffices, so removing only one is not
+    observable here), which would attach the ring to the generator's graph
+    and keep every past generator step alive on the device."""
     critic = _bank_critic(bank_size=8)
     rows = _rows(14, 4, 6).requires_grad_(True)
 
@@ -493,12 +503,20 @@ class BankNeighbourhoodCritic(NeighbourhoodCritic):
         self.register_buffer(
             "fake_bank", torch.zeros(self.bank_size, input_dim), persistent=False
         )
+        # A buffer, not a plain attribute, so `.to(device)` moves it with the
+        # banks; non-persistent because it is rebuilt from the indices.
+        self.register_buffer(
+            "row_to_slot", torch.empty(0, dtype=torch.long), persistent=False
+        )
         self.fake_rows_written = 0
-        self.row_to_slot: Tensor | None = None
 
     @property
     def fake_bank_full(self) -> bool:
         return self.fake_rows_written >= self.bank_size
+
+    @property
+    def real_bank_set(self) -> bool:
+        return self.row_to_slot.numel() > 0
 
     def set_real_bank(self, x_train: Tensor, indices: Tensor) -> None:
         """Fill the real bank with `x_train[indices]` and index it by row."""
@@ -543,9 +561,14 @@ class BankNeighbourhoodCritic(NeighbourhoodCritic):
             raise ValueError(
                 f"population must be one of {self.POPULATIONS}, got {population!r}"
             )
+        needs_real_bank = population == "real" or (
+            population == "mixed" and self.fake_bank_full
+        )
+        if needs_real_bank and not self.real_bank_set:
+            raise RuntimeError(
+                f"call set_real_bank() before scoring the {population!r} population"
+            )
         if population == "real":
-            if self.row_to_slot is None:
-                raise RuntimeError("call set_real_bank() before scoring real rows")
             self_index = (
                 None
                 if row_ids is None
@@ -726,7 +749,10 @@ def test_bank_critic_smoke_run_writes_a_checkpoint_the_factory_can_load(tmp_path
 def test_resume_rebuilds_the_real_bank_from_the_checkpoint_not_from_the_seed(tmp_path):
     """Spec's round-trip test at trainer level. The resumed config carries a
     different seed, so a trainer that redraws on resume produces different
-    indices; catches exactly that redraw."""
+    indices; catches exactly that redraw. (The different seed also changes
+    the train/holdout split, so the rows behind the indices differ; resuming
+    under another seed is already unsupported for the data order, and this
+    test compares the indices, which is what the checkpoint carries.)"""
     first = make_bank_config(tmp_path, name="first", seed=0)
     _, meta_first = train(first)
     step4 = torch.load(tmp_path / "first" / "checkpoint_step_4.pt", weights_only=False)
@@ -826,7 +852,7 @@ and replace the two scoring lines:
                 d_fake = score_population(critic, fake, "fake")
 ```
 
-In the generator step, after its `try/except StopIteration`:
+In the generator step, after its `try/except StopIteration` and before the existing `batch_size = real_batch.shape[0]` line (a list has no `.shape`):
 
 ```python
         real_batch, _ = split_batch(real_batch)

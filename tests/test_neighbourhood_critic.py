@@ -26,6 +26,8 @@ def _unit_batch(seed: int, n: int, dim: int) -> torch.Tensor:
 
 
 def test_defaults_are_the_spec_values():
+    """Catches a changed default that would silently alter every neighbourhood
+    config."""
     assert DEFAULT_K == 20
     assert DEFAULT_DISTANCE_FLOOR == 0.01
 
@@ -128,6 +130,17 @@ def test_self_index_minus_one_means_not_in_bank():
     r = neighbourhood_distances(x, k=1, floor=0.01, bank=bank, self_index=self_index)
     # No exclusion: each row finds its own copy in the bank at the floor.
     assert r.max().item() == pytest.approx(0.01, abs=1e-8)
+
+
+def test_self_index_exclusions_count_toward_candidate_validation():
+    """Catches a candidate count that ignores self_index: inf would leak into
+    the profile."""
+    x = torch.randn(4, 5)
+    bank = torch.randn(3, 5)
+    bank[0] = x[0]
+    self_index = torch.tensor([0, -1, -1, -1])
+    with pytest.raises(ValueError, match="k"):
+        neighbourhood_distances(x, k=3, floor=0.01, bank=bank, self_index=self_index)
 
 
 def test_profile_is_log_ratios_then_log_scale():

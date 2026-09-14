@@ -93,7 +93,12 @@ def neighbourhood_distances(
         raise ValueError(f"k must be positive, got {k}")
     if floor <= 0.0:
         raise ValueError(f"floor must be positive, got {floor}")
-    n_candidates = x.shape[0] - 1 if bank is None else bank.shape[0]
+    if bank is None:
+        n_candidates = x.shape[0] - 1
+    else:
+        n_candidates = bank.shape[0]
+        if self_index is not None and (self_index >= 0).any():
+            n_candidates -= 1
     if n_candidates < k:
         raise ValueError(
             f"need at least k={k} neighbour candidates per row, got {n_candidates} "

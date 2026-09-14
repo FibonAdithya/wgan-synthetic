@@ -27,10 +27,10 @@ AI working notes, kept for provenance and **not** authoritative:
 
 ## Datasets
 
-Each family gets its own ladder of variants and its own gate. SIFT and DEEP
-have trained ladders; GloVe has a trained `v0` and no rung above it; the other
-three have a `v0` baseline config and a documented profile waiting to be
-measured.
+Each family gets its own ladder of variants and its own gate. SIFT, DEEP and
+NYTimes have trained ladders; GloVe has a trained `v0` and no rung above it;
+the other two have a `v0` baseline config and a documented profile waiting to
+be measured.
 
 | Family | Dim | Metric | Ladder | Page |
 |---|---|---|---|---|
@@ -38,12 +38,14 @@ measured.
 | `gist` | 960 | `l2` | `v0` defined, not trained | `docs/datasets/gist.md` |
 | `deep` | 96 | `angular` | `v0`–`v2` trained | `docs/datasets/deep.md` |
 | `glove` | 100 | `angular` | `v0` trained (5 seeds) | `docs/datasets/glove.md` |
-| `nytimes` | 256 | `angular` | `v0` defined, not trained | `docs/datasets/nytimes.md` |
+| `nytimes` | 256 | `angular` | `v0`–`v2b` trained, none meeting the bar | `docs/datasets/nytimes.md` |
 | `openai` | 1536 | `angular` | `v0` defined, not trained | `docs/datasets/openai.md` |
 
 Variant numbers are per dataset and are comparable only within one family.
 The SIFT and DEEP ladders live in `configs/sift/` and `configs/deep/`; every
-other family has a single `v0.yaml` under its own directory in `configs/`. To see all four SIFT variants overlaid on real SIFT
+family except SIFT, DEEP and NYTimes has a single `v0.yaml` under its own
+directory in `configs/`; NYTimes has `v0` to `v2b` under `configs/nytimes/`.
+To see all four SIFT variants overlaid on real SIFT
 in one report:
 
     python -m src.eval.compare_variants \

@@ -176,7 +176,214 @@ class NeighbourhoodCritic(nn.Module):
         return self.mlp(torch.cat([x, phi], dim=1))
 
 
-CRITIC_TYPES = ("per_vector", "neighbourhood")
+def draw_real_bank_indices(num_rows: int, bank_size: int, seed: int) -> Tensor:
+    """A fixed random subset of the training split, one draw per run seed.
+
+    Seeded on its own generator, on the CPU, so the draw does not depend on
+    how much of the global RNG the trainer consumed before building the
+    critic. The result is stored in the checkpoint (`real_bank_indices`) so a
+    resume rebuilds the same bank instead of redrawing it.
+    """
+    if bank_size > num_rows:
+        raise ValueError(
+            f"critic_bank_size={bank_size} exceeds the training split ({num_rows} rows)"
+        )
+    g = torch.Generator().manual_seed(int(seed))
+    return torch.randperm(num_rows, generator=g)[:bank_size]
+
+
+class BankNeighbourhoodCritic(NeighbourhoodCritic):
+    """Approach 2 of the neighbourhood-critic design: profile against a bank.
+
+    Same features and MLP as `NeighbourhoodCritic`, but a row's neighbours
+    come from a large detached bank rather than its batch-mates, so the
+    profile is measured at a scale closer to the gate's (100-NN in 250k) and
+    exact copies become visible at a rate a critic can learn from (about 3%
+    of real rows at bank size 16k).
+
+    Three populations, chosen by the caller:
+
+    - `real`: the k nearest rows of the real bank, a fixed subset of the
+      training split. A real row that is itself in the bank is excluded by
+      index (`row_ids` -> `row_to_slot` -> `self_index`), never by distance,
+      so a genuine copy elsewhere in the bank is still a neighbour.
+    - `fake`: the k nearest rows of the fake bank, a ring of the most recent
+      generator outputs, written by the trainer after each generator step
+      from the batch it just scored, so a batch never sees itself.
+    - `mixed` (the default, and what a bare `critic(x)` call gets): the
+      union of both banks. `gradient_penalty` scores interpolated rows this
+      way; an interpolate is neither population and the penalty only needs
+      the critic to be smooth in the row, so the union is the neutral choice.
+
+    Until the fake ring has been filled once, `fake` and `mixed` rows are
+    profiled within-batch, exactly as `NeighbourhoodCritic` does. On a resume
+    the ring starts empty again; the trainer records the step at which it
+    first fills.
+
+    Requires `training.amp: false`, as the parent does: under autocast the
+    ring would hold fp16-rounded generator rows widened to float32 while the
+    real bank holds exact training rows, turning the precision asymmetry
+    into a persistent property of the two banks.
+
+    Checkpoints carry `real_bank_indices` (persistent) and neither bank
+    (non-persistent): the trainer rebuilds the real bank from the split.
+    """
+
+    POPULATIONS = ("real", "fake", "mixed")
+
+    def __init__(
+        self,
+        input_dim: int,
+        hidden_dims: Iterable[int],
+        k: int = DEFAULT_K,
+        distance_floor: float = DEFAULT_DISTANCE_FLOOR,
+        negative_slope: float = 0.2,
+        bank_size: int = 16384,
+    ):
+        super().__init__(
+            input_dim=input_dim,
+            hidden_dims=hidden_dims,
+            k=k,
+            distance_floor=distance_floor,
+            negative_slope=negative_slope,
+        )
+        if bank_size <= k:
+            raise ValueError(
+                f"critic_bank_size={bank_size} must exceed critic_k={k}: a real "
+                "row excludes its own slot and still needs k neighbours"
+            )
+        self.bank_size = int(bank_size)
+        self.register_buffer(
+            "real_bank_indices", torch.full((self.bank_size,), -1, dtype=torch.long)
+        )
+        self.register_buffer(
+            "real_bank", torch.zeros(self.bank_size, input_dim), persistent=False
+        )
+        self.register_buffer(
+            "fake_bank", torch.zeros(self.bank_size, input_dim), persistent=False
+        )
+        # A buffer, not a plain attribute, so `.to(device)` moves it with the
+        # banks; non-persistent because it is rebuilt from the indices.
+        self.register_buffer(
+            "row_to_slot", torch.empty(0, dtype=torch.long), persistent=False
+        )
+        self.fake_rows_written = 0
+
+    @property
+    def fake_bank_full(self) -> bool:
+        return self.fake_rows_written >= self.bank_size
+
+    @property
+    def real_bank_set(self) -> bool:
+        return self.row_to_slot.numel() > 0
+
+    def set_real_bank(self, x_train: Tensor, indices: Tensor) -> None:
+        """Fill the real bank with `x_train[indices]` and index it by row."""
+        indices = indices.to(dtype=torch.long, device="cpu")
+        if indices.shape != (self.bank_size,):
+            raise ValueError(
+                f"expected bank_size={self.bank_size} indices, got {tuple(indices.shape)}"
+            )
+        with torch.no_grad():
+            self.real_bank_indices.copy_(indices.to(self.real_bank_indices.device))
+            self.real_bank.copy_(x_train[indices].to(self.real_bank))
+        slot = torch.full((x_train.shape[0],), -1, dtype=torch.long)
+        slot[indices] = torch.arange(self.bank_size)
+        self.row_to_slot = slot.to(self.real_bank.device)
+
+    @torch.no_grad()
+    def write_fake(self, rows: Tensor) -> None:
+        """Append `rows` to the fake ring, overwriting the oldest entries."""
+        n = rows.shape[0]
+        if n > self.bank_size:
+            raise ValueError(
+                f"a batch of {n} rows does not fit a fake bank of {self.bank_size}"
+            )
+        rows = rows.detach().to(self.fake_bank)
+        pos = self.fake_rows_written % self.bank_size
+        end = pos + n
+        if end <= self.bank_size:
+            self.fake_bank[pos:end] = rows
+        else:
+            first = self.bank_size - pos
+            self.fake_bank[pos:] = rows[:first]
+            self.fake_bank[: n - first] = rows[first:]
+        self.fake_rows_written += n
+
+    def features(
+        self,
+        x: Tensor,
+        population: str = "mixed",
+        row_ids: Tensor | None = None,
+    ) -> Tensor:
+        if population not in self.POPULATIONS:
+            raise ValueError(
+                f"population must be one of {self.POPULATIONS}, got {population!r}"
+            )
+        needs_real_bank = population == "real" or (
+            population == "mixed" and self.fake_bank_full
+        )
+        if needs_real_bank and not self.real_bank_set:
+            raise RuntimeError(
+                f"call set_real_bank() before scoring the {population!r} population"
+            )
+        if population == "real":
+            self_index = (
+                None
+                if row_ids is None
+                else self.row_to_slot[row_ids.to(self.row_to_slot.device)]
+            )
+            r = neighbourhood_distances(
+                x,
+                self.k,
+                self.distance_floor,
+                bank=self.real_bank,
+                self_index=self_index,
+            )
+        elif not self.fake_bank_full:
+            r = neighbourhood_distances(x, self.k, self.distance_floor)
+        elif population == "fake":
+            r = neighbourhood_distances(
+                x, self.k, self.distance_floor, bank=self.fake_bank
+            )
+        else:
+            r = neighbourhood_distances(
+                x,
+                self.k,
+                self.distance_floor,
+                bank=torch.cat([self.real_bank, self.fake_bank], dim=0),
+            )
+        return profile_features(r)
+
+    def forward(
+        self,
+        x: Tensor,
+        population: str = "mixed",
+        row_ids: Tensor | None = None,
+    ) -> Tensor:
+        phi = self.features(x, population=population, row_ids=row_ids).to(x.dtype)
+        return self.mlp(torch.cat([x, phi], dim=1))
+
+
+def score_population(
+    critic: nn.Module,
+    x: Tensor,
+    population: str,
+    row_ids: Tensor | None = None,
+) -> Tensor:
+    """Score `x` as `population`; every critic but the bank one ignores the label.
+
+    The trainer calls this at its three scoring sites so the loop reads the
+    same for every `critic_type`. `gradient_penalty` keeps its bare
+    `critic(interpolated)` call, which for the bank critic is the `mixed`
+    population by default.
+    """
+    if isinstance(critic, BankNeighbourhoodCritic):
+        return critic(x, population=population, row_ids=row_ids)
+    return critic(x)
+
+
+CRITIC_TYPES = ("per_vector", "neighbourhood", "neighbourhood_bank")
 
 
 def build_critic(model_cfg: Mapping[str, Any], input_dim: int) -> nn.Module:
@@ -200,6 +407,16 @@ def build_critic(model_cfg: Mapping[str, Any], input_dim: int) -> nn.Module:
             distance_floor=float(
                 model_cfg.get("critic_distance_floor", DEFAULT_DISTANCE_FLOOR)
             ),
+            **common,
+        )
+    if kind == "neighbourhood_bank":
+        return BankNeighbourhoodCritic(
+            input_dim=input_dim,
+            k=int(model_cfg.get("critic_k", DEFAULT_K)),
+            distance_floor=float(
+                model_cfg.get("critic_distance_floor", DEFAULT_DISTANCE_FLOOR)
+            ),
+            bank_size=int(model_cfg.get("critic_bank_size", 16384)),
             **common,
         )
     raise ValueError(f"Unknown critic_type: {kind!r}; expected one of {CRITIC_TYPES}")

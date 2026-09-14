@@ -17,7 +17,7 @@ BASE_CFG = {"critic_hidden_dims": [16, 8], "negative_slope": 0.2}
 
 def test_the_documented_types():
     """Catches a type added to or dropped from the tuple without the docs table changing"""
-    assert CRITIC_TYPES == ("per_vector", "neighbourhood")
+    assert CRITIC_TYPES == ("per_vector", "neighbourhood", "neighbourhood_bank")
 
 
 def test_missing_critic_type_defaults_to_the_per_vector_critic():

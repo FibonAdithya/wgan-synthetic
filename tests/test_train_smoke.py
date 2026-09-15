@@ -100,6 +100,25 @@ def test_spherical_evals_log_radius_and_direction_rank(tmp_path):
     assert "radius" not in meta_mlp["eval"][0]
 
 
+def test_spherical_diagnostics_failure_does_not_lose_the_eval_history(
+    tmp_path, monkeypatch
+):
+    """Catches an unguarded `generator.diagnostics` call: a checkpoint whose
+    diagnostics readout raises (e.g. a non-finite eigendecomposition) must
+    not take the whole run down and discard every eval entry with it."""
+    from src.models.generator import SphericalGenerator
+
+    def boom(self, energy_probe):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(SphericalGenerator, "diagnostics", boom)
+    ckpt_path, meta = train(make_config(tmp_path, "spherical"))
+    assert ckpt_path.exists()
+    assert meta["eval"]
+    for e in meta["eval"]:
+        assert "boom" in e["diagnostics_error"]
+
+
 def test_checkpoints_record_their_generator_weight_provenance(tmp_path):
     """best_generator.pt is written inside the EMA swap, periodic checkpoints
     outside it -- the saved dicts must say which is which."""

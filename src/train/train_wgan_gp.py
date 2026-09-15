@@ -803,10 +803,19 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
                 stats = tensor_stats(x_holdout, fake_holdout)
                 stats.update(collapse_stats(fake_holdout))
                 if energy_probe is not None:
-                    if isinstance(generator, SphericalGenerator):
-                        stats.update(generator.diagnostics(energy_probe))
-                    else:
-                        stats.update(generator.component_energies(energy_probe))
+                    # As with the gate block below: a failure here is a
+                    # property of this one checkpoint's diagnostics readout,
+                    # not of the run, and must not take the whole run down
+                    # with it -- run_metadata.json is only written after the
+                    # loop, so an uncaught exception here would discard every
+                    # eval entry collected so far.
+                    try:
+                        if isinstance(generator, SphericalGenerator):
+                            stats.update(generator.diagnostics(energy_probe))
+                        else:
+                            stats.update(generator.component_energies(energy_probe))
+                    except Exception as e:
+                        stats["diagnostics_error"] = f"{type(e).__name__}: {e}"
                 if select_on == "gate":
                     # The real side is computed once outside the loop and is
                     # not wrapped: a failure there means the holdout itself

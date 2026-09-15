@@ -159,3 +159,20 @@ def test_tangent_head_depends_on_the_trunk_through_the_modulation():
     assert torch.allclose(
         gen.tangent_raw(h1, z_skip), gen.tangent_raw(h2, z_skip), atol=1e-6
     )
+
+
+def test_diagnostics_report_radius_and_direction_rank():
+    """Catches the rank computed on the wrong tensor: with the direction
+    head pinned to one vector, u is constant and its effective rank is 1
+    whatever t does."""
+    torch.manual_seed(0)
+    gen = make(radius_init=0.8)
+    z = torch.randn(2048, LATENT)
+    d = gen.diagnostics(z)
+    assert set(d) == {"radius", "direction_effective_rank"}
+    assert abs(d["radius"] - 0.8) < 1e-6
+    assert 1.0 < d["direction_effective_rank"] <= OUT
+    with torch.no_grad():
+        gen.direction.weight.zero_()
+        gen.direction.weight[0, 0] = 1.0
+    assert gen.diagnostics(z)["direction_effective_rank"] < 1.5

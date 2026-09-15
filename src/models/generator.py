@@ -251,6 +251,17 @@ class SphericalGenerator(nn.Module):
         r = self.radius
         return torch.cos(r) * u + torch.sin(r) * t
 
+    @torch.no_grad()
+    def diagnostics(self, z: Tensor) -> dict[str, float]:
+        """Per-evaluation readout: the shared angle, and the effective rank
+        of the trunk's direction over `z`, which shows whether u is
+        collapsing into a sheet the way linear_skip's trunk did."""
+        u, _ = self.components(z)
+        return {
+            "radius": float(self.radius),
+            "direction_effective_rank": _effective_rank(u),
+        }
+
 
 class GatedGenerator(nn.Module):
     """Generate non-negative unit vectors with a learnable point mass at zero.

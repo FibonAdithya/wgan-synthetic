@@ -145,8 +145,10 @@ changes. The trainer already branches on the generator class to log
 gets the same branch with a `diagnostics(z)` method returning two scalars:
 
 - `radius`: the current `r`.
-- `direction_effective_rank`: the effective rank (the report's definition,
-  `src/eval/eda/metrics.effective_rank`) of `u` over the evaluation batch,
+- `direction_effective_rank`: the effective rank of `u` over the evaluation
+  batch, `exp` of the Shannon entropy of the covariance eigenvalue ratios,
+  the same formula as `src/eval/eda/metrics.effective_rank`, computed in
+  torch inside the model module so `src/models` does not import `src/eval`,
   which shows whether the trunk is developing a sheet the way
   `linear_skip`'s did.
 
@@ -173,8 +175,8 @@ as described, confirm the test fails, restore.
 | unit norm | output row norms within `1e-5` of 1 on random `z` | dropping the normalisation of `t` or of `u` |
 | orthogonality | `(u . t)` within `1e-5` of 0 per row | removing the projection |
 | constant angle | `arccos(x . u)` equals `radius_init` on every row, spread under `1e-5` across rows | a per-sample radius; a wrong sigmoid mapping |
-| band enforcement | `radius_raw = +-50` leaves `r` strictly inside `(radius_min, radius_max)` | an unclamped radius |
-| local rank | the Jacobian of one output row with respect to `z_s` has rank at least `min(skip_dim, output_dim - 1)` at init | zeroing the tangent head's skip weight |
+| band enforcement | `radius_raw = +-50` leaves `r` inside the closed band `[radius_min, radius_max]` (float32 sigmoid saturates to exactly 0 and 1 there), and `radius_raw = +-5` leaves it strictly inside | an unclamped radius |
+| local rank | the Jacobian of one output row with respect to `z_s` has rank at least `min(skip_dim, output_dim - 2)` at init (`t` is a unit vector in the `output_dim - 1` dimensional tangent space, so its Jacobian has rank at most `output_dim - 2`) | zeroing the tangent head's skip weight |
 | location dependence | `gamma(h)` differs across trunk latents; with `gamma` and `beta` frozen to constants, `t` for a fixed `z_s` stops varying with `z_t` beyond what re-projection onto the new `u` explains | a modulation that is wired but inert |
 | factory | `build_generator` builds the class from `spherical`, honours the five keys, rejects `skip_dim` outside `(0, latent_dim)` and a band with `min >= init`, `init >= max` or `max >= pi/2`; a state dict round-trips through a rebuild from the run config | a missing factory branch; a key-name mismatch |
 | config pinning (`tests/test_nytimes_configs.py`) | `v3` equals `v2c` except the generator keys; `v3_seed42` differs from `v3` only in real path and output dir; the job script names `v3_seed42` | a rung that changes more than it says |

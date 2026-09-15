@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
@@ -121,6 +122,134 @@ class LinearSkipGenerator(nn.Module):
             "skip_share": skip_energy / total if total > 0.0 else 0.0,
             "trunk_skip_abs_cos": float(cos.abs().mean()),
         }
+
+
+def _unit(x: Tensor, eps: float) -> Tensor:
+    return x / torch.linalg.vector_norm(x, dim=1, keepdim=True).clamp(min=eps)
+
+
+def _effective_rank(x: Tensor) -> float:
+    """exp(Shannon entropy of the covariance eigenvalue ratios): the same
+    definition as `src.eval.eda.metrics.effective_rank`, in torch, so this
+    module does not import the report."""
+    x = x.float()
+    x = x - x.mean(dim=0, keepdim=True)
+    eig = torch.linalg.eigvalsh(x.T @ x / max(x.shape[0] - 1, 1)).clamp(min=0.0)
+    ratio = eig / eig.sum().clamp(min=1.0e-12)
+    return float(torch.exp(-(ratio * torch.log(ratio + 1.0e-12)).sum()))
+
+
+class SphericalGenerator(nn.Module):
+    """Unit-norm output with a constant residual angle and a residual shape
+    conditioned on the trunk.
+
+        u = unit(direction(h)),  h = trunk(z[:, :t])
+        v = tangent_out(act(tangent_in(z[:, t:]) * (1 + gamma(h)) + beta(h)))
+        t = unit(v - (v . u) u)
+        x = cos(r) u + sin(r) t,     r = radius_min + (radius_max - radius_min) sigmoid(radius_raw)
+
+    Why: on NYTimes the linear-skip generator's hubs are rows whose residual
+    share is a few percent smaller than their neighbours' (trunk-norm CV
+    0.06-0.08 was enough for hubness 17-30; equalising it gave 3-6), and a
+    fixed linear residual cannot reach the corpus's local dimension without
+    losing its global rank. So the angle `r` is one scalar shared by every
+    sample, and the tangent direction's shape follows `h` through the
+    per-channel modulation while its magnitude, sin(r), does not. See
+    docs/ai/specs/2026-09-15-spherical-generator-design.md.
+
+    Output is unit-norm to float precision, so the trainer's `normalize_l2`
+    and the sampler's normalisation are no-ops on it.
+    """
+
+    def __init__(
+        self,
+        latent_dim: int,
+        output_dim: int,
+        hidden_dims: Iterable[int],
+        negative_slope: float = 0.2,
+        skip_dim: int | None = None,
+        tangent_hidden_dim: int = 512,
+        radius_init: float = 0.95,
+        radius_min: float = 0.2,
+        radius_max: float = 1.5,
+        eps: float = 1.0e-8,
+    ):
+        super().__init__()
+        hidden_dims = list(hidden_dims)
+        skip_dim = output_dim if skip_dim is None else int(skip_dim)
+        if skip_dim <= 0 or skip_dim >= latent_dim:
+            raise ValueError(
+                f"skip_dim must be in (0, latent_dim); got skip_dim={skip_dim}, "
+                f"latent_dim={latent_dim}"
+            )
+        if not hidden_dims:
+            raise ValueError("hidden_dims must not be empty: the tangent head reads h")
+        if tangent_hidden_dim <= 0:
+            raise ValueError(
+                f"tangent_hidden_dim must be positive, got {tangent_hidden_dim}"
+            )
+        if not 0.0 < radius_min:
+            raise ValueError(f"radius_min must be positive, got {radius_min}")
+        if not radius_min < radius_init:
+            raise ValueError(
+                f"radius_min must be below radius_init; got radius_min={radius_min}, "
+                f"radius_init={radius_init}"
+            )
+        if not radius_init < radius_max:
+            raise ValueError(
+                f"radius_init must be below radius_max; got radius_init={radius_init}, "
+                f"radius_max={radius_max}"
+            )
+        if not radius_max < math.pi / 2:
+            raise ValueError(f"radius_max must be below pi/2, got {radius_max}")
+        self.skip_dim = skip_dim
+        self.trunk_latent_dim = latent_dim - skip_dim
+        self.radius_min = float(radius_min)
+        self.radius_max = float(radius_max)
+        self.eps = float(eps)
+
+        dims = [self.trunk_latent_dim, *hidden_dims]
+        layers: list[nn.Module] = []
+        for i in range(len(dims) - 1):
+            layers.append(nn.Linear(dims[i], dims[i + 1]))
+            layers.append(nn.LeakyReLU(negative_slope=negative_slope, inplace=True))
+        self.trunk = nn.Sequential(*layers)
+        self.direction = nn.Linear(hidden_dims[-1], output_dim, bias=False)
+        self.tangent_in = nn.Linear(skip_dim, tangent_hidden_dim)
+        # Default init, not zero: the residual's dependence on h exists from
+        # step one, which is what the location-dependence test measures.
+        self.gamma = nn.Linear(hidden_dims[-1], tangent_hidden_dim)
+        self.beta = nn.Linear(hidden_dims[-1], tangent_hidden_dim)
+        self.tangent_act = nn.LeakyReLU(negative_slope=negative_slope)
+        self.tangent_out = nn.Linear(tangent_hidden_dim, output_dim)
+        p = (radius_init - radius_min) / (radius_max - radius_min)
+        self.radius_raw = nn.Parameter(torch.tensor(math.log(p / (1.0 - p))))
+
+    @property
+    def radius(self) -> Tensor:
+        return self.radius_min + (self.radius_max - self.radius_min) * torch.sigmoid(
+            self.radius_raw
+        )
+
+    def tangent_raw(self, h: Tensor, z_skip: Tensor) -> Tensor:
+        """The tangent head's output before projection onto the tangent
+        space at u. Exposed so a test can hold the modulation constant and
+        confirm the head then stops depending on the trunk."""
+        a = self.tangent_in(z_skip) * (1.0 + self.gamma(h)) + self.beta(h)
+        return self.tangent_out(self.tangent_act(a))
+
+    def components(self, z: Tensor) -> tuple[Tensor, Tensor]:
+        t_dim = self.trunk_latent_dim
+        h = self.trunk(z[:, :t_dim])
+        u = _unit(self.direction(h), self.eps)
+        v = self.tangent_raw(h, z[:, t_dim:])
+        v = v - (v * u).sum(dim=1, keepdim=True) * u
+        return u, _unit(v, self.eps)
+
+    def forward(self, z: Tensor) -> Tensor:
+        u, t = self.components(z)
+        r = self.radius
+        return torch.cos(r) * u + torch.sin(r) * t
 
 
 class GatedGenerator(nn.Module):

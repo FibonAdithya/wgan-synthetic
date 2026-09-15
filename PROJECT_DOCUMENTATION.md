@@ -52,10 +52,10 @@ bands; the pages are the source of truth for anything family-specific.
 |---|---|---|---|---|---|
 | `sift` | 128 | `l2` | non-negative uint8, heavy exact-zero mass, ties common | `gated` | `docs/datasets/sift.md` |
 | `gist` | 960 | `l2` | non-negative dense float, little zero mass, high ambient dim | `mlp` | `docs/datasets/gist.md` |
-| `deep` | 96 | `angular` | dense signed unit-norm image embeddings | `mlp` today, `spherical` when built | `docs/datasets/deep.md` |
-| `glove` | 100 | `angular` | dense signed word vectors, strong density gradient | `mlp` today, `spherical` when built | `docs/datasets/glove.md` |
-| `nytimes` | 256 | `angular` | dense signed document embeddings, strong topic clusters | `mlp` at v0, `linear_skip` from v1 (v1, v2, v2b and v2c trained, none meeting the bar), `spherical` still planned | `docs/datasets/nytimes.md` |
-| `openai` | 1536 | `angular` | unit-norm text embeddings, very high ambient dim, low intrinsic dim | `mlp` today, `spherical` when built | `docs/datasets/openai.md` |
+| `deep` | 96 | `angular` | dense signed unit-norm image embeddings | `mlp` today, `spherical` not yet adopted | `docs/datasets/deep.md` |
+| `glove` | 100 | `angular` | dense signed word vectors, strong density gradient | `mlp` today, `spherical` not yet adopted | `docs/datasets/glove.md` |
+| `nytimes` | 256 | `angular` | dense signed document embeddings, strong topic clusters | `mlp` at v0, `linear_skip` from v1 (v1, v2, v2b and v2c trained, none meeting the bar), `spherical` from v3 (config written, not yet trained) | `docs/datasets/nytimes.md` |
+| `openai` | 1536 | `angular` | unit-norm text embeddings, very high ambient dim, low intrinsic dim | `mlp` today, `spherical` not yet adopted | `docs/datasets/openai.md` |
 
 ### Fetching
 

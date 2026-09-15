@@ -12,7 +12,7 @@
 
 **Tech Stack:** Python 3.12, numpy, torch (generator sampling only), h5py (real query set), plotly (HTML report), cuVS (GPU indexes, box-side only).
 
-**Design spec:** `docs/superpowers/specs/2026-08-12-ann-gpu-benchmark-design.md`
+**Design spec:** `docs/ai/specs/2026-08-12-ann-gpu-benchmark-design.md`
 
 ## Global Constraints
 
@@ -54,7 +54,7 @@
 This task writes no product code. It exists because tasks 3, 4 and 8 are written against a cuVS API surface and a set of run directories that have not been confirmed to exist. Confirming them costs minutes; discovering them wrong after six modules are written costs a day.
 
 **Files:**
-- Create: `docs/superpowers/plans/2026-08-12-ann-gpu-benchmark-probe.md`
+- Create: `docs/ai/plans/2026-08-12-ann-gpu-benchmark-probe.md`
 
 - [ ] **Step 1: Check SSH reaches the box at all**
 
@@ -112,10 +112,10 @@ Expected: real signatures. **Task 3 is written against the signatures this step 
 
 - [ ] **Step 5: Write the findings down and commit**
 
-Write `docs/superpowers/plans/2026-08-12-ann-gpu-benchmark-probe.md` recording, verbatim: GPU model and driver, which run directories exist, the HDF5 key shapes, the cuVS version, and the printed signatures. Then:
+Write `docs/ai/plans/2026-08-12-ann-gpu-benchmark-probe.md` recording, verbatim: GPU model and driver, which run directories exist, the HDF5 key shapes, the cuVS version, and the printed signatures. Then:
 
 ```bash
-git add docs/superpowers/plans/2026-08-12-ann-gpu-benchmark-probe.md
+git add docs/ai/plans/2026-08-12-ann-gpu-benchmark-probe.md
 git commit -m "docs: record GPU box probe for the ANN benchmark"
 ```
 

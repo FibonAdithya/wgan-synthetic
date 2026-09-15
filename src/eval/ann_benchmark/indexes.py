@@ -15,7 +15,7 @@ Argument order matches the measured cuVS 26.08.01 API, not the guessed one:
 queries, k, ...)` -- params before the index -- while `brute_force.search`
 takes `(index, queries, k, ...)`, index first. `brute_force.build` takes the
 metric directly; the other three take it on `IndexParams`. See
-`docs/superpowers/plans/2026-08-12-ann-gpu-benchmark-probe.md`.
+`docs/ai/plans/2026-08-12-ann-gpu-benchmark-probe.md`.
 """
 
 from __future__ import annotations

@@ -319,7 +319,7 @@ The run directories are spread over two trees on the box, while
 `compare_variants` resolves every rung against a single `--root`. A staging
 directory of symlinks reconciles that without changing the manifest format;
 the recipe is in
-`docs/superpowers/plans/2026-08-12-ann-gpu-benchmark-probe.md`, together with
+`docs/ai/plans/2026-08-12-ann-gpu-benchmark-probe.md`, together with
 the measured cuVS API surface and the box paths.
 
 Corpora, query sets and ground truth are cached in the work directory and keyed

@@ -637,4 +637,13 @@ def build_generator(model_cfg: Mapping[str, Any], output_dim: int) -> nn.Module:
             skip_init=str(model_cfg.get("skip_init", "orthogonal")),
             skip_init_gain=float(model_cfg.get("skip_init_gain", 1.0)),
         )
+    if kind == "spherical":
+        return SphericalGenerator(
+            **common,
+            skip_dim=model_cfg.get("skip_dim"),
+            tangent_hidden_dim=int(model_cfg.get("tangent_hidden_dim", 512)),
+            radius_init=float(model_cfg.get("radius_init", 0.95)),
+            radius_min=float(model_cfg.get("radius_min", 0.2)),
+            radius_max=float(model_cfg.get("radius_max", 1.5)),
+        )
     raise ValueError(f"Unknown generator_type: {kind}")

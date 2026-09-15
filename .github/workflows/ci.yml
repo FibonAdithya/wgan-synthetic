@@ -39,5 +39,10 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Install development tools
+        # ruff, pytest, and the agentify pin: tests/test_contract.py imports
+        # agentify, so a CI without this step cannot run the gate.
+        run: pip install -r requirements-dev.txt
+
       - name: Run checks
         run: make check

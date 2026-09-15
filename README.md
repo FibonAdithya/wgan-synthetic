@@ -79,7 +79,8 @@ fetcher does not produce") for why the SIFT configs still point at
 
 ## Quick start
 
-1. Create environment and install dependencies:
+1. Create environment and install dependencies (`make setup` does all four
+   steps and is safe to re-run):
    - `python3 -m venv .venv`
    - `source .venv/bin/activate`
    - `pip install -r requirements.txt`

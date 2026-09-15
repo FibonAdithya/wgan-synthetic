@@ -6,8 +6,9 @@
 
 PYTHON ?= python
 RUFF ?= ruff
+VENV ?= .venv
 
-.PHONY: check lint format-check format test
+.PHONY: check lint format-check format test setup
 
 check: lint format-check test
 
@@ -23,3 +24,13 @@ format:
 
 test:
 	$(PYTHON) -m pytest
+
+# One idempotent entry point for a fresh checkout; the four steps of the
+# README's quick start. The venv rule fires only when $(VENV) is absent, and
+# pip skips what is already installed. `make -n setup` shows what would run.
+setup: $(VENV)/bin/python
+	$(VENV)/bin/python -m pip install --quiet -r requirements.txt
+	$(VENV)/bin/python -m pip install --quiet -r requirements-dev.txt
+
+$(VENV)/bin/python:
+	python3 -m venv $(VENV)

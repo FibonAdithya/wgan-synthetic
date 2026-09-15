@@ -30,7 +30,11 @@ from src.models.critic import (
     draw_real_bank_indices,
     score_population,
 )
-from src.models.generator import LinearSkipGenerator, build_generator
+from src.models.generator import (
+    LinearSkipGenerator,
+    SphericalGenerator,
+    build_generator,
+)
 from src.train.gpu_lock import claim_gpu, gpu_lock_key
 from src.train.log_ratio import LogRatioTarget, log_ratio_penalty
 from src.train.selection import (
@@ -635,10 +639,11 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
         if select_on == "gate"
         else None
     )
-    # Fixed latents for the linear-skip balance readout, drawn from a
-    # separate generator so the training stream is exactly what it was.
+    # Fixed latents for the linear-skip balance readout and the spherical
+    # radius/direction-rank readout, drawn from a separate generator so the
+    # training stream is exactly what it was.
     energy_probe = None
-    if isinstance(generator, LinearSkipGenerator):
+    if isinstance(generator, (LinearSkipGenerator, SphericalGenerator)):
         probe_rng = torch.Generator(device=device)
         probe_rng.manual_seed(seed)
         energy_probe = torch.randn(4096, latent_dim, generator=probe_rng, device=device)
@@ -798,7 +803,10 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
                 stats = tensor_stats(x_holdout, fake_holdout)
                 stats.update(collapse_stats(fake_holdout))
                 if energy_probe is not None:
-                    stats.update(generator.component_energies(energy_probe))
+                    if isinstance(generator, SphericalGenerator):
+                        stats.update(generator.diagnostics(energy_probe))
+                    else:
+                        stats.update(generator.component_energies(energy_probe))
                 if select_on == "gate":
                     # The real side is computed once outside the loop and is
                     # not wrapped: a failure there means the holdout itself

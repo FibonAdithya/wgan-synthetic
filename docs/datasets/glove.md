@@ -138,7 +138,7 @@ for the reason given above.
 
 ## Model family
 
-`mlp` today, `spherical` when phase (b) lands.
+`mlp` today, `spherical` not yet adopted.
 
 ## Ladder
 

@@ -13,7 +13,12 @@ sphere.
     x(s) = normalise(s * trunk(z_t) + skip(z_s))        s in --scales
 
 `s = 0` is the skip term alone (a linear map of a Gaussian on the sphere)
-and `trunk_only` is the trunk alone. If hubness rises monotonically with s
+and `trunk_only` is the trunk alone. With `--equalise`, a second family of
+rows `eq_scale_<s>` first rescales each row's trunk and skip terms to their
+respective mean norms, so every sample carries the same trunk-to-skip ratio
+and only the direction of each term is kept; if hubness falls to the
+uniform-noise bound (about 4) under equalisation, the per-sample ratio is
+the hub source rather than the sheet's directions. If hubness rises monotonically with s
 while the s = 0 row reads near the Gaussian's, the trunk-plus-skip
 decomposition is the hub source; if it does not move with s, the hubs come
 from somewhere else and the generator is not the lever.
@@ -60,6 +65,11 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--scales", default="0,0.25,0.5,1,2,4")
     p.add_argument("--device", default="cpu")
+    p.add_argument(
+        "--equalise",
+        action="store_true",
+        help="also measure each scale with per-row trunk and skip norms equalised",
+    )
     return p.parse_args()
 
 
@@ -120,6 +130,25 @@ def main() -> None:
         for s in scales:
             rows[f"scale_{s:g}"] = measure(normalise(s * trunk + skip))
             print(f"{name} scale {s:g}: {json.dumps(rows[f'scale_{s:g}'])}", flush=True)
+        if args.equalise:
+            trunk_norm = torch.linalg.vector_norm(trunk, dim=1, keepdim=True)
+            skip_norm = torch.linalg.vector_norm(skip, dim=1, keepdim=True)
+            trunk_eq = trunk / trunk_norm.clamp(min=1.0e-8) * trunk_norm.mean()
+            skip_eq = skip / skip_norm.clamp(min=1.0e-8) * skip_norm.mean()
+            result.setdefault("trunk_norm_stats", {})[name] = {
+                "trunk_norm_mean": float(trunk_norm.mean()),
+                "trunk_norm_cv": float(trunk_norm.std() / trunk_norm.mean()),
+                "skip_norm_mean": float(skip_norm.mean()),
+                "skip_norm_cv": float(skip_norm.std() / skip_norm.mean()),
+            }
+            print(
+                f"{name} norms: {json.dumps(result['trunk_norm_stats'][name])}",
+                flush=True,
+            )
+            for s in scales:
+                key = f"eq_scale_{s:g}"
+                rows[key] = measure(normalise(s * trunk_eq + skip_eq))
+                print(f"{name} {key}: {json.dumps(rows[key])}", flush=True)
         rows["trunk_only"] = measure(normalise(trunk))
         print(f"{name} trunk_only: {json.dumps(rows['trunk_only'])}", flush=True)
         result["checkpoints"][name] = {

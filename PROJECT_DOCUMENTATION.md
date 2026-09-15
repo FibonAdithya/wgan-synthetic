@@ -54,7 +54,7 @@ bands; the pages are the source of truth for anything family-specific.
 | `gist` | 960 | `l2` | non-negative dense float, little zero mass, high ambient dim | `mlp` | `docs/datasets/gist.md` |
 | `deep` | 96 | `angular` | dense signed unit-norm image embeddings | `mlp` today, `spherical` when built | `docs/datasets/deep.md` |
 | `glove` | 100 | `angular` | dense signed word vectors, strong density gradient | `mlp` today, `spherical` when built | `docs/datasets/glove.md` |
-| `nytimes` | 256 | `angular` | dense signed document embeddings, strong topic clusters | `mlp` today, `spherical` when built | `docs/datasets/nytimes.md` |
+| `nytimes` | 256 | `angular` | dense signed document embeddings, strong topic clusters | `mlp` at v0, `linear_skip` from v1 (v1, v2, v2b and v2c trained, none meeting the bar), `spherical` still planned | `docs/datasets/nytimes.md` |
 | `openai` | 1536 | `angular` | unit-norm text embeddings, very high ambient dim, low intrinsic dim | `mlp` today, `spherical` when built | `docs/datasets/openai.md` |
 
 ### Fetching
@@ -230,7 +230,9 @@ independent, a variant number means nothing across families: SIFT's `v2` and
 a future GIST `v2` are unrelated, and only ever compare within one dataset.
 Each family's ladder and its status live in its page under `docs/datasets/`.
 SIFT and DEEP have trained rungs above `v0`; GloVe has a trained `v0` and
-nothing above it; the other three have a `v0` baseline config only.
+nothing above it; NYTimes has trained rungs at `v1`, `v2`, `v2b` and `v2c` above
+`v0`, none of which yet reproduces the corpus's search difficulty; the other
+two have a `v0` baseline config only.
 
 The SIFT ladder:
 
@@ -320,16 +322,18 @@ both arms. Any write-up of a v4 result must lead with those.
 
 ### `generator_type`
 
-The architecture axis in the `model` config block, accepting `mlp` (default),
-`gated`, and `structured_gated`. It sits underneath the variant numbering:
-v0, v1 and v1_5 all use `mlp` and differ only in training settings.
+The architecture axis in the `model` config block. Four values are built:
+`mlp` (default), `gated`, `structured_gated`, and `linear_skip`. It sits
+underneath the variant numbering: on SIFT, v0, v1 and v1_5 all use `mlp`
+and differ only in training settings.
 
-A third value, `spherical`, is planned and not built. It is phase (b) of the
+A fifth value, `spherical`, is planned and not built. It is phase (b) of the
 multi-dataset design: a generator whose output is unit-norm by construction
 rather than by a normalization applied afterwards, for the four `angular`
-families. Until it exists, `deep`, `glove`, `nytimes` and `openai` all start
-their ladders on `mlp`, and any dataset page naming `spherical` is describing
-the intended rung, not a trained one.
+families. Until it exists, `deep`, `glove` and `openai` all start their
+ladders on `mlp` (`nytimes` moved to `linear_skip` at its v1), and any
+dataset page naming `spherical` is describing the intended rung, not a
+trained one.
 
 Checkpoints do not record `generator_type` — the architecture is rebuilt from
 the run config at load time. A checkpoint is therefore only loadable
@@ -344,7 +348,60 @@ that rename unloadable — including v2's, whose `run_config.yaml` still says
 `sparse`. Write `gated` in new configs; the alias exists for the ones already
 on disk.
 
+`linear_skip` is an `mlp` trunk plus a bias-free linear map on a separate
+block of the latent: `x = trunk(z[:, :t]) + W z[:, t:]` with
+`t = latent_dim - skip_dim`. The output Jacobian is full rank by
+construction, which is the property `mlp` lacks on every family measured
+(its local dimension sits at about 15 regardless of the corpus). Keys:
+`skip_dim` (default `descriptor_dim`), `skip_init` (`orthogonal` or
+`identity`), `skip_init_gain`. Sampling and checkpoints are unchanged: the
+split happens inside the generator. First used by `configs/nytimes/v1.yaml`.
+
 ---
+
+### `critic_type`
+
+The critic axis in the `model` config block, built by `build_critic` in
+`src/models/critic.py`. Four values: `per_vector` (default; the `Critic` MLP
+scoring one row at a time, every config before NYTimes v2), `neighbourhood`
+(`NeighbourhoodCritic`: the same MLP on each row concatenated with its
+within-batch neighbourhood profile, `critic_k` entries of sorted, floored
+k-NN distances expressed as `log(r_i / r_k)` plus `log r_k`) and
+`neighbourhood_bank` (`BankNeighbourhoodCritic`: the same features, but a
+real row's neighbours come from a fixed `critic_bank_size`-row bank of the
+training split and a fake row's from a ring of the last
+`critic_bank_size / batch_size` generator batches; interpolated rows, which
+is what `gradient_penalty` scores, query the union. A real row that is
+itself in the bank is excluded by index, so genuine duplicates stay
+visible. Checkpoints store the bank's row indices, not its rows, and the
+fake ring refills after a resume), and `neighbourhood_set`
+(`SetNeighbourhoodCritic`: one EdgeConv layer over each row's k
+within-batch neighbour differences, pooled, then the MLP head; it learns
+its own neighbourhood features and reads no distances, so
+`critic_distance_floor` is unused).
+
+Why: a per-vector critic cannot see local dimension, so a low-rank sheet
+with the right covariance envelope is, to it, the corpus. NYTimes v1
+collapsed to LID 5 with the Wasserstein estimate under 0.06 throughout.
+The neighbourhood critic makes the k-NN profile part of what is
+discriminated. Under it, `gradient_penalty` bounds the gradient of the
+batch's *summed* score per row, which is the intended constraint for a
+batch-dependent critic (its docstring says so).
+
+| Config key | Default | Meaning |
+|---|---|---|
+| `model.critic_type` | `per_vector` | Which critic class. `neighbourhood`, `neighbourhood_bank` and `neighbourhood_set` require `training.amp: false` (real and fake rows would otherwise reach the critic at different precisions). |
+| `model.critic_k` | `20` | Neighbour depth; the profile has `critic_k` entries. Must be below `training.batch_size`. |
+| `model.critic_distance_floor` | `0.01` | Every neighbour distance the critic reads is clamped from below here, so an exact copy reads as a bounded "tight pair" rather than `-inf`. The gate's `near_duplicate_fraction` uses the same constant. |
+| `model.critic_bank_size` | `16384` | `neighbourhood_bank` only: rows in each of the real bank and the fake ring. Must exceed `critic_k` and not exceed the training split. `run_metadata.json` records it as `critic_bank_size` and the first step the ring was full as `fake_bank_filled_step`. |
+| `model.critic_edge_dim` | `128` | Width of the edge MLP. |
+| `model.critic_edge_pool` | `max` | max or mean over the k edges. |
+| `data.preprocess.drop_zero_rows` | `false` | Drop exact-zero rows at load, before the train/holdout split; count in `run_metadata.json` under `data.dropped_zero_rows`. Duplicates are never dropped. |
+
+Checkpoints do not record `critic_type` either; like the generator, the
+critic is rebuilt from `run_config.yaml`, and the per-vector, neighbourhood
+and set state dicts do not cross-load. The bank critic's state dict is the
+neighbourhood critic's plus `real_bank_indices`.
 
 ## Optimizer and training setup
 
@@ -372,7 +429,11 @@ Both are off by default, so v0–v3 behaviour is unchanged when they are absent.
 | `training.lid_reg_max_points` | `256` | Batch subsample the within-batch neighbour search runs on. |
 
 Both terms are logged per step alongside `wasserstein` and `adv_loss`, as
-`distance_reg` and `lid_reg`.
+`distance_reg` and `lid_reg`. `linear_skip` runs also log `trunk_energy`,
+`skip_energy`, `skip_share` and `trunk_skip_abs_cos` on every evaluation
+entry (`LinearSkipGenerator.component_energies`), and every
+`select_on: gate` run logs `gate_real_near_duplicate_fraction` /
+`gate_fake_near_duplicate_fraction`.
 
 `lid_reg_alpha` **cannot be set by analogy to `distance_reg_alpha`.**
 `distance_reg` is one scalar; `log_ratio_penalty` is an L1 *sum* over `k − 1`
@@ -387,6 +448,36 @@ Degenerate batches are dropped rather than clamped, matching
 at distance zero (duplicates, entirely plausible under mode collapse) or whose
 neighbours all tie contributes nothing, and the penalty is exactly zero when no
 query survives on either side.
+
+### Checkpoint selection
+
+| Config key | Default | Meaning |
+|---|---|---|
+| `training.select_on` | `cov_fro` | Which statistic chooses `best_generator.pt`. `cov_fro` is the covariance Frobenius gap on the holdout, as always. `gate` scores each evaluation by the holdout's normalised LID-median and relative-contrast gaps (`src/train/selection.py`), logs all four ANN-difficulty statistics for fake and real as `gate_fake_*` / `gate_real_*`, and records `selection_score`. |
+
+The holdout is smaller than a family's canonical N, so `gate_*` values rank
+checkpoints within one run and are not the family's profile. Checkpoints
+record `select_on` and `best_score`; a resume under a different selector is
+refused.
+
+Both sides are measured with exact-zero rows dropped (`zero_rows` in the
+logged statistics is the count) -- a zero row sits at the origin rather than
+on the sphere, and on NYTimes it roughly halves the reference LID. On the
+shipped 12,500-row holdout the reference reads about 5.6% above the
+canonical 20,000-row LID for NYTimes, which is acceptable for a selector
+that only ranks checkpoints of one run against each other and is not the
+family's profile.
+
+A fake-side `gate_statistics` failure is caught and logged as `gate_error`
+on that eval, with `selection_score: inf`; it does not stop the run.
+`selection_score` is also `inf` when more than half the fake side's queries
+were discarded from the LID/contrast estimators. A `select_on: gate` run in
+which every evaluation scores `inf` -- so no checkpoint was ever written --
+raises after `run_metadata.json` and `run_config.yaml` are written.
+
+`run_metadata.json` can therefore contain `Infinity` for `selection_score`
+and `best_score`. Python's `json` module reads that back fine; it is not
+strict JSON, so a consumer that insists on the spec will choke on it.
 
 Training entrypoint:
 

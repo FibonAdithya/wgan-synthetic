@@ -17,15 +17,29 @@ from torch.amp import GradScaler, autocast
 from torch.utils.data import DataLoader, Dataset, RandomSampler
 
 from src.data.dataset import (
+    IndexedTensorDataset,
     NumpyTensorDataset,
     PreprocessConfig,
     build_training_data,
 )
-from src.device import resolve_device
-from src.models.critic import Critic
-from src.models.generator import build_generator
+from src.device import cuda_device_index, resolve_device
+from src.models.critic import (
+    DEFAULT_DISTANCE_FLOOR,
+    BankNeighbourhoodCritic,
+    build_critic,
+    draw_real_bank_indices,
+    score_population,
+)
+from src.models.generator import LinearSkipGenerator, build_generator
 from src.train.gpu_lock import claim_gpu, gpu_lock_key
 from src.train.log_ratio import LogRatioTarget, log_ratio_penalty
+from src.train.selection import (
+    LOGGED,
+    SELECTORS,
+    gate_statistics,
+    prefixed,
+    selection_score,
+)
 from src.train.spectrum import spectrum_distance
 
 
@@ -118,9 +132,29 @@ def build_dataloader(
     )
 
 
+def split_batch(batch: Tensor | list | tuple) -> tuple[Tensor, Tensor | None]:
+    """Rows and, from an `IndexedTensorDataset`, their training indices."""
+    if isinstance(batch, (list, tuple)):
+        rows, ids = batch
+        return rows, ids
+    return batch, None
+
+
 def gradient_penalty(
-    critic: Critic, real: Tensor, fake: Tensor, device: torch.device
+    critic: nn.Module, real: Tensor, fake: Tensor, device: torch.device
 ) -> Tensor:
+    """WGAN-GP penalty on row-wise interpolates of `real` and `fake`.
+
+    The gradient is of the *summed* critic output with respect to each
+    interpolated row. For a per-vector critic that is each row's own score
+    gradient. For a batch-dependent critic (`NeighbourhoodCritic` and its
+    relatives) it also includes how row i moves every other row's
+    neighbourhood features; the penalty then bounds the Lipschitz constant
+    of the summed batch score, one row at a time. That is the intended
+    formulation for a minibatch-dependent critic, and the interpolated batch
+    mixing real and fake neighbourhoods is fine: the penalty is about the
+    critic's smoothness, not the population the batch came from.
+    """
     batch_size = real.shape[0]
     alpha = torch.rand(batch_size, 1, device=device)
     alpha = alpha.expand_as(real)
@@ -319,7 +353,7 @@ def ema_weights(
 
 def save_checkpoint(
     generator: nn.Module,
-    critic: Critic,
+    critic: nn.Module,
     optim_g: torch.optim.Optimizer,
     optim_d: torch.optim.Optimizer,
     out_dir: Path,
@@ -329,6 +363,8 @@ def save_checkpoint(
     ema_params: dict[str, Tensor] | None = None,
     ema_step: int = 0,
     best_cov: float = float("inf"),
+    select_on: str = "cov_fro",
+    best_score: float = float("inf"),
 ) -> None:
     """Write a checkpoint.
 
@@ -341,7 +377,14 @@ def save_checkpoint(
     resume needs and the model files do not carry. The EMA shadow matters
     most: at decay 0.999 a resume that loses it silently restarts a
     thousand-step average, and since best_generator.pt is chosen from EMA
-    weights the damage only shows up in the final artifact.
+    weights the damage only shows up in the final artifact. `best_cov` is
+    the running minimum of `cov_fro` over every evaluation so far, not the
+    `cov_fro` of the checkpoint this call is saving -- it keeps tracking
+    under `select_on: gate` too, so the two selectors can be compared after
+    the fact (see `src/train/selection.py`). `select_on` and `best_score`
+    record which selector chose `best_generator.pt` and its running best, so
+    a resume under a different selector is refused rather than silently
+    mixing two scores.
     """
     if generator_weights not in ("live", "ema"):
         raise ValueError(
@@ -357,6 +400,8 @@ def save_checkpoint(
         "ema_params": {k: v.detach().cpu() for k, v in (ema_params or {}).items()},
         "ema_step": int(ema_step),
         "best_cov": float(best_cov),
+        "select_on": select_on,
+        "best_score": float(best_score),
     }
     out_dir.mkdir(parents=True, exist_ok=True)
     torch.save(ckpt, out_dir / f"checkpoint_step_{step}.pt")
@@ -406,7 +451,9 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
     if device.type == "cuda" and 0.0 < memory_fraction < 1.0:
         # Belt and braces: if the lock is bypassed, a run degrades instead of
         # taking the whole card down with it.
-        torch.cuda.set_per_process_memory_fraction(memory_fraction, device)
+        torch.cuda.set_per_process_memory_fraction(
+            memory_fraction, cuda_device_index(device)
+        )
     out_dir = Path(config["output_dir"])
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -429,13 +476,12 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
     train_cfg = config["training"]
     latent_dim = int(model_cfg["latent_dim"])
     descriptor_dim = int(data_cfg["descriptor_dim"])
+    gate_distance_floor = float(
+        model_cfg.get("critic_distance_floor", DEFAULT_DISTANCE_FLOOR)
+    )
 
     generator = build_generator(model_cfg, output_dim=descriptor_dim).to(device)
-    critic = Critic(
-        input_dim=descriptor_dim,
-        hidden_dims=model_cfg["critic_hidden_dims"],
-        negative_slope=float(model_cfg["negative_slope"]),
-    ).to(device)
+    critic = build_critic(model_cfg, input_dim=descriptor_dim).to(device)
 
     lr_g = float(train_cfg["lr_g"])
     lr_d = float(train_cfg["lr_d"])
@@ -443,7 +489,10 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
     optim_g = torch.optim.Adam(generator.parameters(), lr=lr_g, betas=betas)
     optim_d = torch.optim.Adam(critic.parameters(), lr=lr_d, betas=betas)
 
-    dataset = NumpyTensorDataset(x_train)
+    bank_critic = isinstance(critic, BankNeighbourhoodCritic)
+    dataset = (
+        IndexedTensorDataset(x_train) if bank_critic else NumpyTensorDataset(x_train)
+    )
     num_workers = int(train_cfg.get("num_workers", 0))
     loader = build_dataloader(
         dataset,
@@ -490,6 +539,7 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
             "num_train": int(x_train.shape[0]),
             "num_holdout": int(x_holdout.shape[0]),
             "descriptor_dim": descriptor_dim,
+            "dropped_zero_rows": int(preprocess_state.dropped_zero_rows),
         },
         "preprocess_state": preprocess_state.to_serializable(),
         "gpu": gpu_meta,
@@ -497,6 +547,13 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
     }
 
     best_cov = float("inf")
+    select_on = str(train_cfg.get("select_on", "cov_fro"))
+    if select_on not in SELECTORS:
+        raise ValueError(
+            f"training.select_on must be one of {SELECTORS}, got {select_on!r}"
+        )
+    best_score = float("inf")
+    metric = data_cfg.get("metric", "l2")
 
     start_step = 0
     if resume is not None:
@@ -508,6 +565,12 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
             raise ValueError(
                 f"checkpoint is at step {start_step}, already at or past "
                 f"num_gen_steps={num_gen_steps}; raise the budget to continue"
+            )
+        ckpt_select_on = str(ckpt.get("select_on", "cov_fro"))
+        if ckpt_select_on != select_on:
+            raise ValueError(
+                f"{resume} was selected under select_on={ckpt_select_on!r} but the "
+                f"config says {select_on!r}; a resume cannot mix two selection scores"
             )
         if use_ema:
             saved = ckpt.get("ema_params") or {}
@@ -539,10 +602,50 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
         optim_d.load_state_dict(ckpt["optim_d_state_dict"])
         ema_step = int(ckpt.get("ema_step", 0))
         best_cov = float(ckpt.get("best_cov", float("inf")))
+        best_score = float(ckpt.get("best_score", float("inf")))
         if use_ema:
             ema_params = {k: v.to(device) for k, v in ckpt["ema_params"].items()}
 
     run_meta["resumed_from_step"] = start_step
+
+    if bank_critic:
+        # The real bank is a fixed subset of the training split, drawn once
+        # per run seed. A resume takes the indices load_state_dict restored
+        # from the checkpoint rather than redrawing, so the bank the critic
+        # was trained against is the bank it continues against. The fake
+        # ring is not checkpointed; it refills within bank_size / batch_size
+        # generator steps, during which fake rows fall back to within-batch
+        # profiles, and `fake_bank_filled_step` records when that ended.
+        indices = (
+            critic.real_bank_indices.cpu()
+            if resume is not None
+            else draw_real_bank_indices(x_train.shape[0], critic.bank_size, seed)
+        )
+        critic.set_real_bank(dataset.x, indices)
+        run_meta["critic_bank_size"] = critic.bank_size
+
+    # Real-side gate statistics are a property of the holdout, not of the
+    # step: computed once, repeated into every eval entry so each is
+    # self-describing. Measured after the resume refusals above, so an
+    # invalid --resume fails fast without paying for a ~2 s k-NN pass.
+    real_gate = (
+        gate_statistics(
+            x_holdout, metric=metric, seed=seed, distance_floor=gate_distance_floor
+        )
+        if select_on == "gate"
+        else None
+    )
+    # Fixed latents for the linear-skip balance readout, drawn from a
+    # separate generator so the training stream is exactly what it was.
+    energy_probe = None
+    if isinstance(generator, LinearSkipGenerator):
+        probe_rng = torch.Generator(device=device)
+        probe_rng.manual_seed(seed)
+        energy_probe = torch.randn(4096, latent_dim, generator=probe_rng, device=device)
+    # Whether a best_generator.pt has been written this run (or was already
+    # written before a resume). inf < inf is False, so under `gate` a run
+    # where every evaluation scores inf never sets this -- checked below.
+    best_checkpoint_written = best_score < float("inf")
 
     for step in range(start_step + 1, num_gen_steps + 1):
         d_loss_val = 0.0
@@ -556,15 +659,17 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
                 data_iter = iter(loader)
                 real_batch = next(data_iter)
 
+            real_batch, real_ids = split_batch(real_batch)
             real = real_batch.to(device)
+            real_ids = None if real_ids is None else real_ids.to(device)
             batch_size = real.shape[0]
             z = torch.randn(batch_size, latent_dim, device=device)
 
             optim_d.zero_grad(set_to_none=True)
             with autocast("cuda", enabled=amp):
                 fake = normalize_l2(generator(z).detach())
-                d_real = critic(real)
-                d_fake = critic(fake)
+                d_real = score_population(critic, real, "real", row_ids=real_ids)
+                d_fake = score_population(critic, fake, "fake")
                 gp = gradient_penalty(critic, real, fake, device=device)
                 d_loss = -(d_real.mean() - d_fake.mean()) + lambda_gp * gp
 
@@ -585,13 +690,14 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
         except StopIteration:
             data_iter = iter(loader)
             real_batch = next(data_iter)
+        real_batch, _ = split_batch(real_batch)
         batch_size = real_batch.shape[0]
 
         optim_g.zero_grad(set_to_none=True)
         with autocast("cuda", enabled=amp):
             z = torch.randn(batch_size, latent_dim, device=device)
             fake = normalize_l2(generator(z))
-            adv_loss = -critic(fake).mean()
+            adv_loss = -score_population(critic, fake, "fake").mean()
             g_loss = adv_loss
             # Transferred once and shared: the regularizers all want the same
             # batch, and doing it per-branch pays for a host-to-device copy per
@@ -650,6 +756,13 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
         scaler_g.step(optim_g)
         scaler_g.update()
 
+        if bank_critic:
+            # After the score, never before: the batch just scored must not
+            # find itself in the ring at the floor.
+            critic.write_fake(fake.detach())
+            if critic.fake_bank_full and "fake_bank_filled_step" not in run_meta:
+                run_meta["fake_bank_filled_step"] = step
+
         if use_ema:
             ema_update(ema_params, generator, ema_decay)
             ema_step += 1
@@ -684,11 +797,44 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
                 )
                 stats = tensor_stats(x_holdout, fake_holdout)
                 stats.update(collapse_stats(fake_holdout))
+                if energy_probe is not None:
+                    stats.update(generator.component_energies(energy_probe))
+                if select_on == "gate":
+                    # The real side is computed once outside the loop and is
+                    # not wrapped: a failure there means the holdout itself
+                    # is broken, which should stop the run. A fake-side
+                    # failure is a property of this one checkpoint and must
+                    # not take the whole run down with it.
+                    try:
+                        fake_gate = gate_statistics(
+                            fake_holdout,
+                            metric=metric,
+                            seed=seed,
+                            distance_floor=gate_distance_floor,
+                        )
+                    except Exception as e:
+                        stats["gate_error"] = f"{type(e).__name__}: {e}"
+                        stats.update({f"gate_fake_{key}": None for key in LOGGED})
+                        stats["selection_score"] = math.inf
+                    else:
+                        stats.update(prefixed(fake_gate, "gate_fake_"))
+                        stats.update(prefixed(real_gate, "gate_real_"))
+                        stats["selection_score"] = selection_score(fake_gate, real_gate)
                 stats["step"] = step
                 run_meta.setdefault("eval", []).append(stats)
                 print(json.dumps({"eval": stats}))
-                if stats["cov_fro"] < best_cov:
+                # best_cov keeps tracking cov_fro under both selectors so the
+                # two can be compared after the fact.
+                improved_cov = stats["cov_fro"] < best_cov
+                if improved_cov:
                     best_cov = stats["cov_fro"]
+                if select_on == "gate":
+                    improved = stats["selection_score"] < best_score
+                    if improved:
+                        best_score = stats["selection_score"]
+                else:
+                    improved = improved_cov
+                if improved:
                     # Saved from inside the EMA swap: generator_state_dict holds
                     # EMA weights, but optim_g_state_dict (and the critic) are
                     # the LIVE training state -- the optimiser moments belong to
@@ -707,7 +853,10 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
                         ema_params=ema_params,
                         ema_step=ema_step,
                         best_cov=best_cov,
+                        select_on=select_on,
+                        best_score=best_score,
                     )
+                    best_checkpoint_written = True
 
         if step % save_every == 0:
             # Outside the EMA swap: this one holds live weights throughout.
@@ -723,6 +872,8 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
                 ema_params=ema_params,
                 ema_step=ema_step,
                 best_cov=best_cov,
+                select_on=select_on,
+                best_score=best_score,
             )
 
     with (out_dir / "run_metadata.json").open("w", encoding="utf-8") as f:
@@ -730,6 +881,12 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
 
     with (out_dir / "run_config.yaml").open("w", encoding="utf-8") as f:
         yaml.safe_dump(config, f, sort_keys=False)
+
+    if select_on == "gate" and not best_checkpoint_written:
+        raise RuntimeError(
+            f"{out_dir}: every evaluation scored inf under select_on='gate'; "
+            "no checkpoint was selected as best_generator.pt"
+        )
 
     return out_dir / "best_generator.pt", run_meta
 

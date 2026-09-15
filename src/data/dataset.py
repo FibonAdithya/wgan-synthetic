@@ -50,6 +50,14 @@ class PreprocessConfig:
     l2_normalize: bool = True
     eps: float = 1.0e-8
     metric: str = "l2"
+    # Drop rows with exact L2 norm zero before the train/holdout split. Off by
+    # default so every existing config trains on exactly the rows it did.
+    # A zero row is an empty document after preprocessing: the gate already
+    # drops it, the generator cannot emit one, and to a neighbourhood critic
+    # it is a row at L2 exactly 1.0 from everything -- a shortcut with nothing
+    # to emulate. Exact duplicates are NOT dropped: they are part of the
+    # search target (docs/superpowers/specs/2026-09-14-neighbourhood-critic-design.md).
+    drop_zero_rows: bool = False
 
     def __post_init__(self) -> None:
         if self.metric not in METRICS:
@@ -66,6 +74,10 @@ class PreprocessState:
     config: PreprocessConfig
     mean: np.ndarray | None = None
     whitening_matrix: np.ndarray | None = None
+    # How many exact-zero rows build_training_data removed (0 unless
+    # config.drop_zero_rows). Recorded so run_metadata.json says how many
+    # rows the run actually trained on.
+    dropped_zero_rows: int = 0
 
     def to_serializable(self) -> dict:
         payload = asdict(self)
@@ -90,6 +102,7 @@ class PreprocessState:
                 if whitening_matrix is None
                 else np.asarray(whitening_matrix, dtype=np.float32)
             ),
+            dropped_zero_rows=int(payload.get("dropped_zero_rows", 0)),
         )
 
 
@@ -214,6 +227,20 @@ class NumpyTensorDataset(Dataset):
         return self.x[idx]
 
 
+class IndexedTensorDataset(NumpyTensorDataset):
+    """`NumpyTensorDataset` that also yields each row's index into `x`.
+
+    The bank-neighbourhood critic excludes a real row's own bank slot by
+    index, so the trainer must know which training row each batch row is.
+    The default collate turns the ints into a `(batch,)` long tensor. Used
+    only when the critic is the bank type; every other critic keeps the
+    plain dataset and plain tensor batches.
+    """
+
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, int]:
+        return self.x[idx], idx
+
+
 def build_training_data(
     descriptor_path: str | None,
     file_format: str,
@@ -237,12 +264,20 @@ def build_training_data(
     if x.shape[1] != descriptor_dim:
         raise ValueError(f"Expected descriptor dim {descriptor_dim}, got {x.shape[1]}")
 
+    dropped_zero_rows = 0
+    if preprocess_cfg.drop_zero_rows:
+        keep = np.linalg.norm(x, axis=1) > 0.0
+        dropped_zero_rows = int(np.count_nonzero(~keep))
+        if dropped_zero_rows:
+            x = x[keep]
+
     x_train_raw, x_holdout_raw = train_holdout_split(
         x, holdout_fraction=holdout_fraction, seed=seed
     )
     state = _fit_preprocess_state(
         x_train=x_train_raw, descriptor_dim=descriptor_dim, cfg=preprocess_cfg
     )
+    state.dropped_zero_rows = dropped_zero_rows
     x_train = apply_preprocess(x_train_raw, state)
     x_holdout = apply_preprocess(x_holdout_raw, state)
     return x_train, x_holdout, state

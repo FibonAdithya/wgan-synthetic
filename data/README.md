@@ -50,9 +50,14 @@ like `nytimes_1m.npy` always holds exactly 1,000,000 rows.
 The training and generation pipeline assumes:
 
 1. Input vectors are converted to `float32`.
-2. Optional centering is computed from train split only.
-3. Optional whitening uses train covariance only.
-4. Final L2 normalization is applied per vector.
+2. Optional row filter: with `drop_zero_rows: true` (default `false`), rows
+   whose L2 norm is exactly zero are removed before the train/holdout split,
+   and the count is recorded as `dropped_zero_rows` in `run_metadata.json`.
+   Sampling and evaluation apply no filter, since a generator never emits
+   these rows; the NYTimes `v2*` configs turn it on.
+3. Optional centering is computed from train split only.
+4. Optional whitening uses train covariance only.
+5. Final L2 normalization is applied per vector.
 
 This contract is implemented in `src/data/dataset.py` and saved into training artifacts so sampling/evaluation uses the same transform.
 

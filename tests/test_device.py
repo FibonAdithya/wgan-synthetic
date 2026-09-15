@@ -65,3 +65,27 @@ def test_preflight_reports_the_device_on_cpu():
     assert meta["device"] == "cpu"
     # No CUDA fields invented on a CPU box.
     assert "memory_total_bytes" not in meta
+
+
+def test_cuda_device_index_keeps_an_explicit_index():
+    from src.device import cuda_device_index
+
+    assert cuda_device_index(torch.device("cuda:1")) == 1
+
+
+def test_cuda_device_index_resolves_a_bare_cuda_to_the_current_card(monkeypatch):
+    # torch >= 2.13 refuses a bare `cuda` in set_per_process_memory_fraction
+    # ("Expected a torch.device with a specified index or an integer"), which
+    # is exactly what resolve_device("auto") returns, so the index has to be
+    # filled in before the call.
+    from src.device import cuda_device_index
+
+    monkeypatch.setattr(torch.cuda, "current_device", lambda: 3)
+    assert cuda_device_index(torch.device("cuda")) == 3
+
+
+def test_cuda_device_index_refuses_a_non_cuda_device():
+    from src.device import cuda_device_index
+
+    with pytest.raises(ValueError):
+        cuda_device_index(torch.device("cpu"))

@@ -1,10 +1,12 @@
 from types import MappingProxyType
 
 import pytest
+import torch
 
 from src.models.generator import (
     GatedGenerator,
     Generator,
+    LinearSkipGenerator,
     StructuredGateGenerator,
     build_generator,
 )
@@ -139,3 +141,44 @@ def test_structured_and_gated_checkpoints_do_not_interchange():
         gated.load_state_dict(structured.state_dict())
     with pytest.raises(RuntimeError):
         structured.load_state_dict(gated.state_dict())
+
+
+def test_linear_skip_defaults_skip_dim_to_output_dim():
+    cfg = dict(BASE_CFG, generator_type="linear_skip", latent_dim=16 + 128)
+    generator = build_generator(cfg, output_dim=128)
+    assert isinstance(generator, LinearSkipGenerator)
+    assert generator.skip_dim == 128
+    assert generator.trunk_latent_dim == 16
+
+
+def test_linear_skip_honours_overrides():
+    cfg = dict(
+        BASE_CFG,
+        generator_type="linear_skip",
+        latent_dim=16 + 64,
+        skip_dim=64,
+        skip_init="orthogonal",
+        skip_init_gain=0.5,
+    )
+    generator = build_generator(cfg, output_dim=128)
+    assert generator.skip_dim == 64
+    w = generator.skip.weight
+    assert torch.allclose(w.T @ w, 0.25 * torch.eye(64), atol=1e-5)
+
+
+def test_linear_skip_rejects_skip_dim_at_or_above_latent_dim():
+    cfg = dict(BASE_CFG, generator_type="linear_skip", latent_dim=16, skip_dim=16)
+    with pytest.raises(ValueError, match="skip_dim"):
+        build_generator(cfg, output_dim=128)
+
+
+def test_linear_skip_rejects_identity_init_of_the_wrong_width():
+    cfg = dict(
+        BASE_CFG,
+        generator_type="linear_skip",
+        latent_dim=16 + 64,
+        skip_dim=64,
+        skip_init="identity",
+    )
+    with pytest.raises(ValueError, match="identity"):
+        build_generator(cfg, output_dim=128)

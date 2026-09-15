@@ -3,6 +3,7 @@ import math
 import pytest
 import torch
 
+from src.train.selection import selection_score
 from src.train.train_wgan_gp import train
 
 
@@ -50,10 +51,14 @@ def make_config(tmp_path, generator_type):
             # descriptor_dim is 16 here, not SIFT's 128, so the default
             # (4, 4, 8) layout would not tile the output.
             cfg["model"]["layout"] = [2, 2, 4]
+        if generator_type == "linear_skip":
+            cfg["model"]["skip_dim"] = 4  # latent_dim is 8: 4 trunk + 4 skip
     return cfg
 
 
-@pytest.mark.parametrize("generator_type", ["mlp", "gated", "structured_gated"])
+@pytest.mark.parametrize(
+    "generator_type", ["mlp", "gated", "structured_gated", "linear_skip"]
+)
 def test_training_loop_runs(tmp_path, generator_type):
     ckpt_path, meta = train(make_config(tmp_path, generator_type))
     assert ckpt_path.exists()
@@ -67,6 +72,17 @@ def test_gated_eval_reports_zero_negatives(tmp_path):
     _, meta = train(make_config(tmp_path, "gated"))
     assert meta["eval"]
     assert all(entry["negative_fraction"] == 0.0 for entry in meta["eval"])
+
+
+def test_linear_skip_evals_log_the_trunk_skip_balance(tmp_path):
+    """Catches the energies not reaching the eval entry, or reaching it for
+    the wrong generator type."""
+    _, meta = train(make_config(tmp_path, "linear_skip"))
+    for e in meta["eval"]:
+        assert 0.0 <= e["skip_share"] <= 1.0
+        assert math.isfinite(e["trunk_energy"]) and math.isfinite(e["skip_energy"])
+    _, meta_mlp = train(make_config(tmp_path, "mlp"))
+    assert "skip_share" not in meta_mlp["eval"][0]
 
 
 def test_checkpoints_record_their_generator_weight_provenance(tmp_path):
@@ -107,3 +123,188 @@ def test_training_resumes_on_live_weights_after_ema_eval(tmp_path):
 def test_mlp_config_without_generator_type_still_trains(tmp_path):
     ckpt_path, _ = train(make_config(tmp_path, None))
     assert ckpt_path.exists()
+
+
+def test_neighbourhood_critic_trains_and_its_checkpoint_reloads(tmp_path):
+    """Catches the trainer not using the factory (the config would be
+    ignored) and a state-dict key mismatch on resume."""
+    from src.models.critic import NeighbourhoodCritic, build_critic
+
+    cfg = make_config(tmp_path, "mlp")
+    cfg["model"]["critic_type"] = "neighbourhood"
+    cfg["model"]["critic_k"] = 5  # batch_size is 32; k must be below it
+    ckpt_path, meta = train(cfg)
+    assert ckpt_path.exists()
+    for entry in meta["metrics"]:
+        assert math.isfinite(entry["d_loss"]) and math.isfinite(entry["gp"])
+    saved = torch.load(ckpt_path, weights_only=False)
+    rebuilt = build_critic(cfg["model"], input_dim=16)
+    assert isinstance(rebuilt, NeighbourhoodCritic)
+    rebuilt.load_state_dict(saved["critic_state_dict"])
+
+
+def test_set_critic_trains_and_its_checkpoint_reloads(tmp_path):
+    from src.models.critic import SetNeighbourhoodCritic, build_critic
+
+    cfg = make_config(tmp_path, "mlp")
+    cfg["model"].update(critic_type="neighbourhood_set", critic_k=5, critic_edge_dim=16)
+    ckpt_path, meta = train(cfg)
+    for entry in meta["metrics"]:
+        assert math.isfinite(entry["d_loss"]) and math.isfinite(entry["gp"])
+    saved = torch.load(ckpt_path, weights_only=False)
+    rebuilt = build_critic(cfg["model"], input_dim=16)
+    assert isinstance(rebuilt, SetNeighbourhoodCritic)
+    rebuilt.load_state_dict(saved["critic_state_dict"])
+
+
+def test_run_metadata_records_dropped_zero_rows(tmp_path):
+    """Catches the count not reaching run_metadata"""
+    cfg = make_config(tmp_path, "mlp")
+    cfg["data"]["preprocess"]["drop_zero_rows"] = True
+    _, meta = train(cfg)
+    # Synthetic Gaussian data has no zero rows; the key must still be there.
+    assert meta["data"]["dropped_zero_rows"] == 0
+
+
+def test_select_on_defaults_to_cov_fro_and_records_it(tmp_path):
+    cfg = make_config(tmp_path, "mlp")
+    ckpt_path, meta = train(cfg)
+    best = torch.load(ckpt_path, weights_only=False)
+    assert best["select_on"] == "cov_fro"
+    assert "gate_fake_lid_median" not in meta["eval"][0]
+
+
+def test_select_on_gate_logs_gate_statistics_and_picks_the_lowest_score(tmp_path):
+    cfg = make_config(tmp_path, "mlp")
+    cfg["training"]["select_on"] = "gate"
+    cfg["training"]["num_gen_steps"] = 6
+    cfg["training"]["eval_every"] = 2
+    ckpt_path, meta = train(cfg)
+
+    evals = meta["eval"]
+    assert len(evals) == 3
+    for e in evals:
+        for stat in (
+            "lid_median",
+            "relative_contrast_median",
+            "hubness_skew",
+            "ivf_gini",
+        ):
+            assert f"gate_fake_{stat}" in e and f"gate_real_{stat}" in e
+        # The logged score must be the score of the logged statistics, fake
+        # against real in that order: pins the trainer to the module's
+        # function and catches a swapped or mis-keyed call.
+        fake = {
+            k[len("gate_fake_") :]: v
+            for k, v in e.items()
+            if k.startswith("gate_fake_")
+        }
+        real = {
+            k[len("gate_real_") :]: v
+            for k, v in e.items()
+            if k.startswith("gate_real_")
+        }
+        assert e["selection_score"] == selection_score(fake, real)
+    # real-side statistics are computed once and repeated, not re-drawn
+    assert all(
+        e["gate_real_lid_median"] == evals[0]["gate_real_lid_median"] for e in evals
+    )
+
+    best = torch.load(ckpt_path, weights_only=False)
+    assert best["select_on"] == "gate"
+    best_step = min(evals, key=lambda e: e["selection_score"])["step"]
+    assert best["step"] == best_step
+    assert best["best_score"] == pytest.approx(min(e["selection_score"] for e in evals))
+
+
+def test_select_on_rejects_unknown_values(tmp_path):
+    cfg = make_config(tmp_path, "mlp")
+    cfg["training"]["select_on"] = "vibes"
+    with pytest.raises(ValueError, match="select_on"):
+        train(cfg)
+
+
+def test_gate_fake_side_failure_on_one_eval_is_contained_and_the_run_completes(
+    tmp_path, monkeypatch
+):
+    """A transient fake-side failure must not take the whole run down: only
+    the eval it happened on scores inf, and a later, working eval can still
+    be selected as best -- unlike a gate that fails on every evaluation
+    (see test_gate_run_raises_when_every_evaluation_scored_inf below), which
+    has selected nothing and must not exit silently."""
+    import src.train.train_wgan_gp as train_mod
+
+    cfg = make_config(tmp_path, "mlp")
+    cfg["training"]["select_on"] = "gate"
+    cfg["training"]["num_gen_steps"] = 6
+    cfg["training"]["eval_every"] = 2
+
+    real_gate_statistics = train_mod.gate_statistics
+    calls = {"n": 0}
+
+    def flaky(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            # The first call is the real side (computed once, before the
+            # loop); the second is the first fake-side eval. Only that one
+            # fails -- every other call, including the real side and every
+            # later fake-side eval, delegates normally.
+            raise RuntimeError("boom")
+        return real_gate_statistics(*args, **kwargs)
+
+    monkeypatch.setattr(train_mod, "gate_statistics", flaky)
+
+    ckpt_path, meta = train_mod.train(cfg)
+
+    evals = meta["eval"]
+    assert len(evals) == 3
+    assert evals[0]["gate_error"] == "RuntimeError: boom"
+    assert evals[0]["selection_score"] == math.inf
+    for e in evals[1:]:
+        assert "gate_error" not in e
+        assert math.isfinite(e["selection_score"])
+    assert (tmp_path / "mlp" / "run_metadata.json").exists()
+
+    best = torch.load(ckpt_path, weights_only=False)
+    best_step = min(evals[1:], key=lambda e: e["selection_score"])["step"]
+    assert best["step"] == best_step
+
+
+def test_gate_run_raises_when_every_evaluation_scored_inf(tmp_path, monkeypatch):
+    import src.train.train_wgan_gp as train_mod
+
+    cfg = make_config(tmp_path, "mlp")
+    cfg["training"]["select_on"] = "gate"
+    cfg["training"]["num_gen_steps"] = 4
+    cfg["training"]["eval_every"] = 2
+
+    real_gate_statistics = train_mod.gate_statistics
+    calls = {"n": 0}
+
+    def none_lid(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return real_gate_statistics(*args, **kwargs)
+        stats = dict(real_gate_statistics(*args, **kwargs))
+        stats["lid_median"] = None
+        return stats
+
+    monkeypatch.setattr(train_mod, "gate_statistics", none_lid)
+
+    with pytest.raises(RuntimeError, match="no checkpoint was selected"):
+        train_mod.train(cfg)
+
+    assert (tmp_path / "mlp" / "run_metadata.json").exists()
+
+
+def test_resume_refuses_a_checkpoint_selected_under_a_different_selector(tmp_path):
+    cfg = make_config(tmp_path, "mlp")
+    cfg["training"]["save_every"] = 2
+    train(cfg)
+    live_ckpt = tmp_path / "mlp" / "checkpoint_step_2.pt"
+    assert live_ckpt.exists()
+    cfg2 = make_config(tmp_path, "mlp")
+    cfg2["training"]["select_on"] = "gate"
+    cfg2["training"]["num_gen_steps"] = 8
+    with pytest.raises(ValueError, match="select_on"):
+        train(cfg2, resume=str(live_ckpt))

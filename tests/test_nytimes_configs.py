@@ -132,3 +132,28 @@ def test_v2c_requires_amp_off():
     test above only pins it transitively."""
     assert _flatten(_load("v2c.yaml"))["training.amp"] is False
     assert _flatten(_load("v2c_seed42.yaml"))["training.amp"] is False
+
+
+def test_v2c_seed42_100k_is_v2c_seed42_with_the_budget_raised():
+    """The continuation is the same instrument with only the budget and the
+    output directory moved; any other key drifting (amp, the critic, the
+    selector) would make the resume measure something else."""
+    inst = _flatten(_load("v2c_seed42.yaml"))
+    cont = _flatten(_load("v2c_seed42_100k.yaml"))
+    assert cont.pop("output_dir") == "runs/nytimes/v2c_seed42_100k"
+    assert cont.pop("training.num_gen_steps") == 100000
+    inst.pop("output_dir")
+    assert inst.pop("training.num_gen_steps") == 30000
+    assert cont == inst
+
+
+def test_v2c_100k_job_script_resumes_the_30k_run_into_the_100k_config():
+    script = (ROOT.parent.parent / "scripts" / "nytimes_v2c_seed42_100k_job.sh").read_text()
+    assert "configs/nytimes/v2c_seed42_100k.yaml" in script
+    assert "runs/nytimes/v2c_seed42_100k" in script
+    assert "--resume" in script
+    assert "/workspace/nytimes-v2/v2c_seed42/checkpoint_step_30000.pt" in script
+    assert "checkpoint_step_100000.pt" in script
+    # The restored best_score may never be beaten; the script must then carry
+    # the 30k run's selection over instead of failing on a missing file.
+    assert "/workspace/nytimes-v2/v2c_seed42/best_generator.pt" in script

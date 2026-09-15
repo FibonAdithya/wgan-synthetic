@@ -76,10 +76,12 @@ Run from the repo root, on Python 3.12:
 
     make check
 
-That is ruff lint, ruff format check, and the pytest suite. It runs in
-seconds and is CPU-only — no GPU and no dataset needed. It is the same
-command CI runs (`.github/workflows/ci.yml`). No target uses `|| true`; a red
-suite is a failure, not a warning.
+That is ruff lint, ruff format check, and the pytest suite, including the
+agentify contract self-check (`tests/test_contract.py`). It runs in seconds
+and is CPU-only — no GPU and no dataset needed. It needs the tools in
+`requirements-dev.txt` installed (`pip install -r requirements-dev.txt`), which
+is what CI does before running the same command (`.github/workflows/ci.yml`).
+No target uses `|| true`; a red suite is a failure, not a warning.
 
 `make format` rewrites files and is not part of `check`. Only format the
 files you touched; never run it repo-wide.

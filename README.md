@@ -83,6 +83,9 @@ fetcher does not produce") for why the SIFT configs still point at
    - `python3 -m venv .venv`
    - `source .venv/bin/activate`
    - `pip install -r requirements.txt`
+   - `pip install -r requirements-dev.txt` — ruff, pytest, and the pinned
+     `agentify`, which `tests/test_contract.py` imports; without it
+     `make check` fails on that import.
 2. Fetch a dataset (see `data/README.md`):
    - `python -m src.data.fetch <dataset>` — `<dataset>` is one of `sift`,
      `gist`, `deep`, `glove`, `nytimes`, `openai`.

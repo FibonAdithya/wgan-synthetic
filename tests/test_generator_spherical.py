@@ -10,7 +10,8 @@ import math
 import pytest
 import torch
 
-from src.models.generator import SphericalGenerator
+from src.eval.eda.metrics import effective_rank
+from src.models.generator import SphericalGenerator, _effective_rank
 
 LATENT, OUT, SKIP, HID, TANGENT = 8 + 32, 32, 32, [16, 16], 64
 
@@ -68,12 +69,13 @@ def test_angle_from_direction_is_the_radius_on_every_row():
     x = gen(z)
     angles = torch.acos((x * u).sum(dim=1).clamp(-1.0, 1.0))
     assert torch.allclose(angles, torch.full((512,), 0.95), atol=1e-5)
-    assert float(angles.std()) < 1e-5
+    with torch.no_grad():
+        assert float(angles.std()) < 1e-5
 
 
 def test_radius_starts_at_radius_init():
     gen = make(radius_init=0.7, radius_min=0.1, radius_max=1.2)
-    assert abs(float(gen.radius) - 0.7) < 1e-6
+    assert abs(float(gen.radius.detach()) - 0.7) < 1e-6
 
 
 def test_radius_stays_in_the_band():
@@ -84,7 +86,7 @@ def test_radius_stays_in_the_band():
     for raw, strict in ((50.0, False), (-50.0, False), (5.0, True), (-5.0, True)):
         with torch.no_grad():
             gen.radius_raw.fill_(raw)
-        r = float(gen.radius)
+        r = float(gen.radius.detach())
         assert 0.2 <= r <= 1.5
         if strict:
             assert 0.2 < r < 1.5
@@ -176,3 +178,17 @@ def test_diagnostics_report_radius_and_direction_rank():
         gen.direction.weight.zero_()
         gen.direction.weight[0, 0] = 1.0
     assert gen.diagnostics(z)["direction_effective_rank"] < 1.5
+
+
+def test_effective_rank_centres_before_the_eigendecomposition():
+    """Catches dropping the mean-centring in `_effective_rank`: an offset
+    added uniformly to every row changes the raw second moment but not the
+    true spread around the mean, so an uncentred computation disagrees with
+    `src.eval.eda.metrics.effective_rank` (which centres via PCA) once the
+    input carries a large constant offset."""
+    torch.manual_seed(0)
+    scales = torch.arange(1, 17, dtype=torch.float32)
+    x = torch.randn(2048, 16) * scales + 100.0
+    got = _effective_rank(x)
+    want = effective_rank(x.numpy())
+    assert abs(got - want) / abs(want) < 1e-4

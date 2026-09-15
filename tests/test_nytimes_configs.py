@@ -191,7 +191,7 @@ def test_v3_seed42_is_v3_with_an_absolute_real_path_and_its_own_output_dir():
     v3 = _flatten(_load("v3.yaml"))
     inst = _flatten(_load("v3_seed42.yaml"))
     assert inst.pop("output_dir") == "runs/nytimes/v3_seed42"
-    assert inst.pop("data.real_path").startswith("/workspace/")
+    assert inst.pop("data.real_path") == "/workspace/data-cache/nytimes_250k.npy"
     v3.pop("output_dir")
     v3.pop("data.real_path")
     assert inst == v3
@@ -202,6 +202,7 @@ def test_v3_job_script_runs_the_v3_seed42_config():
     assert "configs/nytimes/v3_seed42.yaml" in script
     assert "runs/nytimes/v3_seed42" in script
     assert "/workspace/nytimes-v3/v3_seed42" in script
+    assert "REAL=/workspace/data-cache/nytimes_250k.npy" in script
 
 
 def test_v3_requires_amp_off():

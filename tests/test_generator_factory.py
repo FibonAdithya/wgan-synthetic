@@ -192,7 +192,7 @@ def test_spherical_defaults():
     assert generator.skip_dim == 128
     assert generator.trunk_latent_dim == 16
     assert generator.tangent_in.out_features == 512
-    assert abs(float(generator.radius) - 0.95) < 1e-6
+    assert abs(float(generator.radius.detach()) - 0.95) < 1e-6
     assert generator.radius_min == 0.2 and generator.radius_max == 1.5
 
 
@@ -210,7 +210,7 @@ def test_spherical_honours_overrides():
     generator = build_generator(cfg, output_dim=128)
     assert generator.skip_dim == 64
     assert generator.tangent_in.out_features == 96
-    assert abs(float(generator.radius) - 0.6) < 1e-6
+    assert abs(float(generator.radius.detach()) - 0.6) < 1e-6
     assert generator.radius_min == 0.1 and generator.radius_max == 1.0
 
 
@@ -241,4 +241,4 @@ def test_spherical_state_dict_round_trips_through_a_rebuild():
     b.load_state_dict(a.state_dict())
     z = torch.randn(8, 16 + 32)
     assert torch.allclose(a(z), b(z))
-    assert float(b.radius) == float(a.radius)
+    assert float(b.radius.detach()) == float(a.radius.detach())

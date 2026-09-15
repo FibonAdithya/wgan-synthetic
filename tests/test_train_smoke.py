@@ -95,7 +95,7 @@ def test_spherical_evals_log_radius_and_direction_rank(tmp_path):
     assert meta["eval"]
     for e in meta["eval"]:
         assert 0.2 <= e["radius"] <= 1.5
-        assert 1.0 <= e["direction_effective_rank"] <= 16.0
+        assert 1.5 < e["direction_effective_rank"] <= 16.0
     _, meta_mlp = train(make_config(tmp_path, "mlp"))
     assert "radius" not in meta_mlp["eval"][0]
 

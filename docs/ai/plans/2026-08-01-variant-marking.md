@@ -35,7 +35,7 @@
 - `configs/sift_gan_v2.yaml` — v1_5 + gated generator.
 - `src/eval/compare_variants.py` — resolves variant checkpoints, samples each, drives `eda_report`.
 - `tests/test_compare_variants.py` — tests for the driver.
-- `docs/superpowers/README.md` — marks the tree as AI working notes.
+- `docs/ai/README.md` — marks the tree as AI working notes.
 
 **Modified:**
 - `src/models/generator.py` — `SparseGenerator` → `GatedGenerator`, `kind == "sparse"` → `kind == "gated"`.
@@ -45,7 +45,7 @@
 - `README.md` — doc map + variant quick-reference.
 - `PROJECT_DOCUMENTATION.md` — Model variants section, updated EDA section.
 - `data/README.md` — what the driver expects on disk.
-- `docs/superpowers/plans/2026-07-31-*.md`, `docs/superpowers/specs/2026-07-31-*.md` — AI banner.
+- `docs/ai/plans/2026-07-31-*.md`, `docs/ai/specs/2026-07-31-*.md` — AI banner.
 
 **Local-only (never committed):**
 - `runs/x100k_sparse_clamp4/run_config.yaml` — hand-edited `sparse` → `gated`.
@@ -1131,9 +1131,9 @@ EOF
 ### Task 7: Documentation split and variant table
 
 **Files:**
-- Create: `docs/superpowers/README.md`
+- Create: `docs/ai/README.md`
 - Modify: `README.md`, `PROJECT_DOCUMENTATION.md`, `data/README.md`
-- Modify: `docs/superpowers/plans/2026-07-31-ann-difficulty-panels.md`, `docs/superpowers/plans/2026-07-31-sparse-generator.md`, `docs/superpowers/specs/2026-07-31-ann-difficulty-panels-design.md`, `docs/superpowers/specs/2026-07-31-sparse-generator-design.md`
+- Modify: `docs/ai/plans/2026-07-31-ann-difficulty-panels.md`, `docs/ai/plans/2026-07-31-sparse-generator.md`, `docs/ai/specs/2026-07-31-ann-difficulty-panels-design.md`, `docs/ai/specs/2026-07-31-sparse-generator-design.md`
 
 **Interfaces:**
 - Consumes: config paths from Task 4, `python -m src.eval.compare_variants` from Task 6.
@@ -1158,8 +1158,8 @@ Human-maintained, and the source of truth:
 
 AI working notes, kept for provenance and **not** authoritative:
 
-- `docs/superpowers/` — design specs and implementation plans written by
-  Claude during development. See `docs/superpowers/README.md`. Where these
+- `docs/ai/` — design specs and implementation plans written by
+  Claude during development. See `docs/ai/README.md`. Where these
   disagree with `PROJECT_DOCUMENTATION.md`, the latter wins.
 
 ## Model variants
@@ -1277,7 +1277,7 @@ Samples are written to `<output-dir>/samples/<variant>.npy` and reused as the
 report's input, so they can be inspected independently.
 ```
 
-- [ ] **Step 5: Create `docs/superpowers/README.md`**
+- [ ] **Step 5: Create `docs/ai/README.md`**
 
 ```markdown
 # AI working notes
@@ -1309,7 +1309,7 @@ produced, and of no use to anyone reading the repo later.
 
 - [ ] **Step 6: Banner the four existing spec and plan files**
 
-Prepend to each of `docs/superpowers/plans/2026-07-31-ann-difficulty-panels.md`, `docs/superpowers/plans/2026-07-31-sparse-generator.md`, `docs/superpowers/specs/2026-07-31-ann-difficulty-panels-design.md`, and `docs/superpowers/specs/2026-07-31-sparse-generator-design.md`, above the existing `# ` heading:
+Prepend to each of `docs/ai/plans/2026-07-31-ann-difficulty-panels.md`, `docs/ai/plans/2026-07-31-sparse-generator.md`, `docs/ai/specs/2026-07-31-ann-difficulty-panels-design.md`, and `docs/ai/specs/2026-07-31-sparse-generator-design.md`, above the existing `# ` heading:
 
 ```markdown
 > **AI-generated working note.** Written by Claude during development and kept
@@ -1321,7 +1321,7 @@ Prepend to each of `docs/superpowers/plans/2026-07-31-ann-difficulty-panels.md`,
 The two `2026-08-01-*` files already carry this banner — do not double it. Verify all six:
 
 ```bash
-head -1 docs/superpowers/specs/*.md docs/superpowers/plans/*.md
+head -1 docs/ai/specs/*.md docs/ai/plans/*.md
 ```
 
 Expected: every file's first line is `> **AI-generated working note.** ...`.
@@ -1341,12 +1341,12 @@ The `grep` should return only prose about *sparsity as a property* (SIFT's zeros
 - [ ] **Step 8: Commit**
 
 ```bash
-git add README.md PROJECT_DOCUMENTATION.md data/README.md docs/superpowers/
+git add README.md PROJECT_DOCUMENTATION.md data/README.md docs/ai/
 git commit -m "$(cat <<'EOF'
 docs: split human docs from AI notes, document the four variants
 
 README and PROJECT_DOCUMENTATION are the source of truth and now carry the
-variant table; docs/superpowers is marked as AI working notes that lose to
+variant table; docs/ai is marked as AI working notes that lose to
 them on any disagreement. Documents why v2's gated generator exists, that
 generator_type is mlp | gated, and that a checkpoint needs its run_config to
 be loadable at all.

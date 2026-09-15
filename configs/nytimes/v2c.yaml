@@ -11,7 +11,7 @@
 # critic can read it directly rather than through the log-ratio profile.
 # critic_distance_floor is unused by this class (selection is by ordering).
 # See approach 3 in
-# docs/superpowers/specs/2026-09-14-neighbourhood-critic-design.md.
+# docs/ai/specs/2026-09-14-neighbourhood-critic-design.md.
 seed: 42
 device: auto
 output_dir: runs/nytimes/v2c

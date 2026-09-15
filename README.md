@@ -21,8 +21,8 @@ Human-maintained, and the source of truth:
 
 AI working notes, kept for provenance and **not** authoritative:
 
-- `docs/superpowers/` — design specs and implementation plans written by
-  Claude during development. See `docs/superpowers/README.md`. Where these
+- `docs/ai/` — design specs and implementation plans written by
+  Claude during development. See `docs/ai/README.md`. Where these
   disagree with `PROJECT_DOCUMENTATION.md`, the latter wins.
 
 ## Datasets
@@ -83,6 +83,9 @@ fetcher does not produce") for why the SIFT configs still point at
    - `python3 -m venv .venv`
    - `source .venv/bin/activate`
    - `pip install -r requirements.txt`
+   - `pip install -r requirements-dev.txt` — ruff, pytest, and the pinned
+     `agentify`, which `tests/test_contract.py` imports; without it
+     `make check` fails on that import.
 2. Fetch a dataset (see `data/README.md`):
    - `python -m src.data.fetch <dataset>` — `<dataset>` is one of `sift`,
      `gist`, `deep`, `glove`, `nytimes`, `openai`.

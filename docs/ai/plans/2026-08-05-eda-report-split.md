@@ -1615,7 +1615,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 **Files:**
 - Modify: `AGENTIC-REVIEW.md:185-198`
 - Modify: `AGENTS.md:114-115` (the "Where to look" table)
-- Modify: `docs/superpowers/specs/2026-08-05-eda-report-split-design.md` (status line)
+- Modify: `docs/ai/specs/2026-08-05-eda-report-split-design.md` (status line)
 
 - [ ] **Step 1: Update `AGENTIC-REVIEW.md`**
 

@@ -27,7 +27,7 @@ class Critic(nn.Module):
         return self.net(x).squeeze(-1)
 
 
-# Spec: docs/superpowers/specs/2026-09-14-neighbourhood-critic-design.md.
+# Spec: docs/ai/specs/2026-09-14-neighbourhood-critic-design.md.
 # k=20 separates the collapsed sheet from the corpus per row at 0.998 and
 # keeps the real-vs-Gaussian ordering; the floor sits inside the measured
 # gap between exact copies (~1e-8 after rounding) and the nearest genuine

@@ -13,7 +13,7 @@ be from a test: by driving `sys.argv` and calling `main()`.
 Everything below skips on a clean install, and that is the point rather than an
 oversight. `plot_distance_cdf` imports matplotlib, which is deliberately not in
 `requirements.txt` (see the "Do not add dependencies" constraint in
-docs/superpowers/plans/2026-08-04-sift-descriptor-glyph-grid.md). So the module
+docs/ai/plans/2026-08-04-sift-descriptor-glyph-grid.md). So the module
 cannot be imported from a clean checkout at all, and adding the dependency here
 to make these tests run would quietly overturn a decision this file has no
 standing to overturn. The skip keeps that visible in the pytest summary. If the

@@ -3,7 +3,7 @@
 # the three keys that change introduces. v2's gates are independent per
 # coordinate, so its non-zero count is Binomial(128, p) with std about 4.76;
 # real SIFT measures 14.45. See
-# docs/superpowers/specs/2026-08-03-structured-gate-generator-design.md
+# docs/ai/specs/2026-08-03-structured-gate-generator-design.md
 #
 # This is the variant definition at 30k steps, matching the other sift_gan_*
 # configs. The 100k arm the experiment plan calls for is

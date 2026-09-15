@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.12, PyTorch, numpy, scikit-learn (already used by `src/eval/ann_difficulty.py`), pytest, ruff. Run everything with the project venv: `~/TIG/wgan-synthetic/.venv/bin/python` from the worktree `~/TIG/tig-worktrees/wgan-nytimes-eda`.
 
-**Spec:** `docs/superpowers/specs/2026-09-11-linear-skip-generator-design.md`
+**Spec:** `docs/ai/specs/2026-09-11-linear-skip-generator-design.md`
 
 ## Global Constraints
 
@@ -144,7 +144,7 @@ class LinearSkipGenerator(nn.Module):
     the skip term, d x / d z_skip = W, so the output's local dimension is at
     least rank(W) whatever the trunk does; the trunk is left to supply the
     structure a Gaussian lacks. See
-    docs/superpowers/specs/2026-09-11-linear-skip-generator-design.md.
+    docs/ai/specs/2026-09-11-linear-skip-generator-design.md.
 
     The split lives here rather than in a second latent argument so that
     every sampling site (`sample_generator`, `src.sample.generate`) keeps
@@ -737,7 +737,7 @@ Copy `configs/nytimes/v0.yaml` and change exactly these lines (header comment, `
 # the corpus's 56). The skip path makes the output Jacobian full rank by
 # construction; the selector picks the checkpoint by the holdout's LID and
 # contrast gaps instead of cov_fro, which chose an untrained step for v0.
-# See docs/superpowers/specs/2026-09-11-linear-skip-generator-design.md.
+# See docs/ai/specs/2026-09-11-linear-skip-generator-design.md.
 seed: 42
 device: auto
 output_dir: runs/nytimes/v1

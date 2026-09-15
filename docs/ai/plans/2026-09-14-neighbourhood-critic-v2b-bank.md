@@ -8,9 +8,9 @@
 
 **Tech Stack:** Python 3, PyTorch, numpy, pytest, ruff. Local venv `/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/python`; box `/opt/venvs/wgan-synthetic/bin/python`.
 
-**Spec:** `docs/superpowers/specs/2026-09-14-neighbourhood-critic-design.md`, sections "Shared" and "Approach 2".
+**Spec:** `docs/ai/specs/2026-09-14-neighbourhood-critic-design.md`, sections "Shared" and "Approach 2".
 
-**Prerequisite:** the shared change from `docs/superpowers/plans/2026-09-14-neighbourhood-critic-v2.md` Tasks 1 to 6 is merged on `nytimes-eda` (`build_critic`, `neighbourhood_distances`, `profile_features`, `drop_zero_rows`, `near_duplicate_fraction`, `component_energies`). Start from that commit; do not edit `NeighbourhoodCritic`.
+**Prerequisite:** the shared change from `docs/ai/plans/2026-09-14-neighbourhood-critic-v2.md` Tasks 1 to 6 is merged on `nytimes-eda` (`build_critic`, `neighbourhood_distances`, `profile_features`, `drop_zero_rows`, `near_duplicate_fraction`, `component_energies`). Start from that commit; do not edit `NeighbourhoodCritic`.
 
 ## Global Constraints
 
@@ -594,7 +594,7 @@ Run: `$PY -m pytest tests/test_nytimes_configs.py -v`. Expected: FAIL, `FileNotF
 # 0.15% of real rows; a 16k bank moves the profile toward the gate's 100-NN
 # scale and exposes copies for a few percent, so near_duplicate_fraction is
 # a live target here. See approach 2 in
-# docs/superpowers/specs/2026-09-14-neighbourhood-critic-design.md.
+# docs/ai/specs/2026-09-14-neighbourhood-critic-design.md.
 ```
 
 `configs/nytimes/v2b_seed42.yaml`: same as `v2b.yaml` with `output_dir: runs/nytimes/v2b_seed42`, `real_path: /workspace/data-cache/nytimes_250k.npy`, and the `v2_seed42.yaml` instrument header with `v2` replaced by `v2b`.

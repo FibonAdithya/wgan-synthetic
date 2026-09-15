@@ -4,7 +4,7 @@
 # structured gate reaches SIFT's local geometry unaided; v4 hedges it by
 # matching the mean log-ratio profile of within-batch neighbours, the
 # sufficient statistic the Hill LID estimator reduces to a scalar. See
-# docs/superpowers/specs/2026-08-03-structured-gate-generator-design.md
+# docs/ai/specs/2026-08-03-structured-gate-generator-design.md
 #
 # v3 and v4 are NOT judged the same way. v4 trains on LID's sufficient
 # statistic, so its lid_median is a fitted number, not evidence. The real

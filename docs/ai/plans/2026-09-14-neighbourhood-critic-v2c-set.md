@@ -15,9 +15,9 @@ RUFF=$(dirname "$PY")/ruff
 
 `ruff` is installed in the venv only, not on `PATH`: bare `make check PYTHON=$PY` stops at `lint` with `make: ruff: No such file or directory` (audit 2026-09-14, measured). Always pass both variables. Baseline at the prerequisite commit: `make check PYTHON=$PY RUFF=$RUFF` green, 847 passed (measured 2026-09-14).
 
-**Spec:** `docs/superpowers/specs/2026-09-14-neighbourhood-critic-design.md`, sections "Shared" and "Approach 3".
+**Spec:** `docs/ai/specs/2026-09-14-neighbourhood-critic-design.md`, sections "Shared" and "Approach 3".
 
-**Prerequisite:** the shared change from `docs/superpowers/plans/2026-09-14-neighbourhood-critic-v2.md` Tasks 1 to 6 is merged on `nytimes-eda`. Start from that commit; do not edit `NeighbourhoodCritic` or `BankNeighbourhoodCritic`.
+**Prerequisite:** the shared change from `docs/ai/plans/2026-09-14-neighbourhood-critic-v2.md` Tasks 1 to 6 is merged on `nytimes-eda`. Start from that commit; do not edit `NeighbourhoodCritic` or `BankNeighbourhoodCritic`.
 
 ## Global Constraints
 
@@ -537,7 +537,7 @@ Run: `$PY -m pytest tests/test_nytimes_configs.py -v`. Expected: `FileNotFoundEr
 # critic can read it directly rather than through the log-ratio profile.
 # critic_distance_floor is unused by this class (selection is by ordering).
 # See approach 3 in
-# docs/superpowers/specs/2026-09-14-neighbourhood-critic-design.md.
+# docs/ai/specs/2026-09-14-neighbourhood-critic-design.md.
 ```
 
 `configs/nytimes/v2c_seed42.yaml`: same as `v2c.yaml` with `output_dir: runs/nytimes/v2c_seed42`, `real_path: /workspace/data-cache/nytimes_250k.npy`, and the `v2_seed42.yaml` instrument header with `v2` replaced by `v2c`.

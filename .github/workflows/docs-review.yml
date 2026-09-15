@@ -69,7 +69,7 @@ jobs:
             Do not:
             - Rewrite documentation. Flag stale claims; the wording is a
               human's call.
-            - Comment on anything under docs/superpowers/. Those are dated
+            - Comment on anything under docs/ai/. Those are dated
               snapshots, non-authoritative by policy, and are not updated as
               the code changes.
             - Flag style that `make check` (ruff lint + format) enforces.

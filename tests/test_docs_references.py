@@ -25,7 +25,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # The documents AGENTS.md calls human-maintained and authoritative. Everything
-# under docs/superpowers/ is deliberately absent: docs/superpowers/README.md
+# under docs/ai/ is deliberately absent: docs/ai/README.md
 # states those are snapshots kept for provenance and not updated as the code
 # changes, so a reference that has gone stale in one of them is a fact about
 # history rather than a defect.

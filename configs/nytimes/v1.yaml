@@ -5,7 +5,7 @@
 # the corpus's 56). The skip path makes the output Jacobian full rank by
 # construction; the selector picks the checkpoint by the holdout's LID and
 # contrast gaps instead of cov_fro, which chose an untrained step for v0.
-# See docs/superpowers/specs/2026-09-11-linear-skip-generator-design.md.
+# See docs/ai/specs/2026-09-11-linear-skip-generator-design.md.
 seed: 42
 device: auto
 output_dir: runs/nytimes/v1

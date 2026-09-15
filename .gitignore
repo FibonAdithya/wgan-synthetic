@@ -36,3 +36,8 @@ runs/
 # Agent scratch: worktrees and subagent-driven-development ledgers
 .claude/worktrees/
 .superpowers/
+
+# agentify: agent scratch state and tool caches
+.claude/settings.local.json
+.agentify/
+.ruff_cache/

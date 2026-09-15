@@ -39,7 +39,7 @@ jobs:
 
             Review this pull request. The PR branch is already checked out in
             the working directory. Read AGENTS.md first -- it is the project's
-            router, and its "Five invariants" section lists the mistakes that
+            router, and its "Invariants" section lists the five mistakes that
             nothing in the test suite catches.
 
             Prioritise, in order:

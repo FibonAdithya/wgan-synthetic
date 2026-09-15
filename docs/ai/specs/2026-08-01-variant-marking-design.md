@@ -27,7 +27,7 @@ Three consequences:
 2. `src/eval/eda_report.py` can already overlay any number of synthetic sets on
    the real data, but nothing drives it across the variants, so the comparison
    is re-typed by hand each time.
-3. `docs/superpowers/` holds AI-generated specs and plans alongside
+3. `docs/ai/` holds AI-generated specs and plans alongside
    human-maintained `README.md` and `PROJECT_DOCUMENTATION.md`, with nothing
    marking which is which or which one wins on a disagreement.
 
@@ -123,11 +123,11 @@ Human-maintained, source of truth:
 
 AI working notes, kept for provenance, explicitly not authoritative:
 
-- `docs/superpowers/` — new `README.md` stating that the specs and plans there
+- `docs/ai/` — new `README.md` stating that the specs and plans there
   are AI-generated, kept for provenance, and superseded by
   `PROJECT_DOCUMENTATION.md` on any disagreement. A one-line banner is added at
   the top of each of the four existing spec/plan files and this one.
-- `.superpowers/sdd/` — gitignored tooling state. The `docs/superpowers/README.md`
+- `.superpowers/sdd/` — gitignored tooling state. The `docs/ai/README.md`
   notes that it exists and why it is not tracked.
 
 ### 5. Git integration and cleanup

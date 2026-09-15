@@ -44,7 +44,7 @@ class LinearSkipGenerator(nn.Module):
     the skip term, d x / d z_skip = W, so the output's local dimension is at
     least rank(W) whatever the trunk does; the trunk is left to supply the
     structure a Gaussian lacks. See
-    docs/superpowers/specs/2026-09-11-linear-skip-generator-design.md.
+    docs/ai/specs/2026-09-11-linear-skip-generator-design.md.
 
     The split lives here rather than in a second latent argument so that
     every sampling site (`sample_generator`, `src.sample.generate`) keeps

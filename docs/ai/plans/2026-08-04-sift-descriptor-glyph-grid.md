@@ -21,7 +21,7 @@
 - Negative bins are **never clamped**. They are routed to separate output arrays so they can be drawn in a warning colour. v0/v1/v1_5 use the unactivated `MLPGenerator` and will produce them; hiding that would defeat the figure.
 - Gap marker inside coordinate arrays is `np.nan`, not `None`.
 
-**Reference spec:** `docs/superpowers/specs/2026-08-04-sift-descriptor-glyph-grid-design.md`
+**Reference spec:** `docs/ai/specs/2026-08-04-sift-descriptor-glyph-grid-design.md`
 
 ---
 

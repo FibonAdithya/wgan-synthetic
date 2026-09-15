@@ -2,4 +2,4 @@
 # runs against a known version; bump the tag deliberately.
 ruff
 pytest
-agentify @ git+https://github.com/FibonAdithya/agentic-coding-scaffold@v0.1.1
+agentify @ git+https://github.com/FibonAdithya/agentic-coding-scaffold@v0.1.2

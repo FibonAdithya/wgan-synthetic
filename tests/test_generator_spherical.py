@@ -117,3 +117,45 @@ def test_radius_receives_a_gradient():
 def test_rejects_bad_config(kwargs, match):
     with pytest.raises(ValueError, match=match):
         make(**kwargs)
+
+
+def _jacobian_wrt_skip(gen, z_trunk, z_skip):
+    def f(zs):
+        return gen(torch.cat([z_trunk, zs[None, :]], dim=1))[0]
+
+    return torch.autograd.functional.jacobian(f, z_skip)
+
+
+@pytest.mark.parametrize("skip_dim, expected_rank", [(32, OUT - 2), (8, 8)])
+def test_local_rank_wrt_skip_block_is_full(skip_dim, expected_rank):
+    """The Jacobian of one output row wrt the skip block has rank
+    min(skip_dim, output_dim - 2): t is a unit vector in the (output_dim - 1)
+    dimensional tangent space, so its Jacobian loses one more dimension.
+    Catches zeroing the tangent head's skip weight."""
+    torch.manual_seed(0)
+    gen = make(latent_dim=8 + skip_dim, skip_dim=skip_dim)
+    z_trunk = torch.randn(1, 8)
+    z_skip = torch.randn(skip_dim)
+    jac = _jacobian_wrt_skip(gen, z_trunk, z_skip)
+    assert jac.shape == (OUT, skip_dim)
+    assert int(torch.linalg.matrix_rank(jac, rtol=1e-4)) >= expected_rank
+
+
+def test_tangent_head_depends_on_the_trunk_through_the_modulation():
+    """Catches a modulation that is wired but inert. With gamma and beta
+    live, the pre-projection tangent output for a fixed skip draw changes
+    with the trunk latent; with both frozen to constants it does not."""
+    torch.manual_seed(0)
+    gen = make()
+    z_skip = torch.randn(4, SKIP)
+    h1 = gen.trunk(torch.randn(4, 8))
+    h2 = gen.trunk(torch.randn(4, 8))
+    assert not torch.allclose(gen.gamma(h1), gen.gamma(h2))
+    assert not torch.allclose(gen.tangent_raw(h1, z_skip), gen.tangent_raw(h2, z_skip))
+    with torch.no_grad():
+        for layer in (gen.gamma, gen.beta):
+            layer.weight.zero_()
+            layer.bias.zero_()
+    assert torch.allclose(
+        gen.tangent_raw(h1, z_skip), gen.tangent_raw(h2, z_skip), atol=1e-6
+    )

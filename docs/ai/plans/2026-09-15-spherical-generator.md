@@ -16,7 +16,7 @@
 - Construction validates `0 < skip_dim < latent_dim`, `0 < radius_min < radius_init < radius_max < pi/2`, `tangent_hidden_dim > 0`, and non-empty `hidden_dims`, raising `ValueError` with the key name in the message.
 - `configs/nytimes/v3.yaml` is byte-for-byte `v2c.yaml` outside the `model` generator keys and `output_dir`; the pinning test states the diff.
 - No change to the critic, the selector, `linear_skip`, or any config other than the two new NYTimes files.
-- `make check` (ruff lint, ruff format check, pytest) passes at the end of every task. Run it as `make check` from the worktree root.
+- `make check` (ruff lint, ruff format check, pytest) passes at the end of every task. The worktree has no venv and `ruff` is not on PATH, so run it from the worktree root as `make check PYTHON=/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/python RUFF=/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/ruff`.
 - Commit only the files each task names. Never `git add -A`.
 - Work on branch `nytimes-v3`, cut from `probe/nytimes-trunk-scale` at its head so the spec and the probe results travel with the rung.
 - Every new test is mutation-checked in its task: break the code as the step says, confirm the named test fails, restore, confirm it passes.
@@ -180,6 +180,17 @@ def test_radius_stays_in_the_band():
         assert 0.2 <= r <= 1.5
         if strict:
             assert 0.2 < r < 1.5
+
+
+def test_radius_receives_a_gradient():
+    """Catches a radius cut from the graph (a detached radius_raw): r is one
+    learned scalar, so a loss on the output must reach it. The band and init
+    tests above still pass with `self.radius_raw.detach()`."""
+    torch.manual_seed(0)
+    gen = make()
+    gen(torch.randn(64, LATENT)).sum().backward()
+    assert gen.radius_raw.grad is not None
+    assert float(gen.radius_raw.grad.abs()) > 0.0
 
 
 @pytest.mark.parametrize(
@@ -355,10 +366,11 @@ Each of these in turn: apply, run the named test, confirm FAIL, revert.
 2. In `components`, delete the line `v = v - (v * u).sum(dim=1, keepdim=True) * u`. `test_tangent_is_orthogonal_to_direction` fails.
 3. In `forward`, replace `r = self.radius` with `r = self.radius * (1.0 + 0.05 * torch.rand(z.shape[0], 1))`. `test_angle_from_direction_is_the_radius_on_every_row` fails.
 4. In `radius`, return `self.radius_min + self.radius_raw` instead. `test_radius_stays_in_the_band` fails.
+5. In `radius`, replace `torch.sigmoid(self.radius_raw)` with `torch.sigmoid(self.radius_raw.detach())`. `test_radius_receives_a_gradient` fails; every other test still passes.
 
 - [ ] **Step 7: Lint and commit**
 
-Run: `make check` from the worktree root. Expected: passes.
+Run: `make check PYTHON=/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/python RUFF=/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/ruff` from the worktree root. Expected: passes.
 
 ```bash
 git add src/models/generator.py tests/test_generator_spherical.py docs/ai/specs/2026-09-15-spherical-generator-design.md
@@ -435,7 +447,7 @@ Expected: PASS. (These tests are written against Task 1's class. If the rank tes
 
 - [ ] **Step 4: Commit**
 
-Run: `make check`. Expected: passes.
+Run: `make check PYTHON=/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/python RUFF=/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/ruff`. Expected: passes.
 
 ```bash
 git add tests/test_generator_spherical.py
@@ -508,7 +520,7 @@ In `diagnostics`, replace `u, _ = self.components(z)` with `_, u = self.componen
 
 - [ ] **Step 6: Commit**
 
-Run: `make check`. Expected: passes.
+Run: `make check PYTHON=/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/python RUFF=/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/ruff`. Expected: passes.
 
 ```bash
 git add src/models/generator.py tests/test_generator_spherical.py
@@ -565,9 +577,11 @@ def test_spherical_honours_overrides():
     "overrides, match",
     [
         (dict(latent_dim=16, skip_dim=16), "skip_dim"),
-        (dict(latent_dim=32, radius_min=0.95), "radius_min"),
-        (dict(latent_dim=32, radius_init=1.5), "radius_init"),
-        (dict(latent_dim=32, radius_max=1.6), "radius_max"),
+        # latent_dim 16 + 128 so skip_dim (default output_dim = 128) is valid
+        # and the radius check, not the skip_dim check, is what raises.
+        (dict(latent_dim=16 + 128, radius_min=0.95), "radius_min"),
+        (dict(latent_dim=16 + 128, radius_init=1.5), "radius_init"),
+        (dict(latent_dim=16 + 128, radius_max=1.6), "radius_max"),
     ],
 )
 def test_spherical_rejects_bad_keys(overrides, match):
@@ -617,11 +631,12 @@ Expected: all PASS.
 
 - [ ] **Step 5: Mutation-check**
 
-In the new branch, change `model_cfg.get("tangent_hidden_dim", 512)` to `model_cfg.get("tangent_hidden", 512)`. `test_spherical_honours_overrides` fails. Revert.
+1. In the new branch, change `model_cfg.get("tangent_hidden_dim", 512)` to `model_cfg.get("tangent_hidden", 512)`. `test_spherical_honours_overrides` fails. Revert.
+2. In the new branch, change `model_cfg.get("radius_max", 1.5)` to `model_cfg.get("radius_maximum", 1.5)`. The `radius_max` case of `test_spherical_rejects_bad_keys` fails (the ignored 1.6 falls back to the valid default 1.5). Revert.
 
 - [ ] **Step 6: Commit**
 
-Run: `make check`. Expected: passes.
+Run: `make check PYTHON=/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/python RUFF=/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/ruff`. Expected: passes.
 
 ```bash
 git add src/models/generator.py tests/test_generator_factory.py
@@ -726,7 +741,7 @@ Change the isinstance tuple back to `LinearSkipGenerator` only. `test_spherical_
 
 - [ ] **Step 6: Commit**
 
-Run: `make check`. Expected: passes.
+Run: `make check PYTHON=/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/python RUFF=/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/ruff`. Expected: passes.
 
 ```bash
 git add src/train/train_wgan_gp.py tests/test_train_smoke.py
@@ -973,7 +988,7 @@ Expected: prints a parameter count and `radius 0.95`.
 
 - [ ] **Step 9: Commit**
 
-Run: `make check`. Expected: passes.
+Run: `make check PYTHON=/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/python RUFF=/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/ruff`. Expected: passes.
 
 ```bash
 git add configs/nytimes/v3.yaml configs/nytimes/v3_seed42.yaml scripts/nytimes_v3_seed42_job.sh tests/test_nytimes_configs.py
@@ -1058,7 +1073,7 @@ Expected: PASS.
 
 - [ ] **Step 4: Commit**
 
-Run: `make check`. Expected: passes.
+Run: `make check PYTHON=/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/python RUFF=/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/ruff`. Expected: passes.
 
 ```bash
 git add PROJECT_DOCUMENTATION.md docs/datasets/nytimes.md
@@ -1072,6 +1087,8 @@ git commit -m "docs: generator_type spherical is built; NYTimes v3 ladder row"
 **Files:** none changed in the repo by this task.
 
 - [ ] **Step 1: Push the branch**
+
+Probe SSH first (`timeout 10 ssh -o BatchMode=yes -o ConnectTimeout=8 -T git@github.com`); if it is blocked, push to `https-origin`, which points at the same fork. The branch touches no `.github/workflows/*` file, so the HTTPS token's missing `workflow` scope does not apply.
 
 Run from the worktree:
 ```bash
@@ -1088,6 +1105,8 @@ ssh tig-gpu '/opt/gpuq/venv/bin/gpuq submit --project wgan-synthetic \
   --commit <full-sha> --branch nytimes-v3 --lane gpu --timeout-s 10800 \
   --dedupe-key nytimes-v3-seed42-<short-sha> -- bash scripts/nytimes_v3_seed42_job.sh'
 ```
+Before submitting, run `ssh tig-gpu '/opt/gpuq/venv/bin/gpuq submit --help'` and confirm `--dedupe-key` is a flag; drop it if not.
+
 Expected: prints a job id `wgan-synthetic-<timestamp>-<hash>`.
 
 - [ ] **Step 3: Record**

@@ -17,5 +17,6 @@ ignore_references = [
   # Names the docs cite relative to a run directory or a family's config
   # directory, not to the repo root.
   "run_config.yaml", "run_metadata.json", "summary.json", "structure.json", "png/", "synthetic_",
+  "generation_benchmark.json", "generation_benchmark.md",
   "sift_", "deep_", "glove_", "gist_", "nytimes_", "openai_", "v0.yaml", "v2.yaml",
 ]

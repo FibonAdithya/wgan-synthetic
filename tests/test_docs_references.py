@@ -103,6 +103,10 @@ GENERIC_BASENAMES = frozenset(
         # Written once per --output-dir by src/eval/openai_structure.py, and
         # named alongside summary.json for the same reason.
         "structure.json",
+        # Written once per --output-dir by src/sample/benchmark.py; the
+        # committed copies live under docs/results/generation-timing/.
+        "generation_benchmark.json",
+        "generation_benchmark.md",
         # A module named by basename in prose. Citations that need to be
         # checked are written as `src/eval/ann_difficulty.py::compute` and
         # are covered by test_symbol_references_resolve.

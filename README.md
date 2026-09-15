@@ -19,9 +19,9 @@ Human-maintained, and the source of truth:
 - `docs/datasets/` — one page per benchmark family: structure, source,
   canonical N and k, measured profile, model family, ladder and gate bands.
 - `docs/results/` — curated measurement records, each with the queue job spec
-  that produced it. `generation-timing/` holds the sampling cost benchmark;
-  `sift-generator-report/index.html` is the standalone team briefing built
-  from those records.
+  that produced it. `docs/results/generation-timing/` holds the sampling cost
+  benchmark; `docs/results/sift-generator-report/index.html` is the
+  standalone team briefing built from those records.
 
 AI working notes, kept for provenance and **not** authoritative:
 

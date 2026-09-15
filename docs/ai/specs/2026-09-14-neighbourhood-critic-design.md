@@ -13,7 +13,7 @@ what differs.
 
 ## Problem
 
-`v1` (linear-skip generator, `docs/superpowers/specs/2026-09-11-linear-skip-generator-design.md`)
+`v1` (linear-skip generator, `docs/ai/specs/2026-09-11-linear-skip-generator-design.md`)
 kept the output full rank but not the trunk-to-skip balance: the trunk's
 output energy grew 38x over 30k steps while the skip's held still, the
 residual's share of each output fell from 91% to 20%, and LID drifted

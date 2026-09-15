@@ -56,7 +56,7 @@ class PreprocessConfig:
     # drops it, the generator cannot emit one, and to a neighbourhood critic
     # it is a row at L2 exactly 1.0 from everything -- a shortcut with nothing
     # to emulate. Exact duplicates are NOT dropped: they are part of the
-    # search target (docs/superpowers/specs/2026-09-14-neighbourhood-critic-design.md).
+    # search target (docs/ai/specs/2026-09-14-neighbourhood-critic-design.md).
     drop_zero_rows: bool = False
 
     def __post_init__(self) -> None:

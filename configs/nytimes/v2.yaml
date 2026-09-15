@@ -11,7 +11,7 @@
 #      document, the gate already drops them, and to this critic they are a
 #      shortcut. Exact duplicates are KEPT: they are part of the corpus.
 #
-# See docs/superpowers/specs/2026-09-14-neighbourhood-critic-design.md.
+# See docs/ai/specs/2026-09-14-neighbourhood-critic-design.md.
 seed: 42
 device: auto
 output_dir: runs/nytimes/v2

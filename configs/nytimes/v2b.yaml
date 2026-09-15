@@ -12,7 +12,7 @@
 #
 # Everything else is v2's: the linear-skip generator, drop_zero_rows: true
 # (duplicates kept), gate-aware selection, 30k steps.
-# See docs/superpowers/specs/2026-09-14-neighbourhood-critic-design.md,
+# See docs/ai/specs/2026-09-14-neighbourhood-critic-design.md,
 # "Approach 2: bank neighbourhoods (v2b)".
 seed: 42
 device: auto

@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3, PyTorch, numpy, pytest, ruff. Run everything with the project venv: locally `/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/python` (set `PYTHON=` for `make`), on the box `/opt/venvs/wgan-synthetic/bin/python`.
 
-**Spec:** `docs/superpowers/specs/2026-09-14-neighbourhood-critic-design.md` (sections "Shared" and "Approach 1").
+**Spec:** `docs/ai/specs/2026-09-14-neighbourhood-critic-design.md` (sections "Shared" and "Approach 1").
 
 ## Global Constraints
 
@@ -19,7 +19,7 @@
 - Defaults: `critic_type: per_vector`, `critic_k: 20`, `critic_distance_floor: 0.01`, `drop_zero_rows: false`. Every existing config trains exactly as before.
 - Duplicates are kept. Only exact-zero rows are dropped, and only when the flag is on.
 - Commit after every task with explicit paths (`git add <paths>`; never `-A`/`.`). Run `make check` (ruff + pytest) before each commit; the repo gate is `make check`, not `pytest` alone.
-- `docs/superpowers/specs/*` is not edited. Deviations are recorded here under "Deviations".
+- `docs/ai/specs/*` is not edited. Deviations are recorded here under "Deviations".
 - Never push `wgan-synthetic` until the tests are green; the gpuq runner needs the commit on the remote, so Task 10 pushes once, after Task 9.
 
 ## Deviations from the spec
@@ -153,7 +153,7 @@ class PreprocessConfig:
     # drops it, the generator cannot emit one, and to a neighbourhood critic
     # it is a row at L2 exactly 1.0 from everything -- a shortcut with nothing
     # to emulate. Exact duplicates are NOT dropped: they are part of the
-    # search target (docs/superpowers/specs/2026-09-14-neighbourhood-critic-design.md).
+    # search target (docs/ai/specs/2026-09-14-neighbourhood-critic-design.md).
     drop_zero_rows: bool = False
 ```
 
@@ -400,7 +400,7 @@ Expected: FAIL at import, `ImportError: cannot import name 'DEFAULT_DISTANCE_FLO
 Append to `src/models/critic.py` (keep the existing `Critic` class exactly as it is; add `from torch import Tensor` to the imports):
 
 ```python
-# Spec: docs/superpowers/specs/2026-09-14-neighbourhood-critic-design.md.
+# Spec: docs/ai/specs/2026-09-14-neighbourhood-critic-design.md.
 # k=20 separates the collapsed sheet from the corpus per row at 0.998 and
 # keeps the real-vs-Gaussian ordering; the floor sits inside the measured
 # gap between exact copies (~1e-8 after rounding) and the nearest genuine
@@ -1232,7 +1232,7 @@ Expected: FAIL, `FileNotFoundError` on `v2.yaml`.
 #      document, the gate already drops them, and to this critic they are a
 #      shortcut. Exact duplicates are KEPT: they are part of the corpus.
 #
-# See docs/superpowers/specs/2026-09-14-neighbourhood-critic-design.md.
+# See docs/ai/specs/2026-09-14-neighbourhood-critic-design.md.
 seed: 42
 device: auto
 output_dir: runs/nytimes/v2
@@ -1406,7 +1406,7 @@ In the "Generator regularizers" paragraph, add after the sentence about `distanc
 Append to the ladder table:
 
 ```markdown
-| `v2` | + neighbourhood-aware critic (`critic_type: neighbourhood`, k 20, floor 0.01) and `drop_zero_rows: true`; duplicates kept | `configs/nytimes/v2.yaml`; box instrument `configs/nytimes/v2_seed42.yaml` | `runs/nytimes/v2_seed42` (box: `/workspace/nytimes-v2/v2_seed42`) | planned -- spec `docs/superpowers/specs/2026-09-14-neighbourhood-critic-design.md` |
+| `v2` | + neighbourhood-aware critic (`critic_type: neighbourhood`, k 20, floor 0.01) and `drop_zero_rows: true`; duplicates kept | `configs/nytimes/v2.yaml`; box instrument `configs/nytimes/v2_seed42.yaml` | `runs/nytimes/v2_seed42` (box: `/workspace/nytimes-v2/v2_seed42`) | planned -- spec `docs/ai/specs/2026-09-14-neighbourhood-critic-design.md` |
 ```
 
 - [ ] **Step 3: Run the docs checks and the full gate**

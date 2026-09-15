@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.12, PyTorch 2.13, numpy, pytest, ruff. Run everything with the project venv, `~/TIG/wgan-synthetic/.venv/bin/python`, from the worktree `~/.herdr/worktrees/wgan-synthetic/nytimes-v2b` on branch `nytimes-v2b`. The box is `tig-gpu` (RTX 3060), queue `gpuq` at `/opt/gpuq/venv/bin/gpuq`, project venv `/opt/venvs/wgan-synthetic`.
 
-**Spec:** `docs/superpowers/specs/2026-09-14-neighbourhood-critic-design.md`, sections "Shared" and "Approach 2: bank neighbourhoods (`v2b`)". The plan argues from the spec; read both.
+**Spec:** `docs/ai/specs/2026-09-14-neighbourhood-critic-design.md`, sections "Shared" and "Approach 2: bank neighbourhoods (`v2b`)". The plan argues from the spec; read both.
 
 ## Global Constraints
 
@@ -978,7 +978,7 @@ Expected: the three new tests FAIL with `FileNotFoundError`.
 #
 # Everything else is v2's: the linear-skip generator, drop_zero_rows: true
 # (duplicates kept), gate-aware selection, 30k steps.
-# See docs/superpowers/specs/2026-09-14-neighbourhood-critic-design.md,
+# See docs/ai/specs/2026-09-14-neighbourhood-critic-design.md,
 # "Approach 2: bank neighbourhoods (v2b)".
 seed: 42
 device: auto

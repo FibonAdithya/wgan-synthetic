@@ -21,8 +21,8 @@ Human-maintained, and the source of truth:
 
 AI working notes, kept for provenance and **not** authoritative:
 
-- `docs/superpowers/` — design specs and implementation plans written by
-  Claude during development. See `docs/superpowers/README.md`. Where these
+- `docs/ai/` — design specs and implementation plans written by
+  Claude during development. See `docs/ai/README.md`. Where these
   disagree with `PROJECT_DOCUMENTATION.md`, the latter wins.
 
 ## Datasets

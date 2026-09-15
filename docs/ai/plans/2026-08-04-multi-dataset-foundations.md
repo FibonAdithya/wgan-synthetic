@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Phase (a) of `docs/superpowers/specs/2026-08-04-multi-dataset-ann-emulation-design.md` — make the repo dataset-general in name, acquisition, configuration and documentation, without changing any model or any existing SIFT result.
+**Goal:** Phase (a) of `docs/ai/specs/2026-08-04-multi-dataset-ann-emulation-design.md` — make the repo dataset-general in name, acquisition, configuration and documentation, without changing any model or any existing SIFT result.
 
 **Architecture:** Four mechanical changes then two documentation rewrites. `src/data/sift1m_dataset.py` becomes `src/data/dataset.py` (rename only, no behaviour change). `src/deep/download.py` becomes `src/data/fetch.py` with a six-entry source registry, keeping its atomic single-flight caching verbatim. A `data.metric` config field records `l2` vs `angular` so phase (c)'s evaluation can read it. Configs gain a per-dataset directory. Then `README.md`, `PROJECT_DOCUMENTATION.md`, `data/README.md` are reframed and `docs/datasets/*.md` created.
 
@@ -17,7 +17,7 @@
 - **`.npy` is the on-disk interchange format.** `src/data/fetch.py` writes `.npy`, so neither the loader nor the trainer learns about HDF5.
 - **Metric vocabulary is exactly `l2` and `angular`.** Used in configs, the source registry and the dataset docs. No third value, no synonyms (`cosine`, `ip`).
 - **Dataset names are exactly `sift`, `gist`, `deep`, `glove`, `nytimes`, `openai`.** Used as registry keys, config directory names and dataset doc filenames.
-- Docs under `docs/superpowers/` are AI working notes and open with the standard provenance blockquote. `README.md`, `PROJECT_DOCUMENTATION.md`, `data/README.md` and `docs/datasets/*.md` are human-maintained sources of truth and carry no such banner.
+- Docs under `docs/ai/` are AI working notes and open with the standard provenance blockquote. `README.md`, `PROJECT_DOCUMENTATION.md`, `data/README.md` and `docs/datasets/*.md` are human-maintained sources of truth and carry no such banner.
 
 ---
 
@@ -878,7 +878,7 @@ quick-start structure and gains a dataset table. Specifically:
   distribution".
 - Documentation map: add `docs/datasets/` as human-maintained source of truth,
   alongside the existing `README.md` / `PROJECT_DOCUMENTATION.md` /
-  `data/README.md` entries and the `docs/superpowers/` non-authoritative note.
+  `data/README.md` entries and the `docs/ai/` non-authoritative note.
   Keep the "where these disagree, `PROJECT_DOCUMENTATION.md` wins" rule.
 - Replace the "Model variants" section with a dataset table: family, dim,
   metric, ladder status, link to its page. SIFT is the only `trained` row.
@@ -903,7 +903,7 @@ Changed:
   difficulty: the distributional metrics are dominated by the bulk of the
   distance distribution while ANN difficulty is set by its far-left tail, and
   no symmetric two-sample statistic constrains hubness at all. Point at
-  `docs/superpowers/specs/2026-08-04-multi-dataset-ann-emulation-design.md`
+  `docs/ai/specs/2026-08-04-multi-dataset-ann-emulation-design.md`
   for the full argument.
 - **Datasets** — new section, directly after Goal: the six-family table
   (family, dim, metric, structure, model family) and a pointer to
@@ -968,7 +968,7 @@ grep -rn "sift1m_dataset\|sift_gan_v\|src/deep\|src\.deep" \
   README.md PROJECT_DOCUMENTATION.md data/README.md docs/datasets/ src/ tests/ configs/
 ```
 
-Expected: no output. `docs/superpowers/` is excluded on purpose — those are
+Expected: no output. `docs/ai/` is excluded on purpose — those are
 dated working notes and are not rewritten when the code moves.
 
 - [ ] **Step 6: Run the full suite one final time**

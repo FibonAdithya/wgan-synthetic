@@ -14,7 +14,7 @@
 - `make check` is the gate: `ruff check src tests`, `ruff format --check src tests`, `python -m pytest`. No target may use `|| true`.
 - `make format` rewrites files. Only format files you touched; never run it repo-wide.
 - Ruff: `line-length = 88`, `target-version = "py312"`, rules `["E", "F", "I", "W", "UP"]`, `ignore = ["E501"]`, `known-first-party = ["src"]`.
-- Never edit anything under `docs/superpowers/` other than adding this plan's own files. Those are snapshots, non-authoritative by written policy.
+- Never edit anything under `docs/ai/` other than adding this plan's own files. Those are snapshots, non-authoritative by written policy.
 - Never change a number in `docs/datasets/*.md`. Those need the GPU box and corpora not present here. Flag, do not edit.
 - Never touch gate bands, `data.real_path` values, or pins in `requirements.txt` — `AGENTS.md` reserves those for a human.
 - Baseline before starting: 448 tests pass.
@@ -124,7 +124,7 @@ jobs:
             Do not:
             - Rewrite documentation. Flag stale claims; the wording is a
               human's call.
-            - Comment on anything under docs/superpowers/. Those are dated
+            - Comment on anything under docs/ai/. Those are dated
               snapshots, non-authoritative by policy, and are not updated as
               the code changes.
             - Flag style that `make check` (ruff lint + format) enforces.
@@ -228,7 +228,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # The documents AGENTS.md calls human-maintained and authoritative. Everything
-# under docs/superpowers/ is deliberately absent: docs/superpowers/README.md
+# under docs/ai/ is deliberately absent: docs/ai/README.md
 # states those are snapshots kept for provenance and not updated as the code
 # changes, so a reference that has gone stale in one of them is a fact about
 # history rather than a defect.
@@ -426,7 +426,7 @@ Each is a `See ...` reference or a table cell. Apply these exact edits:
 | Line | From | To |
 |---|---|---|
 | 19 | `` `README.md:10-26` `` | `` `README.md#documentation-map` `` |
-| 32 | `` `docs/superpowers/README.md:6-13` `` | `` `docs/superpowers/README.md` `` |
+| 32 | `` `docs/ai/README.md:6-13` `` | `` `docs/ai/README.md` `` |
 | 49 | `` `PROJECT_DOCUMENTATION.md:274` `` | `` `PROJECT_DOCUMENTATION.md#ann-difficulty--the-gate` `` |
 | 53 | `` `PROJECT_DOCUMENTATION.md:172` `` | `` `PROJECT_DOCUMENTATION.md#model-variants-the-per-dataset-ladder` `` |
 | 63 | `` `PROJECT_DOCUMENTATION.md:216` `` | `` `PROJECT_DOCUMENTATION.md#generator_type` `` |
@@ -718,12 +718,12 @@ Reviews and vendored external references, also **not** authoritative:
 ```
 
 Delete all seven lines, and the blank line separating them from the preceding
-block, so the documentation map ends with the `docs/superpowers/` entry.
+block, so the documentation map ends with the `docs/ai/` entry.
 
 - [ ] **Step 3: Verify nothing still references the deleted files**
 
-Run: `grep -rn "AGENTIC-REVIEW\|ai-first-development-workflow" --include="*.md" --include="*.yml" --include="*.py" . | grep -v "docs/superpowers/"`
-Expected: no output. Hits under `docs/superpowers/` are expected and must be left alone — those are dated snapshots that correctly record what existed when they were written.
+Run: `grep -rn "AGENTIC-REVIEW\|ai-first-development-workflow" --include="*.md" --include="*.yml" --include="*.py" . | grep -v "docs/ai/"`
+Expected: no output. Hits under `docs/ai/` are expected and must be left alone — those are dated snapshots that correctly record what existed when they were written.
 
 - [ ] **Step 4: Confirm the suite**
 

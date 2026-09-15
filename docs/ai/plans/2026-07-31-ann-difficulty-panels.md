@@ -17,7 +17,7 @@
 
 **Tech Stack:** Python 3.12, numpy, scikit-learn (`NearestNeighbors`, `MiniBatchKMeans`), plotly, pytest.
 
-**Spec:** `docs/superpowers/specs/2026-07-31-ann-difficulty-panels-design.md`
+**Spec:** `docs/ai/specs/2026-07-31-ann-difficulty-panels-design.md`
 
 ## Global Constraints
 

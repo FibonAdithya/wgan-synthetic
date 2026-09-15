@@ -1,6 +1,6 @@
 # Metric-aware ANN difficulty
 
-Phase (c) of `docs/superpowers/specs/2026-08-04-multi-dataset-ann-emulation-design.md`,
+Phase (c) of `docs/ai/specs/2026-08-04-multi-dataset-ann-emulation-design.md`,
 narrowed to what measurement actually requires.
 
 Closes issue #22 (`ann_difficulty.py` is the last consumer that could inherit

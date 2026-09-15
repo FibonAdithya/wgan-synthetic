@@ -73,7 +73,7 @@ At this width the report drops its per-dimension marginals and correlation
 panels, which are quadratic in the dimension and say little here; pass
 `--max-panel-dim 1536` to force them back on.
 
-`ann_difficulty.py` measures this family under its `data.metric`, which is
+`src/eval/ann_difficulty.py` measures this family under its `data.metric`, which is
 `angular`: L2 between unit-norm rows. On the unit sphere Euclidean distance
 is a strictly increasing function of cosine distance, so it ranks neighbours
 identically -- the corpus is measured under the distance it is searched with.

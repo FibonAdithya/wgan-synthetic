@@ -89,7 +89,7 @@ subsample -- is in `## Noise floor` below.
 
 ### Measured under this corpus's own metric
 
-`ann_difficulty.py` measures this family under its `data.metric`, which is
+`src/eval/ann_difficulty.py` measures this family under its `data.metric`, which is
 `angular`: L2 between unit-norm rows. On the unit sphere Euclidean distance
 is a strictly increasing function of cosine distance, so it ranks neighbours
 identically -- the corpus is measured under the distance it is searched with.

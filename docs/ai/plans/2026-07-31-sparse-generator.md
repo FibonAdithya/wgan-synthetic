@@ -12,7 +12,7 @@
 
 **Tech Stack:** Python 3.12, PyTorch 2.13, numpy 2.5, pytest (to be added), PyYAML.
 
-**Spec:** `docs/superpowers/specs/2026-07-31-sparse-generator-design.md`
+**Spec:** `docs/ai/specs/2026-07-31-sparse-generator-design.md`
 
 ## Global Constraints
 

@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
 
+# Least privilege: this workflow reads code and runs tests. Nothing it does
+# needs a token that can write.
+permissions:
+  contents: read
+
 # A second push to a PR makes the first run irrelevant; don't pay for both.
 concurrency:
   group: ci-${{ github.ref }}
@@ -13,6 +18,7 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 

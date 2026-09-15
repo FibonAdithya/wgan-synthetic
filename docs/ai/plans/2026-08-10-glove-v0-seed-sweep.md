@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- **Design authority:** `docs/superpowers/specs/2026-08-10-glove-v0-seed-sweep-design.md`. Where this plan and the spec disagree, the spec wins.
+- **Design authority:** `docs/ai/specs/2026-08-10-glove-v0-seed-sweep-design.md`. Where this plan and the spec disagree, the spec wins.
 - **`configs/glove/v0.yaml` is never edited and never run.** It defines the rung.
 - **`gates/glove.yaml` bands stay null.** Setting a band is reserved for a human with a full ladder (`AGENTS.md` invariant 1).
 - **Canonical measurement conditions, locked:** `n = 20000`, `k = 100`, `k_hub = 10`, `nlist = 256`, `preprocess: l2`, measurement `seed: 42`.

@@ -26,17 +26,17 @@ the one higher in this list wins:
    training objective, data contract, evaluation, variant table.
 3. **`README.md`**, **`data/README.md`**, **`docs/datasets/*.md`** — setup and
    day-to-day commands, the on-disk data contract, and one page per family.
-4. **`docs/superpowers/`** — *not authoritative*. Design specs and plans
+4. **`docs/ai/`** — *not authoritative*. Design specs and plans
    written by Claude during development, kept for the reasoning behind
    decisions. They are not updated as the code changes, and they lose to
    `PROJECT_DOCUMENTATION.md` on any conflict. See
-   `docs/superpowers/README.md#ai-working-notes`.
+   `docs/ai/README.md#ai-working-notes`.
 
 GitHub Issues on the public mirror (`FibonAdithya/wgan-synthetic`) are the
 issue tracker; they are disabled on `upstream`. They record known problems;
 they are not a description of how things work.
 
-## Five invariants
+## Invariants
 
 These are silent until violated. Nothing in the test suite catches them, and
 each is easy to break while believing you are making progress.
@@ -117,4 +117,4 @@ Do not decide these yourself. Raise them and stop.
 | Compare SIFT variants in one report | `src/eval/compare_variants.py` |
 | The EDA report's panels and prose | `src/eval/eda/panels.py` |
 | Known bugs and open questions | GitHub Issues (`gh issue list`) |
-| Why a decision was made (non-authoritative) | `docs/superpowers/specs/` |
+| Why a decision was made (non-authoritative) | `docs/ai/specs/` |

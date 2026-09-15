@@ -37,7 +37,7 @@ recurring, and the accumulated rot must be cleared once.
 - **Re-measuring anything.** The numbers in `docs/datasets/*.md` need the GPU
   box and corpora that are not in this checkout. The sweep flags a number it
   cannot check; it never edits one.
-- **Touching `docs/superpowers/`.** `docs/superpowers/README.md` states these
+- **Touching `docs/ai/`.** `docs/ai/README.md` states these
   are snapshots, kept for reasoning that is not recoverable from a diff, and
   deliberately not updated. Both the bot and the lint exclude the directory.
 - **Rewriting docs automatically.** `AGENTS.md` already tells reviewers to flag
@@ -100,7 +100,7 @@ against the diff:
    bot explains why the anchor form is wanted.
 
 And explicitly not: rewriting docs, style that `make check` already enforces,
-anything under `docs/superpowers/`, or the human-reserved decisions above. If
+anything under `docs/ai/`, or the human-reserved decisions above. If
 the diff is clean it says so in one comment rather than manufacturing findings.
 
 ## Unit 2 — the doc lint
@@ -178,7 +178,7 @@ themselves). The `AGENTS.md` targets:
 | architectures row | `:146` | mid-sentence, wrong section | `#model-architecture` |
 | evaluation row | `:323` | blank | `#metric-definitions` |
 
-The two correct ones — `README.md:10-26` and `docs/superpowers/README.md:6-13`
+The two correct ones — `README.md:10-26` and `docs/ai/README.md:6-13`
 — convert to anchors as well, for uniformity and so check 4 can be absolute.
 
 **3b. Qualify the bare code citations in `FOLLOWUPS.md`.** The four

@@ -31,7 +31,7 @@ collapses relative contrast toward 1.
 
 The full argument, including the failure modes that pass a marginals check in
 both directions, is in
-`docs/superpowers/specs/2026-08-04-multi-dataset-ann-emulation-design.md`.
+`docs/ai/specs/2026-08-04-multi-dataset-ann-emulation-design.md`.
 
 Primary deliverable:
 
@@ -284,7 +284,7 @@ v3 adds a per-vector sparsity level (over-dispersion), a 3x3x3 convolution
 over the (4,4,8) descriptor grid with circular orientation padding (local
 correlation), and fixed smoothing of the gate noise so sampling is
 correlated too. Measurements are in `tools/probes/`; the design is in
-`docs/superpowers/specs/2026-08-03-structured-gate-generator-design.md`.
+`docs/ai/specs/2026-08-03-structured-gate-generator-design.md`.
 
 `noise_kernel_sigma` is calibrated, not tuned during training: the noise
 kernel is deliberately fixed (a learnable one could be driven to zero,
@@ -562,7 +562,7 @@ published figures, which are measured on the full corpus against the real
 query set. Without a locked pair, a gate result from last month cannot be
 read against today's.
 
-`ann_difficulty.py` measures each family under its `data.metric`. The four
+`src/eval/ann_difficulty.py` measures each family under its `data.metric`. The four
 `angular` families are measured as L2 between unit-norm rows, which is the
 distance their corpora are searched under; `l2` families are measured as
 given. Reports must therefore run angular families at `--preprocess l2`,

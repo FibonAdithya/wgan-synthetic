@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.12, numpy, scikit-learn, PyYAML, pytest, ruff.
 
-Spec: `docs/superpowers/specs/2026-08-10-metric-aware-ann-difficulty-design.md`. Closes issues #22 and #16.
+Spec: `docs/ai/specs/2026-08-10-metric-aware-ann-difficulty-design.md`. Closes issues #22 and #16.
 
 ## Global Constraints
 
@@ -789,7 +789,7 @@ grep -rn "phase (c)" docs/datasets/*.md PROJECT_DOCUMENTATION.md
 grep -rn "inert today\|nothing consumes it yet" PROJECT_DOCUMENTATION.md
 ```
 
-Expected: no matches in either. (`docs/superpowers/` still mentions phase (c); that is correct — those are dated design notes, explicitly non-authoritative.)
+Expected: no matches in either. (`docs/ai/` still mentions phase (c); that is correct — those are dated design notes, explicitly non-authoritative.)
 
 - [ ] **Step 7: Run `make check`**
 

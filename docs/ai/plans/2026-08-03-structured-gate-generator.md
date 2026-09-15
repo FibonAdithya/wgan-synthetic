@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Phase 2 of 3 from `docs/superpowers/specs/2026-08-03-structured-gate-generator-design.md`. Phase 1 (run infrastructure) is complete on this branch. Phase 3 (log-ratio regularizer) is a separate plan and is **not** in scope here.
+- Phase 2 of 3 from `docs/ai/specs/2026-08-03-structured-gate-generator-design.md`. Phase 1 (run infrastructure) is complete on this branch. Phase 3 (log-ratio regularizer) is a separate plan and is **not** in scope here.
 - Baseline is **143 tests passing**. Run with the main-repo interpreter: `/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/python -m pytest`. Worktrees have no `.venv`.
 - **`GatedGenerator` (v2) must not be modified.** It is the comparison baseline for the v2-vs-v3 arm; a change to it would silently move the thing v3 is measured against.
 - Every existing test must keep passing, `tests/test_generator.py` untouched.
@@ -807,7 +807,7 @@ Read `configs/sift_gan_v2.yaml` first and copy it exactly, changing **only** `ge
 # the three keys that change introduces. v2's gates are independent per
 # coordinate, so its non-zero count is Binomial(128, p) with std about 4.76;
 # real SIFT measures 14.45. See
-# docs/superpowers/specs/2026-08-03-structured-gate-generator-design.md
+# docs/ai/specs/2026-08-03-structured-gate-generator-design.md
 ```
 
 with the model block gaining:
@@ -860,7 +860,7 @@ v3 adds a per-vector sparsity level (over-dispersion), a 3x3x3 convolution
 over the (4,4,8) descriptor grid with circular orientation padding (local
 correlation), and fixed smoothing of the gate noise so sampling is
 correlated too. Measurements are in `tools/probes/`; the design is in
-`docs/superpowers/specs/2026-08-03-structured-gate-generator-design.md`.
+`docs/ai/specs/2026-08-03-structured-gate-generator-design.md`.
 ```
 
 - [ ] **Step 8: Run the full suite**

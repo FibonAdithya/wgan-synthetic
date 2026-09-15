@@ -1,0 +1,21 @@
+# agentify configuration. The contract is CONTRACT.md in the agentify repo.
+
+[contract]
+# The highest contract level this repo has adopted. tests/test_contract.py
+# checks every item up to it on every `make check`. Raised by
+# `agentify adopt --level N`; never lowered automatically.
+level = 1
+
+[docs]
+# Reference prefixes the docs test treats as correctly absent from a clean
+# checkout: build products, downloaded data, run directories.
+ignore_references = [
+  # Gitignored build products and downloaded corpora (the docs test's old
+  # GENERATED list): run directories, evaluation output, data files.
+  "runs/", "eval", "data/sift_", "data/deep_", "data/nytimes_", "data/glove_",
+  "data/gist_", "data/openai_",
+  # Names the docs cite relative to a run directory or a family's config
+  # directory, not to the repo root.
+  "run_config.yaml", "run_metadata.json", "summary.json", "structure.json", "png/", "synthetic_",
+  "sift_", "deep_", "glove_", "gist_", "nytimes_", "openai_", "v0.yaml", "v2.yaml",
+]

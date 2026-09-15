@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Phase 3 of 3 from `docs/superpowers/specs/2026-08-03-structured-gate-generator-design.md`. Phase 1 (run infrastructure) is complete on this branch. Phase 2 (structured-gate generator) is a **separate plan touching `src/models/generator.py`** — do not modify that file or `tests/test_generator*.py` here.
+- Phase 3 of 3 from `docs/ai/specs/2026-08-03-structured-gate-generator-design.md`. Phase 1 (run infrastructure) is complete on this branch. Phase 2 (structured-gate generator) is a **separate plan touching `src/models/generator.py`** — do not modify that file or `tests/test_generator*.py` here.
 - Baseline is **143 tests passing**. Run with the main-repo interpreter: `/home/fibonadithya/TIG/wgan-synthetic/.venv/bin/python -m pytest`. Worktrees have no `.venv`.
 - **`lid_reg_alpha` defaults to `0.0`.** With it unset or zero, the generator loss must be exactly `adv_loss + distance_reg_alpha * distance_reg` as today — v0 through v3 stay bit-identical.
 - `tests/test_train_smoke.py` must pass untouched.

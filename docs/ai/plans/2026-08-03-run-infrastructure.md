@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Phase 1 of 3 from `docs/superpowers/specs/2026-08-03-structured-gate-generator-design.md`. The generator and regularizer are separate plans and are **not** in scope here.
+- Phase 1 of 3 from `docs/ai/specs/2026-08-03-structured-gate-generator-design.md`. The generator and regularizer are separate plans and are **not** in scope here.
 - Every task in this plan is testable on CPU. No task requires a GPU.
 - Sampling and eval keep today's permissive `auto`; only training becomes strict.
 - Existing behaviour must not change when the new config keys are absent. `tests/test_train_smoke.py` must pass untouched at every commit.
@@ -965,7 +965,7 @@ Append to `FOLLOWUPS.md`:
 
 ### Off-box sync is specified but not implemented
 
-`docs/superpowers/specs/2026-08-03-structured-gate-generator-design.md` calls
+`docs/ai/specs/2026-08-03-structured-gate-generator-design.md` calls
 for syncing run artifacts off the vast.ai box, whose `workspace_is_volume` is
 `false` -- nothing survives recycle or destroy. Resume protects against
 contention and preemption, but only if checkpoints leave the machine.

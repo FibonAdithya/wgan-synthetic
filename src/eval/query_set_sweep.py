@@ -235,7 +235,9 @@ def calibrate(
     return curve, chosen, chosen_hits
 
 
-def spread_table(hits: np.ndarray, sizes: Sequence[int], draws: int, seed: int) -> list[dict]:
+def spread_table(
+    hits: np.ndarray, sizes: Sequence[int], draws: int, seed: int
+) -> list[dict]:
     """Recall spread over `draws` subsets of each size, without replacement."""
     rng = np.random.default_rng(seed)
     pool_n = hits.shape[0]
@@ -309,7 +311,10 @@ def main(argv: Sequence[str] | None = None) -> None:
             "peak_vram_bytes": built.peak_vram_bytes,
             "describe": adapter.describe(),
         }
-        print(f"built {kind} in {built.train_seconds + built.add_seconds:.1f}s", flush=True)
+        print(
+            f"built {kind} in {built.train_seconds + built.add_seconds:.1f}s",
+            flush=True,
+        )
         # Keep the device buffer alive; the handle points into it.
         builds[kind]["_dataset"] = built.dataset
 
@@ -317,8 +322,13 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     calibration: dict[str, dict] = {}
     hits: dict[str, np.ndarray] = {}
-    hits["flat"] = hits_for(timed, "flat", handles["flat"], database, pool, truth, K, None)
-    calibration["flat"] = {"curve": [{"param": None, "recall": float(hits["flat"].mean())}], "chosen": None}
+    hits["flat"] = hits_for(
+        timed, "flat", handles["flat"], database, pool, truth, K, None
+    )
+    calibration["flat"] = {
+        "curve": [{"param": None, "recall": float(hits["flat"].mean())}],
+        "chosen": None,
+    }
     param_space = {
         "ivf_flat": indexes.IVF_N_PROBES,
         "cagra_iters": indexes.CAGRA_MAX_ITERATIONS,
@@ -329,13 +339,24 @@ def main(argv: Sequence[str] | None = None) -> None:
             continue
         params = param_space[kind]
         curve, chosen, chosen_hits = calibrate(
-            timed, kind, handles[kind], database, pool, truth, K, params, args.target_recall
+            timed,
+            kind,
+            handles[kind],
+            database,
+            pool,
+            truth,
+            K,
+            params,
+            args.target_recall,
         )
         calibration[kind] = {"curve": curve, "chosen": chosen}
         if chosen_hits is not None:
             hits[kind] = chosen_hits
 
-    spread = {kind: spread_table(h, args.sizes, args.draws, args.seed) for kind, h in hits.items()}
+    spread = {
+        kind: spread_table(h, args.sizes, args.draws, args.seed)
+        for kind, h in hits.items()
+    }
 
     timing: dict[str, list[dict]] = {}
     fits: dict[str, dict] = {}
@@ -344,7 +365,10 @@ def main(argv: Sequence[str] | None = None) -> None:
             continue
         param = calibration[kind]["chosen"]
         if kind != "flat" and param is None:
-            print(f"{kind}: no param reached {args.target_recall}; timing skipped", flush=True)
+            print(
+                f"{kind}: no param reached {args.target_recall}; timing skipped",
+                flush=True,
+            )
             continue
         rows = []
         for n in args.sizes:
@@ -364,9 +388,14 @@ def main(argv: Sequence[str] | None = None) -> None:
                     "seconds": [float(s) for s in secs],
                 }
             )
-            print(f"  {kind} n={n}: {med * 1e3:.2f} ms median, {n / med:,.0f} qps", flush=True)
+            print(
+                f"  {kind} n={n}: {med * 1e3:.2f} ms median, {n / med:,.0f} qps",
+                flush=True,
+            )
         timing[kind] = rows
-        fits[kind] = fit_linear([r["n"] for r in rows], [r["median_ms"] / 1e3 for r in rows])
+        fits[kind] = fit_linear(
+            [r["n"] for r in rows], [r["median_ms"] / 1e3 for r in rows]
+        )
         peak = max(r["qps_median"] for r in rows)
         knee = next((r["n"] for r in rows if r["qps_median"] >= 0.9 * peak), None)
         fits[kind]["qps_peak_measured"] = peak
@@ -430,9 +459,10 @@ def render_markdown(result: dict) -> str:
     lines.append("")
     lines.append("## Calibration")
     for kind, cal in result["calibration"].items():
-        lines.append(f"- {kind}: chosen={cal['chosen']}; " + ", ".join(
-            f"{c['param']}->{c['recall']:.4f}" for c in cal["curve"]
-        ))
+        lines.append(
+            f"- {kind}: chosen={cal['chosen']}; "
+            + ", ".join(f"{c['param']}->{c['recall']:.4f}" for c in cal["curve"])
+        )
     lines.append("")
     lines.append("## Search time vs n (median ms, qps)")
     kinds = list(result["timing"])
@@ -446,7 +476,9 @@ def render_markdown(result: dict) -> str:
         cells = []
         for kind in kinds:
             r = by_n[n].get(kind)
-            cells.append(f"{r['median_ms']:.2f} | {r['qps_median']:,.0f}" if r else " | ")
+            cells.append(
+                f"{r['median_ms']:.2f} | {r['qps_median']:,.0f}" if r else " | "
+            )
         lines.append(f"| {n:,} | " + " | ".join(cells) + " |")
     lines.append("")
     lines.append("## Fits (t = t0 + n/qps)")
@@ -455,9 +487,12 @@ def render_markdown(result: dict) -> str:
     lines.append("")
     lines.append("## Recall spread vs n (sd over draws; binomial sd)")
     for kind, rows in result["spread"].items():
-        lines.append(f"- {kind}: " + ", ".join(
-            f"n={r['n']}: {r['sd']:.4f} ({r['binomial_sd']:.4f})" for r in rows
-        ))
+        lines.append(
+            f"- {kind}: "
+            + ", ".join(
+                f"n={r['n']}: {r['sd']:.4f} ({r['binomial_sd']:.4f})" for r in rows
+            )
+        )
     lines.append("")
     return "\n".join(lines)
 

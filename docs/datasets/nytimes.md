@@ -192,7 +192,7 @@ the cleaned figures are what the corpus looks like without the artefact.
 
 ## Model family
 
-`mlp` for `v0`, `linear_skip` for `v1`; `spherical` when phase (b) lands.
+`mlp` for `v0`, `linear_skip` from `v1`, `spherical` from `v3`.
 
 ## Ladder
 
@@ -206,6 +206,7 @@ the cleaned figures are what the corpus looks like without the artefact.
 | `v2b` | `v2` with the critic's neighbours drawn from a bank (`critic_type: neighbourhood_bank`, `critic_bank_size: 16384`) | `configs/nytimes/v2b.yaml`; box instrument `configs/nytimes/v2b_seed42.yaml` | `runs/nytimes/v2b_seed42` (box: `/workspace/nytimes-v2b/v2b_seed42`) | trained -- n=1 seed, misses the gate on LID, contrast and hubness, Gini in range; the selected checkpoint is a transient; drifts to the Gaussian end like v2; see `## v2b, measured` |
 | `v2c` | `v2` with a learned set critic (`critic_type: neighbourhood_set`, EdgeConv 128, max pool) | `configs/nytimes/v2c.yaml`; box instrument `configs/nytimes/v2c_seed42.yaml` | `runs/nytimes/v2c_seed42` (box: `/workspace/nytimes-v2/v2c_seed42`) | trained -- n=1 seed, misses the gate on all four at the selected step (LID 12% high, contrast 3.3% low, hubness 11.9, Gini 0.847); no collapse and no Gaussian drift, LID holds a band around real for the whole run; see `## v2c, measured` |
 | `v2c` at 100k steps | same rung, budget raised | `configs/nytimes/v2c_seed42_100k.yaml`, resumed from the row above | `runs/nytimes/v2c_seed42_100k` (box: `/workspace/nytimes-v2/v2c_seed42_100k`) | trained -- selected step 44,000 misses on all four like step 4,000 did; step 100,000 halves hubness (`5.45`) and lands Gini on real but LID stays 9% high; effective rank stopped falling, no collapse, no drift; see `### Continued to 100,000 steps` under v2c |
+| `v3` | `v2c` with the generator changed to `spherical` (`generator_type: spherical`, `tangent_hidden_dim` 512, radius band 0.2 to 1.5 from 0.95) | `configs/nytimes/v3.yaml`; box instrument `configs/nytimes/v3_seed42.yaml` | `runs/nytimes/v3_seed42` (box: `/workspace/nytimes-v3/v3_seed42`) | config written 2026-09-15 (`scripts/nytimes_v3_seed42_job.sh`); not yet trained. Why: `docs/ai/specs/2026-09-15-spherical-generator-design.md`, from the trunk-scale probes under `docs/results/nytimes-trunk-scale-probe/` |
 
 Train `v0`:
 

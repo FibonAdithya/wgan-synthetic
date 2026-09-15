@@ -322,18 +322,27 @@ both arms. Any write-up of a v4 result must lead with those.
 
 ### `generator_type`
 
-The architecture axis in the `model` config block. Four values are built:
-`mlp` (default), `gated`, `structured_gated`, and `linear_skip`. It sits
-underneath the variant numbering: on SIFT, v0, v1 and v1_5 all use `mlp`
-and differ only in training settings.
+The architecture axis in the `model` config block. Five values are built:
+`mlp` (default), `gated`, `structured_gated`, `linear_skip` and
+`spherical`. It sits underneath the variant numbering: on SIFT, v0, v1 and
+v1_5 all use `mlp` and differ only in training settings.
 
-A fifth value, `spherical`, is planned and not built. It is phase (b) of the
-multi-dataset design: a generator whose output is unit-norm by construction
-rather than by a normalization applied afterwards, for the four `angular`
-families. Until it exists, `deep`, `glove` and `openai` all start their
-ladders on `mlp` (`nytimes` moved to `linear_skip` at its v1), and any
-dataset page naming `spherical` is describing the intended rung, not a
-trained one.
+`spherical` is phase (b) of the multi-dataset design: a generator whose
+output is unit-norm by construction rather than by a normalization applied
+afterwards. The trunk MLP emits a unit direction `u`; a tangent head reads
+the skip block of the latent, is modulated per channel by the trunk's
+hidden state, and its output is projected orthogonal to `u` and normalised
+to `t`; the output is `cos(r) u + sin(r) t` with `r` one learned scalar
+inside the band `[radius_min, radius_max]`, shared by every sample. Keys:
+`skip_dim`, `tangent_hidden_dim`, `radius_init`, `radius_min`,
+`radius_max`. It exists because on NYTimes the `linear_skip` generator's
+hubs are the rows whose residual share is a few percent smaller than their
+neighbours', and a fixed linear residual cannot reach the corpus's local
+dimension at its global rank
+(`docs/ai/specs/2026-09-15-spherical-generator-design.md`). The trainer
+logs `radius` and `direction_effective_rank` per evaluation for it. Built
+for NYTimes `v3`; `deep`, `glove` and `openai` still start their ladders on
+`mlp`, and openai's narrow cone is not handled by it.
 
 Checkpoints do not record `generator_type` — the architecture is rebuilt from
 the run config at load time. A checkpoint is therefore only loadable

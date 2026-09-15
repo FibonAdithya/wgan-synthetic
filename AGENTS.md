@@ -103,12 +103,21 @@ Do not decide these yourself. Raise them and stop.
   record of a run that happened.
 - Changing a pinned version in `requirements.txt`.
 
+To report a bug in this project, file an issue with the `agent-reported`
+label:
+
+    gh issue create --label agent-reported --title "..." --body "..."
+
+The label is what routes the issue to a person. An issue without it notifies
+nobody.
+
 ## Where to look
 
 | Task | Start here |
 |---|---|
 | Understand the goal and the gate | `PROJECT_DOCUMENTATION.md#ann-difficulty--the-gate` |
 | Set up and run day-to-day commands | `README.md` (quick start) |
+| Set up a development environment in one step | `make setup` (a target in `Makefile`) |
 | Get data onto disk | `data/README.md`, `src/data/fetch.py` |
 | Facts about one family (N, k, profile, bands) | `docs/datasets/<family>.md` |
 | Preprocessing contract | `data/README.md`, `src/data/dataset.py` |

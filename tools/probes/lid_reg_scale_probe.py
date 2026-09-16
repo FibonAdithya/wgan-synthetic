@@ -34,6 +34,7 @@ import numpy as np
 import torch
 import yaml
 
+from src.device import resolve_device
 from src.models.generator import build_generator
 from src.train.log_ratio import LogRatioTarget, batch_log_ratio_profile, log_ratio_penalty
 
@@ -61,6 +62,18 @@ def gap(sampler, real_pool, k, max_points, batch, trials, device, seed):
     return float(np.mean(vals[warm:])), float(np.std(vals[warm:]))
 
 
+def resolve_probe_device(cfg: dict, device_arg: str | None) -> torch.device:
+    """The device to run on: `--device` if given, else the config's.
+
+    `resolve_device` rather than `torch.device` because every NYTimes config
+    says `device: auto`, which `torch.device` refuses. `strict` stays off:
+    this probe is short and read-only, so making it demand a GPU claim would
+    be friction, and the `--device cpu` path is what keeps a cpu-lane job off
+    the card.
+    """
+    return resolve_device(device_arg if device_arg is not None else cfg["device"])
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--config", required=True)
@@ -69,12 +82,16 @@ def main() -> None:
     ap.add_argument("--trials", type=int, default=80)
     ap.add_argument("--target-fraction", type=float, default=0.05,
                     help="Share of |adv_loss| the penalty should contribute at launch.")
+    ap.add_argument("--device", default=None,
+                    help="Override the config's device. Pass cpu for a cpu-lane job.")
+    ap.add_argument("--output", default=None, help="Write the result JSON here.")
     ap.add_argument("--adv-loss", type=float, default=None,
                     help="Typical |adv_loss| from an existing run's metrics.")
     args = ap.parse_args()
 
     cfg = yaml.safe_load(Path(args.config).open())
-    device = torch.device(cfg["device"] if torch.cuda.is_available() else "cpu")
+    device = resolve_probe_device(cfg, args.device)
+    print(f"device: {device}")
     t = cfg["training"]
     k, max_points, batch = int(t["lid_reg_k"]), int(t["lid_reg_max_points"]), int(t["batch_size"])
     dim = int(cfg["data"]["descriptor_dim"])
@@ -127,6 +144,10 @@ def main() -> None:
         print(f"suggested lid_reg_alpha: {alpha:.4g}"
               f"  ({args.target_fraction:.0%} of |adv_loss|={args.adv_loss:.3g} at gap {signal:.4f})")
     print("\n" + json.dumps(out, indent=2))
+    if args.output:
+        Path(args.output).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.output).write_text(json.dumps(out, indent=2))
+        print(f"wrote {args.output}")
 
 
 if __name__ == "__main__":

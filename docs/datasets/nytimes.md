@@ -1174,24 +1174,32 @@ the spec's 3% bar is stated in, both from
 
 | Statistic | real, cleaned (10-draw range) | `v3_best` (step 9,000, gate-selected) | step 30,000 |
 |---|---|---|---|
-| LID median | `55.97` (54.97 -- 56.86) | `55.69` (0.5% off, inside the range) | `24.07` (57.0% off, 2.28x) |
-| Relative contrast | `1.271` (1.265 -- 1.276) | `1.218` (4.1% off, 1.04x) | `1.452` (14.3% off, 1.14x) |
-| Hubness skew | `2.529` (2.315 -- 2.779) | `3.392` (34.1% off, 1.22x) | `2.196` (13.2% off, 1.05x) |
-| IVF cell-balance Gini | `0.7767` (0.7832 -- 0.8231) | `0.7704` (0.8% off, 1.02x) | `0.5109` (34.2% off, 1.53x) |
+| LID median | `55.97` (54.97 -- 56.86) | `55.69` (0.5% off, inside the range) | `24.07` (57.0% off, 16.9x) |
+| Relative contrast | `1.271` (1.265 -- 1.276) | `1.218` (4.1% off, 4.9x) | `1.452` (14.3% off, 16.9x) |
+| Hubness skew | `2.529` (2.315 -- 2.779) | `3.392` (34.1% off, 1.9x) | `2.196` (13.2% off, 0.7x) |
+| IVF cell-balance Gini | `0.7767` (0.7832 -- 0.8231) | `0.7704` (0.8% off, 0.16x) | `0.5109` (34.2% off, 6.7x) |
 
 **Misses the bar on three of four.** LID is inside the ten-draw range --
 the first NYTimes rung to manage that -- at `0.5%` off the real median.
-Contrast misses low by `4.1%`, outside the spec's 3% allowance (the
-range's bottom edge is `1.04x` the selected value). Hubness misses high
-at `3.392` against the range's `2.779` top -- `1.22x` that edge, where
-every earlier rung in this family missed hubness by `4x` to `7x`. Gini
-misses low by `0.8%`, just under the range's bottom edge (`1.02x`).
-Effective rank: real `247.42`, `v3_best` `230.31`, step 30,000 `203.05`
--- `v3_best` sits closer to real's effective rank than any earlier
-NYTimes checkpoint measured so far (`v2c`'s closest was `210.0` at its
-30k selection, `207.0` at its 100k selection). Median 5-NN distance:
-real `1.2049`, `v3_best` `1.1922`, step 30,000 `1.0353` -- the closest
-any NYTimes checkpoint has come to real's neighbourhood width.
+Contrast misses low by `4.1%`, outside the spec's 3% allowance and `4.9`
+range-widths off. Hubness misses high at `3.392` against the range's
+`2.779` top: `1.9` range-widths off by the table's convention, but only
+`1.22x` that top edge in plain value-over-edge terms -- a different
+ratio from the table's multiplier, and the vivid one against the
+family's earlier rungs, which missed hubness by `4x` to `7x` on that
+same value-over-edge measure. Gini misses low by `0.8%`, `0.16`
+range-widths off; despite the small range-width figure it is not inside
+the range -- like the real corpus's own single draw (`0.7767`), which
+itself sits under its own ten-draw bottom edge (`0.7832`), `v3_best`'s
+`0.7704` sits under that same edge too. Effective rank: real `247.42`,
+`v3_best` `230.31`, step 30,000 `203.05` -- among gate-selected
+checkpoints, `v3_best` is closer to real's effective rank than any
+earlier NYTimes rung's selection (`v2c`'s closest reached `210.0`); two
+Gaussian-drifted, gate-failing checkpoints elsewhere in the family sit
+nearer real's rank still (`v2`'s step 30,000 at `244.4`, `v2b`'s at
+`238.7`), neither selected and neither close to real on anything else.
+Median 5-NN distance: real `1.2049`, `v3_best` `1.1922`, step 30,000
+`1.0353`.
 
 Against the spec's mechanism checks:
 
@@ -1199,7 +1207,8 @@ Against the spec's mechanism checks:
   `3.66` across all 30 evaluations. The spec predicted at or below about
   4 for the whole run; that held, and with more room to spare than any
   earlier rung reached even at its cleanest step -- `v2c`'s holdout
-  hubness never dropped below `3.35` across either of its runs.
+  hubness never dropped below `3.35` across its 100,000-step
+  continuation.
 - **Radius trajectory.** `r` reads `0.976` at the first evaluation (step
   1,000), rising to `1.448` by step 30,000, against the band ceiling
   `radius_max` `1.5`. At the selected step (9,000) it reads `1.1957`.
@@ -1235,12 +1244,14 @@ three of four statistics miss, one of them (contrast) outside the
 spec's allowance. But it is the first NYTimes rung whose LID sits
 inside the real ten-draw range at all, and it does so at a near-real
 global rank (effective rank `230.3` against real's `247.4`, the closest
-of any checkpoint in the family) rather than by drifting to a
-degenerate LID that happens to cross the band. Holdout hubness stayed
-at or below `4` for the entire run, confirming the constant-radius
-design's prediction under training, and the canonical hubness miss
-(`1.22x` the range top) is far smaller than every earlier rung's (`4x`
-to `7x`). What disqualifies the selection is the transient test: the
+of any gate-selected checkpoint in the family) rather than by drifting
+to a degenerate LID that happens to cross the band. Holdout hubness
+stayed at or below `4` for the entire run, confirming the
+constant-radius design's prediction under training, and the canonical
+hubness miss (`1.22x` the range top, by value-over-edge -- not the
+gate table's range-width multiplier) is far smaller than every earlier
+rung's (`4x` to `7x` on that same value-over-edge measure). What
+disqualifies the selection is the transient test: the
 selected step is not an isolated spike, but it is not settled either --
 one evaluation to either side already breaks the factor-of-two window on
 one side. Per the spec's fallback table, the radius trajectory (rising

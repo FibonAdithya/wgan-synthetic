@@ -12,8 +12,11 @@
 # runs/ is gitignored, so nothing here is declared as a --artifact; the run
 # directory is copied to /workspace/nytimes-v3 at the end instead, the way
 # the v2c job did. Box-specific by construction, like the config it runs.
+#
+# The interpreter comes from the runner's project venv on PATH (gpuq puts
+# it there for every job); WGAN_PYTHON overrides it when needed.
 set -euo pipefail
-P=${WGAN_PYTHON:-/opt/venvs/wgan-synthetic/bin/python}
+P=${WGAN_PYTHON:-python}
 RUN=runs/nytimes/v3_seed42
 REAL=/workspace/data-cache/nytimes_250k.npy
 CLEAN=/workspace/data-cache/nytimes_250k_l2_clean.npy

@@ -192,3 +192,33 @@ def test_effective_rank_centres_before_the_eigendecomposition():
     got = _effective_rank(x)
     want = effective_rank(x.numpy())
     assert abs(got - want) / abs(want) < 1e-4
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="needs a GPU")
+def test_effective_rank_keeps_the_eigendecomposition_off_the_gpu():
+    """The segfault guard, and it only means anything on a GPU box.
+
+    `torch.linalg.eigvalsh` on a CUDA tensor kills the training process on
+    the box (see `_effective_rank`'s docstring for the job ids): the crash
+    surfaces at the next cuBLAS matmul, so it cannot be caught. Catches a
+    future edit that drops the `.cpu()` and hands the decomposition a CUDA
+    tensor -- the spy records what `eigvalsh` was actually given, which a
+    CPU-only run of this file cannot check, hence the skip.
+    """
+    seen = []
+    real = torch.linalg.eigvalsh
+
+    def spy(t):
+        seen.append(t.device.type)
+        return real(t)
+
+    x = torch.randn(1024, 16, device="cuda") * torch.arange(
+        1, 17, dtype=torch.float32, device="cuda"
+    )
+    torch.linalg.eigvalsh = spy
+    try:
+        got = _effective_rank(x)
+    finally:
+        torch.linalg.eigvalsh = real
+    assert seen == ["cpu"], seen
+    assert abs(got - _effective_rank(x.cpu())) / abs(got) < 1e-4

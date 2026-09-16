@@ -131,8 +131,23 @@ def _unit(x: Tensor, eps: float) -> Tensor:
 def _effective_rank(x: Tensor) -> float:
     """exp(Shannon entropy of the covariance eigenvalue ratios): the same
     definition as `src.eval.eda.metrics.effective_rank`, in torch, so this
-    module does not import the report."""
-    x = x.float()
+    module does not import the report.
+
+    The eigendecomposition runs on the CPU even when `x` sits on a GPU. On
+    the box (torch 2.13.0+cu126, driver 570.181) `torch.linalg.eigvalsh` on a
+    CUDA tensor takes the whole process down with a segfault when it is
+    called from inside a training run -- not at the call itself, but at the
+    next cuBLAS matmul, which lands in the critic and reads as a critic bug.
+    Measured 2026-09-16: jobs `...T074115Z-dbce65` and `...T084249Z-58ed20`
+    died that way on the first critic step after an evaluation, while the
+    same run with this decomposition on the CPU (`...T091023Z-18c25d`) and
+    one with the readout stubbed out (`...T090023Z-8f1ee2`) both completed.
+    A segfault cannot be caught, so the trainer's try/except around the
+    readout does not help; keeping the decomposition off the GPU does. The
+    covariance is `output_dim` square (256 on NYTimes), so both the copy and
+    the decomposition are negligible beside one evaluation.
+    """
+    x = x.detach().float().cpu()
     x = x - x.mean(dim=0, keepdim=True)
     eig = torch.linalg.eigvalsh(x.T @ x / max(x.shape[0] - 1, 1)).clamp(min=0.0)
     ratio = eig / eig.sum().clamp(min=1.0e-12)

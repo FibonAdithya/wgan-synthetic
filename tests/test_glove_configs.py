@@ -90,41 +90,61 @@ def test_latent_dim_stays_128_over_a_100_dim_corpus(name: str):
     assert config["data"]["descriptor_dim"] == 100
 
 
-# Single-seed probes of the two regularizers that target v0's measured
-# dimensionality gap. Each is v0_seed42 plus one regularizer, so each maps to
-# the keys it may add or change on top of the output directory and the device.
-PROBES = {
-    "probe_lidreg_seed42": {
+# Five-seed probes of the two regularizers that target v0's measured
+# dimensionality gap. probe_<family>_seed<N> is v0_seed<N> plus one regularizer,
+# so each family maps to the keys it may add or change on top of the output
+# directory and the device.
+PROBE_FAMILIES = {
+    "lidreg": {
         "training.lid_reg_alpha",
         "training.lid_reg_k",
         "training.lid_reg_max_points",
     },
-    "probe_spectrum_seed42": {"training.spectrum_reg_alpha"},
+    "spectrum": {"training.spectrum_reg_alpha"},
 }
+PROBE_CELLS = [(family, seed) for family in PROBE_FAMILIES for seed in SEEDS]
 
 
-@pytest.mark.parametrize("name", PROBES)
-def test_probe_differs_from_v0_seed42_only_by_its_regularizer(name: str):
-    base, probe = _flatten(_load("v0_seed42")), _flatten(_load(name))
+def _probe(family: str, seed: int) -> dict[str, Any]:
+    return _load(f"probe_{family}_seed{seed}")
+
+
+@pytest.mark.parametrize(("family", "seed"), PROBE_CELLS)
+def test_probe_differs_from_its_v0_seed_only_by_its_regularizer(family: str, seed: int):
+    base, probe = _flatten(_load(f"v0_seed{seed}")), _flatten(_probe(family, seed))
     differing = {k for k in base.keys() | probe.keys() if base.get(k) != probe.get(k)}
-    assert differing <= PROBES[name] | {"output_dir", "device"}
+    assert differing <= PROBE_FAMILIES[family] | {"output_dir", "device"}
 
 
-@pytest.mark.parametrize("name", PROBES)
-def test_probe_regularizer_is_switched_on(name: str):
+@pytest.mark.parametrize(("family", "seed"), PROBE_CELLS)
+def test_probe_regularizer_is_switched_on(family: str, seed: int):
     """A probe whose alpha is zero trains v0 again under a different name."""
-    alpha_key = next(k for k in PROBES[name] if k.endswith("_alpha"))
-    assert _flatten(_load(name))[alpha_key] > 0.0
+    alpha_key = next(k for k in PROBE_FAMILIES[family] if k.endswith("_alpha"))
+    assert _flatten(_probe(family, seed))[alpha_key] > 0.0
 
 
-@pytest.mark.parametrize("name", PROBES)
-def test_probe_writes_to_its_own_output_dir(name: str):
-    assert _load(name)["output_dir"] == f"runs/glove/{name}"
+@pytest.mark.parametrize(("family", "seed"), PROBE_CELLS)
+def test_probe_carries_its_own_seed_and_output_dir(family: str, seed: int):
+    config = _probe(family, seed)
+    assert config["seed"] == seed
+    assert config["output_dir"] == f"runs/glove/probe_{family}_seed{seed}"
+
+
+@pytest.mark.parametrize("family", PROBE_FAMILIES)
+def test_probe_seeds_agree_on_every_regularizer_key(family: str):
+    """A seed sweep measures the seed only if the regularizer is identical across seeds.
+
+    The per-seed test above allows these keys to differ from v0, so without this
+    one a single seed carrying a different alpha would pass unnoticed.
+    """
+    for key in PROBE_FAMILIES[family]:
+        values = {_flatten(_probe(family, seed)).get(key) for seed in SEEDS}
+        assert len(values) == 1, (key, values)
 
 
 def test_spectrum_probe_uses_the_alpha_deep_found_binding():
     """DEEP's sweep moved effective_rank at 5.0 and not at 0.1 or 1.0."""
-    assert _load("probe_spectrum_seed42")["training"]["spectrum_reg_alpha"] == 5.0
+    assert _probe("spectrum", 42)["training"]["spectrum_reg_alpha"] == 5.0
 
 
 def test_the_rung_still_points_at_the_repo_relative_corpus():

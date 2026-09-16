@@ -1,4 +1,4 @@
-# GloVe probe: v0_seed42 plus the covariance-spectrum regularizer (spectrum_reg).
+# GloVe probe: v0_seed43 plus the covariance-spectrum regularizer (spectrum_reg).
 # One seed of a five-seed measurement instrument (seeds 42-46), not a ladder rung: promoting a probe to
 # v1 is a human decision (AGENTS.md).
 #
@@ -11,10 +11,10 @@
 # DEEP it moved effective_rank without moving the four gate statistics, so this
 # probe asks whether widening the spectrum brings GloVe's hubs with it.
 #
-# Deltas from v0_seed42: device, output_dir, and spectrum_reg_alpha.
-seed: 42
+# Deltas from v0_seed43: device, output_dir, and spectrum_reg_alpha.
+seed: 43
 device: cuda:0
-output_dir: runs/glove/probe_spectrum_seed42
+output_dir: runs/glove/probe_spectrum_seed43
 
 data:
   real_path: /workspace/data-cache/glove_250k.npy

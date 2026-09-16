@@ -1,4 +1,4 @@
-# GloVe probe: v0_seed42 plus the local log-ratio LID regularizer (lid_reg).
+# GloVe probe: v0_seed46 plus the local log-ratio LID regularizer (lid_reg).
 # One seed of a five-seed measurement instrument (seeds 42-46), not a ladder rung: promoting a probe to
 # v1 is a human decision (AGENTS.md).
 #
@@ -10,12 +10,12 @@
 # statistic, so this probe's lid_median is fitted, not evidence: judge it on
 # participation ratio, hubness, contrast and IVF Gini.
 #
-# Deltas from v0_seed42: device, output_dir, and the three lid_reg keys.
+# Deltas from v0_seed46: device, output_dir, and the three lid_reg keys.
 # device is cuda:0 (runner pins CUDA_VISIBLE_DEVICES to the claimed card) because
 # tools/probes/lid_reg_scale_probe.py passes it straight to torch.device.
-seed: 42
+seed: 46
 device: cuda:0
-output_dir: runs/glove/probe_lidreg_seed42
+output_dir: runs/glove/probe_lidreg_seed46
 
 data:
   real_path: /workspace/data-cache/glove_250k.npy

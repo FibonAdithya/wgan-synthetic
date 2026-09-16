@@ -1265,6 +1265,84 @@ the radius band, changes the critic, or reruns this seed to see whether
 the plateau at steps 9,000-11,000 is reproducible is a human decision
 per the spec's own rule.
 
+### Correction: the radius is not what decays
+
+**The paragraph above points at the wrong mechanism, and the "widens the
+radius band" option it lists is a dead end.** Measured 2026-09-16 by
+`tools/probes/radius_probe.py`, job
+`wgan-synthetic-20260916T135324Z-a06c18` at commit `a06db84`, lane `cpu`,
+exit 0; the 28-set table is committed under
+`docs/results/nytimes-radius-probe/`.
+
+`SphericalGenerator.components` returns a unit trunk direction `u` and a
+unit tangent `t` orthogonal to it, and `forward` is `cos(r) u + sin(r) t`.
+So a frozen checkpoint can be decoded at any shared angle from one forward
+pass, and the training trajectory's confound -- `r` and the weights moving
+together -- comes apart. Three checkpoints, seven angles each, one latent
+draw per checkpoint reused at every angle, canonical conditions throughout.
+
+LID median, the statistic the run moves furthest:
+
+| | r = 1.1 | r = 1.2 | r = 1.25 | r = 1.3 | r = 1.4 | r = 1.448 |
+|---|---|---|---|---|---|---|
+| step 9,000 | 52.12 | 55.75 | 57.11 | 58.25 | 59.47 | 59.65 |
+| step 20,000 | 29.69 | 31.17 | 31.82 | 32.39 | 33.35 | 33.70 |
+| step 30,000 | 21.82 | 22.63 | 23.04 | 23.38 | 23.97 | 24.21 |
+
+Read down a column, not across a row. Holding the angle at `1.2`, LID falls
+`55.75` to `31.17` to `22.63` as the weights advance -- a 33-point drop.
+Holding the weights and sweeping the angle across its whole band moves LID
+by 7.5 points at step 9,000, 4.0 at step 20,000, 2.4 at step 30,000. The
+weights account for more than four times what the angle does, comparing the
+33-point drop against the largest of those three spans.
+
+The reverse control settles it. Along the training trajectory `r = 1.448`
+coincided with LID `23.90`. Pushed to that same `r = 1.448`, the frozen
+step-9,000 weights read LID `59.65` -- *better* than at their own learned
+`1.1957`, not worse. LID rises monotonically with `r` at every one of the
+three checkpoints. The rising radius never caused the decay; if anything it
+masked part of it, recovering a few points of LID as the weights gave them
+up. Freezing or re-banding the radius would not have preserved the
+step-9,000 geometry.
+
+What does decay is the tangent head, and it decays locally rather than
+globally:
+
+| | LID | contrast | IVF Gini | effective rank |
+|---|---|---|---|---|
+| real | 55.84 | 1.269 | 0.796 | 247.9 |
+| `tangent_only`, step 9,000 | 59.70 | 1.210 | 0.749 | 221.0 |
+| `tangent_only`, step 20,000 | 34.20 | 1.327 | 0.609 | 213.9 |
+| `tangent_only`, step 30,000 | 24.57 | 1.441 | 0.474 | 203.6 |
+| `trunk_only`, step 9,000 | 18.76 | 1.708 | 0.219 | 65.3 |
+| `trunk_only`, step 30,000 | 12.90 | 2.151 | 0.183 | 48.9 |
+
+LID falls 59% across the run while effective rank falls 8%: the set keeps
+its global spread and loses its local dimension, and contrast rises as
+neighbours clump. The trunk does collapse too (rank `65.3` to `48.9`), which
+revises the "no collapse" reading above -- but `tangent_only` at step 9,000
+is within a point of the full output at the same step on every statistic, so
+the trunk contributes almost nothing to the output geometry either way and
+its collapse is not what the gate sees.
+
+Two further readings, both on the same table. Even at its best angle the
+model misses contrast low by about 4% and hubness high by about 22%, and
+contrast *falls* as `r` rises, so the angle cannot fix the two statistics
+the angle is not already fixing. And median 1-NN distance at step 9,000 is
+`1.153` against real's `1.105` while median pairwise distance matches: the
+synthetic set's nearest neighbours are too far away, which is what the low
+contrast is measuring. A next rung therefore needs a lever on local
+neighbourhood density, not on the residual's angle.
+
+One caveat on reading the table: step 30,000's `learned_r` row (`1.4481`)
+and its `r_1.448` row are the same set to within `0.0001` radians, and they
+agree to six figures on LID (`24.2138` against `24.2129`), contrast,
+hubness and effective rank, but read Gini `0.4942` against `0.4901`. A
+0.8% Gini difference survives an input change of one part in ten thousand,
+so differences in IVF Gini below about 1% are k-means partition noise
+rather than signal -- which is worth remembering when reading `v3_best`'s
+Gini miss in the table above, itself 0.8%.
+
 ## Gate
 
 `gates/nytimes.yaml` is the gate. The bands live there rather than in this

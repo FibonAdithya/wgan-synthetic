@@ -18,7 +18,7 @@ P=${WGAN_PYTHON:-/venv/main/bin/python}
 V3=/workspace/nytimes-v3/v3_seed42
 REAL=/workspace/data-cache/nytimes_250k.npy
 CFG=/tmp/nytimes_v4_sizing.yaml
-OUT=runs/nytimes/probes/lid_reg_scale.json
+# Output paths are per-checkpoint; see the loop below.
 KEEP=/workspace/nytimes-v4/probes
 
 test -f "$P"
@@ -50,13 +50,26 @@ PY
 #
 # Note: the probe caps its real pool at min(200000, rows), so this measures
 # against 200,000 of the corpus's 250,000 rows, not all of them.
-"$P" tools/probes/lid_reg_scale_probe.py \
-  --config "$CFG" \
-  --device cpu \
-  --v2-checkpoint "$V3/checkpoint_step_9000.pt" \
-  --v2-config configs/nytimes/v3_seed42.yaml \
-  --adv-loss 0.87 \
-  --target-fraction 0.05 \
-  --output "$OUT"
+# Measured at BOTH ends of the collapse, because which checkpoint you size
+# against changes the answer completely. Step 9,000 is the selected one, and
+# it already matches real LID to 0.5% -- and the log-ratio profile is LID's
+# sufficient statistic, so its gap there is near zero by construction and
+# says nothing about whether the penalty can resist the collapse. Step 30,000
+# is the collapsed state (LID 24.2), which is the gap the penalty must
+# actually be able to see. The first sizing run of this job measured only
+# step 9,000 and read a signal-to-floor ratio of 1.0x for that reason.
+for STEP in 9000 30000; do
+  test -f "$V3/checkpoint_step_${STEP}.pt"
+  echo "=== trained reference: step ${STEP} ==="
+  "$P" tools/probes/lid_reg_scale_probe.py \
+    --config "$CFG" \
+    --device cpu \
+    --v2-checkpoint "$V3/checkpoint_step_${STEP}.pt" \
+    --v2-config configs/nytimes/v3_seed42.yaml \
+    --adv-loss 0.87 \
+    --target-fraction 0.05 \
+    --output "runs/nytimes/probes/lid_reg_scale_step${STEP}.json"
+done
 
-mkdir -p "$KEEP" && cp "$OUT" "$KEEP"/ && sha256sum "$KEEP"/lid_reg_scale.json
+mkdir -p "$KEEP" && cp runs/nytimes/probes/lid_reg_scale_step*.json "$KEEP"/ \
+  && sha256sum "$KEEP"/lid_reg_scale_step*.json

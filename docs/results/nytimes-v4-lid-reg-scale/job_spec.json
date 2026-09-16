@@ -1,0 +1,25 @@
+{
+  "state": "done",
+  "orphaned": false,
+  "id": "wgan-synthetic-20260916T152044Z-5b69e9",
+  "lane": "cpu",
+  "project": "wgan-synthetic",
+  "commit": "5a5a38e75397d23b8072a439f02f4a8e5751c42b",
+  "branch": "nytimes-v4",
+  "cmd": [
+    "bash",
+    "scripts/nytimes_v4_lid_reg_scale_job.sh"
+  ],
+  "artifacts": [],
+  "timeout_s": 3600,
+  "vram_mb": null,
+  "attempts": 0,
+  "dedupe_key": "nytimes-v4-lid-reg-scale-5a5a38e",
+  "submitted_at": "2026-09-16T15:20:44Z",
+  "pid": null,
+  "runner_pid": 2366,
+  "exit_code": 0,
+  "error": null,
+  "stdout_log": "/workspace/queue/logs/wgan-synthetic-20260916T152044Z-5b69e9.out",
+  "stderr_log": "/workspace/queue/logs/wgan-synthetic-20260916T152044Z-5b69e9.err"
+}

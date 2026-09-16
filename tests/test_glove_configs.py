@@ -90,6 +90,43 @@ def test_latent_dim_stays_128_over_a_100_dim_corpus(name: str):
     assert config["data"]["descriptor_dim"] == 100
 
 
+# Single-seed probes of the two regularizers that target v0's measured
+# dimensionality gap. Each is v0_seed42 plus one regularizer, so each maps to
+# the keys it may add or change on top of the output directory and the device.
+PROBES = {
+    "probe_lidreg_seed42": {
+        "training.lid_reg_alpha",
+        "training.lid_reg_k",
+        "training.lid_reg_max_points",
+    },
+    "probe_spectrum_seed42": {"training.spectrum_reg_alpha"},
+}
+
+
+@pytest.mark.parametrize("name", PROBES)
+def test_probe_differs_from_v0_seed42_only_by_its_regularizer(name: str):
+    base, probe = _flatten(_load("v0_seed42")), _flatten(_load(name))
+    differing = {k for k in base.keys() | probe.keys() if base.get(k) != probe.get(k)}
+    assert differing <= PROBES[name] | {"output_dir", "device"}
+
+
+@pytest.mark.parametrize("name", PROBES)
+def test_probe_regularizer_is_switched_on(name: str):
+    """A probe whose alpha is zero trains v0 again under a different name."""
+    alpha_key = next(k for k in PROBES[name] if k.endswith("_alpha"))
+    assert _flatten(_load(name))[alpha_key] > 0.0
+
+
+@pytest.mark.parametrize("name", PROBES)
+def test_probe_writes_to_its_own_output_dir(name: str):
+    assert _load(name)["output_dir"] == f"runs/glove/{name}"
+
+
+def test_spectrum_probe_uses_the_alpha_deep_found_binding():
+    """DEEP's sweep moved effective_rank at 5.0 and not at 0.1 or 1.0."""
+    assert _load("probe_spectrum_seed42")["training"]["spectrum_reg_alpha"] == 5.0
+
+
 def test_the_rung_still_points_at_the_repo_relative_corpus():
     """v0.yaml is the rung and must stay box-independent."""
     assert _load("v0")["data"]["real_path"] == "data/glove_250k.npy"

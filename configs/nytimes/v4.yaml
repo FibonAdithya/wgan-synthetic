@@ -1,0 +1,92 @@
+# NYTIMES v4 -- v3 with the log-ratio regulariser turned on.
+# One change from v3, stated:
+#
+#   1. training.lid_reg_alpha off zero, with lid_reg_k: 20 and
+#      lid_reg_max_points: 256 new. Nothing else moves.
+#
+# Why: v3 reaches the real corpus's local geometry at step 9,000 (LID 55.68
+# against real's 55.84) and then loses it, reading 24.21 by step 30,000. The
+# radius probe ruled out the shared angle as the mechanism -- at a fixed angle
+# the weights alone cost 33 points of LID, and the frozen step-9,000 weights
+# read BETTER at the drifted angle than at their own. What decays is the
+# tangent head's local structure: its LID falls 59% while its effective rank
+# falls 8%. log_ratio_penalty constrains the shape of that neighbourhood. See
+# docs/ai/specs/2026-09-16-nytimes-v4-local-profile-design.md and
+# docs/results/nytimes-radius-probe/.
+seed: 42
+device: auto
+output_dir: runs/nytimes/v4
+
+data:
+  real_path: data/nytimes_250k.npy
+  format: npy
+  metric: angular
+  descriptor_dim: 256
+  holdout_fraction: 0.05
+  synthetic_if_missing: false
+  synthetic_num_vectors: 100000
+  preprocess:
+    center: false
+    whiten: false
+    l2_normalize: true
+    drop_zero_rows: true
+
+model:
+  # 256 trunk + 256 skip. The generator splits the latent itself.
+  latent_dim: 512
+  generator_hidden_dims: [512, 1024, 1024]
+  critic_hidden_dims: [1024, 512, 256]
+  negative_slope: 0.2
+  generator_type: spherical
+  skip_dim: 256
+  tangent_hidden_dim: 512
+  radius_init: 0.95
+  radius_min: 0.2
+  radius_max: 1.5
+  critic_type: neighbourhood_set
+  critic_edge_dim: 128
+  critic_edge_pool: max
+  critic_k: 20
+  critic_distance_floor: 0.01
+
+training:
+  batch_size: 512
+  num_gen_steps: 30000
+  n_critic: 3
+  lr_g: 1.0e-4
+  lr_d: 1.0e-4
+  betas: [0.0, 0.9]
+  lambda_gp: 5.0
+  distance_reg_alpha: 0.0
+  distance_reg_max_points: 256
+  # Sized on this family, NOT carried over from SIFT's 0.015: log_ratio_penalty
+  # is an L1 sum over lid_reg_k - 1 terms, so its magnitude depends on k and on
+  # the family's own gap. From tools/probes/lid_reg_scale_probe.py, job
+  # wgan-synthetic-20260916T152044Z-5b69e9
+  # (docs/results/nytimes-v4-lid-reg-scale/):
+  #
+  #                          gap        floor   signal   alpha
+  #   step 9,000     0.0860+-0.0162   0.0866     1.0x   0.5057
+  #   step 30,000    0.3175+-0.0253   0.0777     4.1x   0.1370
+  #
+  # Sized against step 30,000, the collapsed end. Step 9,000 is v3's selected
+  # checkpoint and already matches real LID to 0.5%; the log-ratio profile is
+  # the sufficient statistic LID reduces to, so its gap there is near zero by
+  # construction and sizing against it would multiply noise. alpha = 0.05 *
+  # |adv_loss| / gap at |adv_loss| = 0.87, v3's run-mean from
+  # docs/results/nytimes-v3/run_metadata.json.
+  #
+  # Expect the penalty to be near zero early, when the generator is still
+  # right, and to bite as it drifts. A lid_reg that is large from step one
+  # means something else is wrong.
+  lid_reg_alpha: 0.137
+  # 20, not the gate's 100, on purpose: matching the gate's own k would make
+  # the LID result close to tautological. See the spec's "Why k = 20".
+  lid_reg_k: 20
+  lid_reg_max_points: 256
+  num_workers: 0
+  amp: false
+  log_every: 250
+  eval_every: 1000
+  save_every: 2000
+  select_on: gate

@@ -10,9 +10,14 @@ is the collision the queue exists to prevent.
 from __future__ import annotations
 
 import importlib.util
+import subprocess
+import sys
 from pathlib import Path
 
 import torch
+
+REPO = Path(__file__).resolve().parents[1]
+PROBE = REPO / "tools" / "probes" / "lid_reg_scale_probe.py"
 
 _SPEC = importlib.util.spec_from_file_location(
     "lid_reg_scale_probe",
@@ -20,6 +25,27 @@ _SPEC = importlib.util.spec_from_file_location(
 )
 probe = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(probe)
+
+
+def test_probe_runs_as_a_script():
+    """Catches the missing sys.path bootstrap.
+
+    This has to be a subprocess. Importing the module from pytest cannot catch
+    it, because pytest already puts the repo root on sys.path -- so the unit
+    tests below all passed while `python tools/probes/lid_reg_scale_probe.py`
+    died with ModuleNotFoundError: No module named 'src' on the box. Run the
+    file the way its own docstring says to run it, from the repo root, with no
+    PYTHONPATH help.
+    """
+    proc = subprocess.run(
+        [sys.executable, str(PROBE), "--help"],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+        env={"PATH": "/usr/bin:/bin", "HOME": str(Path.home())},
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "--device" in proc.stdout
 
 
 def test_auto_config_resolves_without_raising():

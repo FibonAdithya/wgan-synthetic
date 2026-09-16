@@ -28,15 +28,25 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
 import torch
 import yaml
 
-from src.device import resolve_device
-from src.models.generator import build_generator
-from src.train.log_ratio import LogRatioTarget, batch_log_ratio_profile, log_ratio_penalty
+# Run as a script, sys.path[0] is tools/probes, not the repo root, so `src`
+# does not import. The sibling probes do the same thing; this one never did,
+# which is why its own documented invocation has never worked.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from src.device import resolve_device  # noqa: E402
+from src.models.generator import build_generator  # noqa: E402
+from src.train.log_ratio import (  # noqa: E402
+    LogRatioTarget,
+    batch_log_ratio_profile,
+    log_ratio_penalty,
+)
 
 
 def l2_normalize(x: torch.Tensor) -> torch.Tensor:

@@ -52,9 +52,18 @@ training:
   lambda_gp: 5.0
   distance_reg_alpha: 0.0
   distance_reg_max_points: 256
-  # PROVISIONAL: SIFT v4's value, to be replaced by the GloVe scale probe
-  # (tools/probes/lid_reg_scale_probe.py) before this config is trained.
-  lid_reg_alpha: 0.015
+  # Sized by tools/probes/lid_reg_scale_probe.py on GloVe at this k (gpuq job
+  # wgan-synthetic-20260916T113625Z-8da203, 80 trials per row):
+  #
+  #   real vs real (noise floor) : 0.0322 +/- 0.0239
+  #   untrained mlp vs real      : 0.0622 +/- 0.0107
+  #   trained v0_seed42 vs real  : 0.7238 +/- 0.0534  -> 22.5x the floor
+  #
+  # Unlike SIFT, the untrained generator starts near the floor and training
+  # moves it away, so alpha is sized on the trained-v0 gap: 2.5% of v0's
+  # |adv_loss| (0.538, mean over steps 20000-30000), matching the share
+  # configs/sift/v4.yaml chose. At the floor it contributes ~0.1%.
+  lid_reg_alpha: 0.01858
   lid_reg_k: 20
   lid_reg_max_points: 256
   num_workers: 0

@@ -1,0 +1,324 @@
+{
+  "config": "/workspace/nytimes-v3/v3_seed42/run_config.yaml",
+  "real_path": "/workspace/data-cache/nytimes_250k_l2_clean.npy",
+  "num_samples": 50000,
+  "sample_seed": 42,
+  "conditions": {
+    "k": 100,
+    "k_hub": 10,
+    "nlist": 256,
+    "max_rows": 20000,
+    "seed": 42,
+    "metric": "angular"
+  },
+  "radii": [
+    1.1,
+    1.2,
+    1.25,
+    1.3,
+    1.4,
+    1.448
+  ],
+  "real": {
+    "lid_median": 55.84171653253679,
+    "relative_contrast_median": 1.2691843077488718,
+    "hubness_skew": 2.5937613241228137,
+    "ivf_gini": 0.7958828124999999,
+    "lid_discarded_queries": 0,
+    "median_nn1_distance": 1.1046121716499329,
+    "effective_rank": 247.94334411621094
+  },
+  "checkpoints": {
+    "step9000": {
+      "path": "/workspace/nytimes-v3/v3_seed42/checkpoint_step_9000.pt",
+      "step": 9000,
+      "learned_radius": 1.1957298517227173,
+      "radius_min": 0.2,
+      "radius_max": 1.5,
+      "direction_effective_rank": 65.32352447509766,
+      "tangent_effective_rank": 221.0290069580078,
+      "invariants": {
+        "u_norm_err": 1.7881393432617188e-07,
+        "t_norm_err": 2.384185791015625e-07,
+        "max_abs_dot": 5.327165126800537e-07
+      },
+      "rows": {
+        "learned_r": {
+          "lid_median": 55.67875140237666,
+          "relative_contrast_median": 1.2167894748760273,
+          "hubness_skew": 3.1644191516065043,
+          "ivf_gini": 0.746082421875,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 1.152855634689331,
+          "effective_rank": 230.50340270996094
+        },
+        "r_1.1": {
+          "lid_median": 52.12365686438262,
+          "relative_contrast_median": 1.229434401596758,
+          "hubness_skew": 3.065616095969711,
+          "ivf_gini": 0.6887140624999999,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 1.1389948725700378,
+          "effective_rank": 225.76800537109375
+        },
+        "r_1.2": {
+          "lid_median": 55.74624372920118,
+          "relative_contrast_median": 1.2164300231386833,
+          "hubness_skew": 3.1751776894716195,
+          "ivf_gini": 0.7108874999999999,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 1.153339684009552,
+          "effective_rank": 230.61004638671875
+        },
+        "r_1.25": {
+          "lid_median": 57.10739461625241,
+          "relative_contrast_median": 1.2125156681743308,
+          "hubness_skew": 3.2271467711794304,
+          "ivf_gini": 0.750952734375,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 1.157991111278534,
+          "effective_rank": 231.266357421875
+        },
+        "r_1.3": {
+          "lid_median": 58.24556098837507,
+          "relative_contrast_median": 1.2098865255399152,
+          "hubness_skew": 3.2592185478313374,
+          "ivf_gini": 0.7321046874999999,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 1.1613001823425293,
+          "effective_rank": 230.9497528076172
+        },
+        "r_1.4": {
+          "lid_median": 59.46917414038573,
+          "relative_contrast_median": 1.2081403925369214,
+          "hubness_skew": 3.336818265799671,
+          "ivf_gini": 0.7464625,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 1.1642653346061707,
+          "effective_rank": 228.2008819580078
+        },
+        "r_1.448": {
+          "lid_median": 59.64594008313632,
+          "relative_contrast_median": 1.2082152209207973,
+          "hubness_skew": 3.3526683129053265,
+          "ivf_gini": 0.7501695312500001,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 1.1649320721626282,
+          "effective_rank": 226.28167724609375
+        },
+        "trunk_only": {
+          "lid_median": 18.75771852899078,
+          "relative_contrast_median": 1.707738818042218,
+          "hubness_skew": 1.536096606123854,
+          "ivf_gini": 0.21888984374999998,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 0.8047149777412415,
+          "effective_rank": 65.32352447509766
+        },
+        "tangent_only": {
+          "lid_median": 59.69838880262232,
+          "relative_contrast_median": 1.2098794891562044,
+          "hubness_skew": 3.2841661100907236,
+          "ivf_gini": 0.748966796875,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 1.1638067364692688,
+          "effective_rank": 221.0290069580078
+        }
+      }
+    },
+    "step20000": {
+      "path": "/workspace/nytimes-v3/v3_seed42/checkpoint_step_20000.pt",
+      "step": 20000,
+      "learned_radius": 1.3730261325836182,
+      "radius_min": 0.2,
+      "radius_max": 1.5,
+      "direction_effective_rank": 54.94202423095703,
+      "tangent_effective_rank": 213.9304656982422,
+      "invariants": {
+        "u_norm_err": 1.7881393432617188e-07,
+        "t_norm_err": 1.7881393432617188e-07,
+        "max_abs_dot": 7.078051567077637e-07
+      },
+      "rows": {
+        "learned_r": {
+          "lid_median": 33.12334501963299,
+          "relative_contrast_median": 1.33637144685822,
+          "hubness_skew": 2.124963651559613,
+          "ivf_gini": 0.6548492187499999,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 1.0467431545257568,
+          "effective_rank": 214.44338989257812
+        },
+        "r_1.1": {
+          "lid_median": 29.690498640223993,
+          "relative_contrast_median": 1.3874465473383972,
+          "hubness_skew": 1.8860190941200694,
+          "ivf_gini": 0.5658125,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 0.997769296169281,
+          "effective_rank": 192.93069458007812
+        },
+        "r_1.2": {
+          "lid_median": 31.17280284580356,
+          "relative_contrast_median": 1.3636722233787544,
+          "hubness_skew": 1.9321191547896357,
+          "ivf_gini": 0.5725480468749999,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 1.01986426115036,
+          "effective_rank": 204.31004333496094
+        },
+        "r_1.25": {
+          "lid_median": 31.822113035823882,
+          "relative_contrast_median": 1.353768021990158,
+          "hubness_skew": 1.9796584467209843,
+          "ivf_gini": 0.6126492187499999,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 1.0289914011955261,
+          "effective_rank": 208.4642333984375
+        },
+        "r_1.3": {
+          "lid_median": 32.39015529185063,
+          "relative_contrast_median": 1.3458895534829183,
+          "hubness_skew": 2.033367096502598,
+          "ivf_gini": 0.601784375,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 1.0368600487709045,
+          "effective_rank": 211.59727478027344
+        },
+        "r_1.4": {
+          "lid_median": 33.350648474097426,
+          "relative_contrast_median": 1.333696229625796,
+          "hubness_skew": 2.1490117830716917,
+          "ivf_gini": 0.6191429687500001,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 1.049911916255951,
+          "effective_rank": 215.01809692382812
+        },
+        "r_1.448": {
+          "lid_median": 33.700287129870986,
+          "relative_contrast_median": 1.3301255290516352,
+          "hubness_skew": 2.2038602550445945,
+          "ivf_gini": 0.5972535156250001,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 1.054842233657837,
+          "effective_rank": 215.4750518798828
+        },
+        "trunk_only": {
+          "lid_median": 15.381069835866947,
+          "relative_contrast_median": 1.9291276555404844,
+          "hubness_skew": 1.4532052251243233,
+          "ivf_gini": 0.19881562499999994,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 0.7012395560741425,
+          "effective_rank": 54.94202423095703
+        },
+        "tangent_only": {
+          "lid_median": 34.196989546992846,
+          "relative_contrast_median": 1.3267764101876403,
+          "hubness_skew": 2.3376123692189057,
+          "ivf_gini": 0.6090093750000001,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 1.0602862238883972,
+          "effective_rank": 213.9304656982422
+        }
+      }
+    },
+    "step30000": {
+      "path": "/workspace/nytimes-v3/v3_seed42/checkpoint_step_30000.pt",
+      "step": 30000,
+      "learned_radius": 1.4480782747268677,
+      "radius_min": 0.2,
+      "radius_max": 1.5,
+      "direction_effective_rank": 48.87399673461914,
+      "tangent_effective_rank": 203.63185119628906,
+      "invariants": {
+        "u_norm_err": 1.7881393432617188e-07,
+        "t_norm_err": 1.7881393432617188e-07,
+        "max_abs_dot": 7.236376404762268e-07
+      },
+      "rows": {
+        "learned_r": {
+          "lid_median": 24.213813257282048,
+          "relative_contrast_median": 1.448789726190896,
+          "hubness_skew": 2.4403723979919856,
+          "ivf_gini": 0.4941609375,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 0.9656656682491302,
+          "effective_rank": 203.0458221435547
+        },
+        "r_1.1": {
+          "lid_median": 21.815413709639145,
+          "relative_contrast_median": 1.5257669529076376,
+          "hubness_skew": 1.6312827116047235,
+          "ivf_gini": 0.45613984374999994,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 0.9029645919799805,
+          "effective_rank": 174.2332000732422
+        },
+        "r_1.2": {
+          "lid_median": 22.62698590453284,
+          "relative_contrast_median": 1.4948297119681333,
+          "hubness_skew": 1.791670715888817,
+          "ivf_gini": 0.435395703125,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 0.9260548651218414,
+          "effective_rank": 186.8996124267578
+        },
+        "r_1.25": {
+          "lid_median": 23.036090238268162,
+          "relative_contrast_median": 1.4826462034131966,
+          "hubness_skew": 1.9043742903002716,
+          "ivf_gini": 0.4690378906249999,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 0.9359927177429199,
+          "effective_rank": 191.9358367919922
+        },
+        "r_1.3": {
+          "lid_median": 23.379405799315613,
+          "relative_contrast_median": 1.471902027933403,
+          "hubness_skew": 2.0522724892377386,
+          "ivf_gini": 0.45984218750000005,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 0.9452157616615295,
+          "effective_rank": 196.05882263183594
+        },
+        "r_1.4": {
+          "lid_median": 23.969728898348578,
+          "relative_contrast_median": 1.4544449969106008,
+          "hubness_skew": 2.295913413906112,
+          "ivf_gini": 0.4874652343749999,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 0.9599090814590454,
+          "effective_rank": 201.5968017578125
+        },
+        "r_1.448": {
+          "lid_median": 24.21289302364763,
+          "relative_contrast_median": 1.4487957767275819,
+          "hubness_skew": 2.44054430392293,
+          "ivf_gini": 0.49008046875,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 0.9656546115875244,
+          "effective_rank": 203.04408264160156
+        },
+        "trunk_only": {
+          "lid_median": 12.901562631792512,
+          "relative_contrast_median": 2.1510332456378434,
+          "hubness_skew": 1.104543231337814,
+          "ivf_gini": 0.18265507812500004,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 0.6274465024471283,
+          "effective_rank": 48.87399673461914
+        },
+        "tangent_only": {
+          "lid_median": 24.56832084108452,
+          "relative_contrast_median": 1.441201135884417,
+          "hubness_skew": 2.7499140925932726,
+          "ivf_gini": 0.47406875000000004,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 0.9741917252540588,
+          "effective_rank": 203.63185119628906
+        }
+      }
+    }
+  }
+}

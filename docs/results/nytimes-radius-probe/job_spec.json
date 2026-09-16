@@ -1,0 +1,25 @@
+{
+  "state": "done",
+  "orphaned": false,
+  "id": "wgan-synthetic-20260916T135324Z-a06c18",
+  "lane": "cpu",
+  "project": "wgan-synthetic",
+  "commit": "a06db849c71bda5bb00b42d8b13f329668bb4ab2",
+  "branch": "probe/nytimes-radius",
+  "cmd": [
+    "bash",
+    "scripts/nytimes_radius_probe_job.sh"
+  ],
+  "artifacts": [],
+  "timeout_s": 7200,
+  "vram_mb": null,
+  "attempts": 0,
+  "dedupe_key": "nytimes-radius-probe-a06db84",
+  "submitted_at": "2026-09-16T13:53:24Z",
+  "pid": null,
+  "runner_pid": 2366,
+  "exit_code": 0,
+  "error": null,
+  "stdout_log": "/workspace/queue/logs/wgan-synthetic-20260916T135324Z-a06c18.out",
+  "stderr_log": "/workspace/queue/logs/wgan-synthetic-20260916T135324Z-a06c18.err"
+}

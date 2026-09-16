@@ -208,3 +208,91 @@ def test_v3_job_script_runs_the_v3_seed42_config():
 def test_v3_requires_amp_off():
     assert _flatten(_load("v3.yaml"))["training.amp"] is False
     assert _flatten(_load("v3_seed42.yaml"))["training.amp"] is False
+
+
+def test_v4_is_v3_plus_the_regulariser():
+    """Catches any v4 key drifting from v3 beyond the three lid_reg keys: the
+    spec says v4 against v3 is one change, the regulariser."""
+    v3 = _flatten(_load("v3.yaml"))
+    v4 = _flatten(_load("v4.yaml"))
+    assert v4.pop("training.lid_reg_k") == 20
+    assert v4.pop("training.lid_reg_max_points") == 256
+    alpha = v4.pop("training.lid_reg_alpha")
+    assert isinstance(alpha, float) and alpha > 0.0, alpha
+    assert v4.pop("output_dir") == "runs/nytimes/v4"
+    v3.pop("output_dir")
+    assert v4 == v3
+
+
+def test_v4_keeps_distance_reg_off():
+    """distance_reg penalises a global scalar that already matches -- median
+    pairwise distance is 1.4038 real against 1.4054 for v3's selection -- while
+    the radius probe put the deficit at 1-NN. Turning it on would make v4 a
+    two-change rung."""
+    assert _flatten(_load("v4.yaml"))["training.distance_reg_alpha"] == 0.0
+
+
+def test_v4_records_where_its_alpha_came_from():
+    """An alpha nobody can trace is an invented number. The comment beside it
+    must name the probe that produced it and the committed result.
+
+    This cannot catch a pasted value that kept the comment; what it catches is
+    the provenance being dropped, which is how an invented number gets in."""
+    text = (ROOT / "v4.yaml").read_text(encoding="utf-8")
+    assert "lid_reg_scale_probe" in text
+    assert "docs/results/nytimes-v4-lid-reg-scale" in text
+
+
+def test_v4_seed42_is_v4_with_an_absolute_real_path_and_its_own_output_dir():
+    v4 = _flatten(_load("v4.yaml"))
+    inst = _flatten(_load("v4_seed42.yaml"))
+    assert inst.pop("output_dir") == "runs/nytimes/v4_seed42"
+    assert inst.pop("data.real_path") == "/workspace/data-cache/nytimes_250k.npy"
+    v4.pop("output_dir")
+    v4.pop("data.real_path")
+    assert inst == v4
+
+
+def test_v4_job_script_runs_the_v4_seed42_config():
+    script = (ROOT.parent.parent / "scripts" / "nytimes_v4_seed42_job.sh").read_text()
+    assert "configs/nytimes/v4_seed42.yaml" in script
+    assert "runs/nytimes/v4_seed42" in script
+
+
+def test_v4_job_script_documents_a_submit_without_vram():
+    """--vram-mb lets the scheduler admit a second job onto the card, which
+    the per-card lock then blocks until it dies with GpuBusyError.
+
+    Limitation, stated so nobody reads more into this than it says: the flag
+    is passed at `gpuq submit` time and never appears in the script body, so
+    this cannot police the actual invocation. What it does police is the
+    submit command the script documents in its header, which is the line a
+    human copies.
+
+    It reads that command specifically rather than searching the whole file,
+    because the script also warns about the flag by name -- a blanket "string
+    absent" check cannot tell a warning from a recommendation, and forbidding
+    the string would mean forbidding the warning.
+    """
+    script = (ROOT.parent.parent / "scripts" / "nytimes_v4_seed42_job.sh").read_text()
+    lines = script.splitlines()
+    starts = [i for i, ln in enumerate(lines) if "gpuq submit" in ln]
+    assert starts, "the script must document how to submit it"
+    documented = []
+    for start in starts:
+        i = start
+        while True:
+            documented.append(lines[i])
+            if not lines[i].rstrip().endswith("\\"):
+                break
+            i += 1
+    command = "\n".join(documented)
+    assert "--vram-mb" not in command, command
+    assert "--lane gpu" in command
+
+
+def test_v4_requires_amp_off():
+    """The set critic requires amp off, and lid_reg's pairwise numerics are
+    run outside autocast for the same reason; v4 inherits both from v3."""
+    assert _flatten(_load("v4.yaml"))["training.amp"] is False
+    assert _flatten(_load("v4_seed42.yaml"))["training.amp"] is False

@@ -145,10 +145,12 @@ for the reason given above.
 | Variant | Delta | Config | Run | Status |
 |---|---|---|---|---|
 | `v0` | plain WGAN-GP | `configs/glove/v0_seed42.yaml` through `configs/glove/v0_seed46.yaml`, five-seed instruments of `configs/glove/v0.yaml` | `runs/glove/v0_seed{42..46}` | trained -- n=5 seeds, see `## Noise floor` |
+| `v1` | `training.spectrum_reg_alpha: 5.0` | `configs/glove/v1_seed42.yaml` through `configs/glove/v1_seed46.yaml`, five-seed instruments of `configs/glove/v1.yaml` | `runs/glove/v1_seed{42..46}` | trained -- n=5 seeds, see `## v1: the covariance-spectrum regularizer` |
 
-Train `v0`:
+Train a rung:
 
     python -m src.train.train_wgan_gp --config configs/glove/v0.yaml
+    python -m src.train.train_wgan_gp --config configs/glove/v1.yaml
 
 ## Gate
 
@@ -340,3 +342,142 @@ then difference the five labelled series against `real`:
         --series v0_seed42 --series v0_seed43 --series v0_seed44 \
         --series v0_seed45 --series v0_seed46 \
         --output docs/datasets/glove_v0_noise_floor.json
+
+## v1: the covariance-spectrum regularizer
+
+`v1` is `v0` plus `training.spectrum_reg_alpha: 5.0`, and nothing else
+(`tests/test_glove_configs.py` checks this). It was chosen from two
+single-change candidates measured side by side at five seeds each.
+
+### Why this delta
+
+A comparison of `v0`'s samples against the corpus on the unit sphere
+(`v0_seed42`, 50,000 rows each; not committed, measured 2026-09-16) showed
+that `v0` learns GloVe's shared mean direction -- the mean unit vector has norm
+0.364 against the corpus's 0.355, and the two directions have cosine 0.99 --
+but spreads its variance over too few directions: participation ratio 50
+against 88, and the top 50 eigenvalues hold 81% of the variance against 60%.
+Its nearest neighbours are correspondingly too close (median cosine 0.74
+against 0.55). The deficit is dimensionality, not the mean offset, so both
+candidates target dimensionality:
+
+- `spectrum_reg` matches the normalized eigenvalue spectrum of the generated
+  batch to the real one. It has no term for LID, contrast, hubness or Gini,
+  so where those move, the movement is evidence. Its alpha, 5.0, is the value
+  DEEP's sweep found binding (`docs/datasets/deep.md`); it was not tuned here.
+- `lid_reg` matches the mean log-ratio profile of within-batch neighbours,
+  LID's sufficient statistic, so its LID is fitted rather than evidence. Its
+  alpha, 0.01858, puts the penalty at 2.5% of `v0`'s mean |adv_loss| (0.538
+  over steps 20,000-30,000) at the gap `tools/probes/lid_reg_scale_probe.py`
+  measured between trained `v0` and real: 0.7238 against a real-vs-real
+  floor of 0.0322. This is the same share `configs/sift/v4.yaml` chose.
+
+### Five-seed result
+
+Measured 2026-09-17 on the RTX 3060 Ti box, under the canonical conditions
+(N 20000, k 100, k_hub 10, nlist 256). Seeds 43-46 of all three families
+were trained at commit `b17bd5f`; seed 42 of `v1` and `lid_reg` at `5774227`,
+whose seed-42 configs differ from `b17bd5f`'s only in comments; and
+`v0_seed42` at `f0b47ec`. `src/` is identical across the three commits. Every
+run was sampled for 50,000 vectors at sampling seed 42, and `real` and all
+fifteen series were measured in one `eda_report` invocation. The report is
+committed as `docs/datasets/glove_reg_sweep_summary.json`, and each family's
+seed spread as `docs/datasets/glove_v1_noise_floor.json`,
+`docs/datasets/glove_lidreg_probe_noise_floor.json` and
+`docs/datasets/glove_v0_new_box_noise_floor.json`.
+
+**Series names.** The `v1` seeds were trained as `probe_spectrum_seed42`
+through `probe_spectrum_seed46` and renamed to `v1_seed42` through
+`v1_seed46` afterwards; only the file name and `output_dir` changed. The
+committed JSONs are byte-for-byte what the measurement produced, so they
+still label the `v1` series `probe_spectrum_seed<N>` and the `lid_reg` series
+`probe_lidreg_seed<N>`.
+
+The real column is the eight-draw subsample floor from
+`docs/datasets/glove_noise_floor.json` (measured 2026-08-10), because a
+generator is judged against draws of the corpus, not one draw. Synthetic
+cells are mean ± sample standard deviation over five seeds, with the
+min--max range and how many seeds fall inside the real range.
+
+| Statistic | real, 8 draws: mean (range) | `v0` | `v1` | `lid_reg` probe |
+|---|---|---|---|---|
+| LID median | 35.1238 (35.0318--35.2086) | 18.1422 ± 2.2867 (16.5308--22.0032), 0/5 | 37.4090 ± 1.1781 (36.0803--38.6250), 0/5 | 33.6437 ± 0.2491 (33.3343--33.8552), 0/5, fitted |
+| Relative contrast | 1.3895 (1.3875--1.3920) | 1.7623 ± 0.0828 (1.6393--1.8475), 0/5 | 1.3647 ± 0.0086 (1.3572--1.3744), 0/5 | 1.3974 ± 0.0026 (1.3940--1.4001), 0/5 |
+| Hubness skew | 4.4976 (3.4630--8.3308) | 1.8805 ± 0.2927 (1.6210--2.3560), 0/5 | 4.2606 ± 0.3036 (3.9470--4.6353), 5/5 | 3.4521 ± 0.1671 (3.2793--3.6797), 2/5 |
+| IVF cell-balance Gini | 0.5932 (0.5816--0.6034) | 0.2730 ± 0.0385 (0.2367--0.3369), 0/5 | 0.5968 ± 0.0221 (0.5690--0.6289), 2/5 | 0.5508 ± 0.0294 (0.5049--0.5843), 1/5 |
+
+What the table supports:
+
+- **`v1` moves all four statistics from far off to near the corpus.** Its
+  gap to the real mean, as a share of the real mean, is +6.51% on LID,
+  -1.78% on contrast, -5.27% on hubness and +0.61% on Gini, against `v0`'s
+  -48.35%, +26.83%, -58.19% and -53.98%.
+- **Hubness is inside the real range for every `v1` seed; Gini is inside on
+  the mean but for only two of five seeds.** Gini's `v1` spread (sd 0.0221)
+  is wider than the real range (0.0218 wide), so single seeds land on either
+  side of it.
+- **`v1` misses LID and contrast, in the harder-than-real direction.** LID is
+  too high and contrast too low for all five seeds. The real LID and contrast
+  ranges are narrow (0.5% and 0.3% of their means), so a miss of this size is
+  still well outside them.
+- **`lid_reg` misses in the easier-than-real direction** on contrast (too
+  high), hubness (too low) and Gini (too low). It is closer to real on
+  contrast than `v1`, and its LID is not evidence.
+- **`v1` and `lid_reg` are distinguishable** on LID (+3.77, 4.4 pooled sd),
+  contrast (-0.0327, 5.2 pooled sd) and hubness (+0.81, 3.3 pooled sd), where
+  their five-seed ranges do not overlap. On Gini they are not: +0.0461, 1.8
+  pooled sd, with overlapping ranges.
+
+`v1` was chosen over `lid_reg` because it reaches the corpus on the two
+statistics tied to hub structure without being trained on either, and
+because its remaining misses make the synthetic set harder to search, not
+easier. It does not meet the corpus on LID or contrast. No gate band is set
+from this; see `## Gate`.
+
+### v0 measures differently on the new box
+
+The `v0` column above is not the `v0` sweep in `## Noise floor`. That one was
+measured on 2026-08-10 on an earlier instance of the training box, whose card,
+driver and torch build this page does not record; this one ran on an RTX 3060
+Ti with driver 580.178.04 and torch 2.13.0+cu130. The two disagree on LID (old
+mean 16.4383, range 15.6974--17.4538; new mean 18.1422, range
+16.5308--22.0032) and contrast (old mean 1.8392, range 1.7811--1.8958; new
+mean 1.7623, range 1.6393--1.8475). The environments differ in more than one
+way, so the cause is not known. The old-box figures stay committed as measured; compare `v1`
+against the new-box `v0` in the table above, which was measured with it.
+
+### Reproduce
+
+Train each seed of each family, for example:
+
+    for seed in 42 43 44 45 46; do
+        python -m src.train.train_wgan_gp --config configs/glove/v1_seed${seed}.yaml
+        python -m src.sample.generate \
+            --checkpoint runs/glove/v1_seed${seed}/best_generator.pt \
+            --config configs/glove/v1_seed${seed}.yaml \
+            --num-samples 50000 --seed 42 \
+            --output-path runs/glove/v1_seed${seed}/samples.npy
+    done
+
+and the same for `configs/glove/v0_seed<N>.yaml` and
+`configs/glove/probe_lidreg_seed<N>.yaml`. Train one seed at a time:
+`train_wgan_gp` takes an exclusive per-card lock, so a second run on the same
+card waits and fails after `gpu_lock_timeout_s` (1800 s). Then measure all
+fifteen series in one invocation, labelling them as the committed JSONs do:
+
+    python -m src.eval.eda_report \
+        --real-path data/glove_250k.npy \
+        --synthetic-path v0_seed42=runs/glove/v0_seed42/samples.npy \
+        --synthetic-path probe_spectrum_seed42=runs/glove/v1_seed42/samples.npy \
+        --synthetic-path probe_lidreg_seed42=runs/glove/probe_lidreg_seed42/samples.npy \
+        ... (the same three for seeds 43-46) \
+        --output-dir runs/glove/reg_sweep \
+        --ann-max-rows 20000 --ann-k 100 --ann-hub-k 10 --metric angular
+
+and difference each family against `real`:
+
+    python -m src.eval.noise_floor --summary runs/glove/reg_sweep/summary.json \
+        --series probe_spectrum_seed42 --series probe_spectrum_seed43 \
+        --series probe_spectrum_seed44 --series probe_spectrum_seed45 \
+        --series probe_spectrum_seed46 \
+        --output docs/datasets/glove_v1_noise_floor.json

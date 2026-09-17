@@ -1,0 +1,11 @@
+# sha256 on tig-gpu under /workspace/sift-v4/v4_sift1m_x100k/, job
+# wgan-synthetic-20260917T114405Z-a772c5 at commit 50ca078. The three small
+# files were streamed off the box and re-hashed here; the two checkpoints
+# stay on the box.
+b03128dd60bb0d204a19759e647ecfcad97c8fe5b449b813d499b449533b291d  eda/summary.json
+8eaabafb649ac9b179a9ae818c3d0cb6098d12111caedddb70c36c867959c7e7  run_config.yaml
+1709a0ee677ea23c4e32df72fa3db313c3e2dfc487f291e328c24b907b35e75b  run_metadata.json
+09eaac8fd84d7cd4c96fd2ddbcbeb967d55d422fecfa7d26f0a34590879a1e6c  best_generator.pt (step 86,000, select_on cov_fro)
+af6624b4d2799f44a4578e4a55a1cf0e8a5b7b1a289ef2f0c59ac461bd134593  checkpoint_step_100000.pt
+# docs/datasets/sift_noise_floor.json, job wgan-synthetic-20260917T114209Z-a2b790
+384dc811730e59bfa17c8ec308dc5a71e5203d358fd91582750c5fc6e53779e2  sift_noise_floor.json

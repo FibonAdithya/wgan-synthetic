@@ -159,3 +159,52 @@ def test_v2c_100k_job_script_resumes_the_30k_run_into_the_100k_config():
     # The restored best_score may never be beaten; the script must then carry
     # the 30k run's selection over instead of failing on a missing file.
     assert "/workspace/nytimes-v2/v2c_seed42/best_generator.pt" in script
+
+
+V3_GENERATOR_KEYS = {
+    "model.generator_type": "spherical",
+    "model.tangent_hidden_dim": 512,
+    "model.radius_init": 0.95,
+    "model.radius_min": 0.2,
+    "model.radius_max": 1.5,
+}
+
+
+def test_v3_is_v2c_with_the_generator_swapped():
+    v2c = _flatten(_load("v2c.yaml"))
+    v3 = _flatten(_load("v3.yaml"))
+    for key, value in V3_GENERATOR_KEYS.items():
+        assert v3.pop(key) == value, key
+    assert v3.pop("output_dir") == "runs/nytimes/v3"
+    assert v3["model.skip_dim"] == 256
+    for key in (
+        "model.generator_type",
+        "model.skip_init",
+        "model.skip_init_gain",
+        "output_dir",
+    ):
+        v2c.pop(key)
+    assert v3 == v2c
+
+
+def test_v3_seed42_is_v3_with_an_absolute_real_path_and_its_own_output_dir():
+    v3 = _flatten(_load("v3.yaml"))
+    inst = _flatten(_load("v3_seed42.yaml"))
+    assert inst.pop("output_dir") == "runs/nytimes/v3_seed42"
+    assert inst.pop("data.real_path") == "/workspace/data-cache/nytimes_250k.npy"
+    v3.pop("output_dir")
+    v3.pop("data.real_path")
+    assert inst == v3
+
+
+def test_v3_job_script_runs_the_v3_seed42_config():
+    script = (ROOT.parent.parent / "scripts" / "nytimes_v3_seed42_job.sh").read_text()
+    assert "configs/nytimes/v3_seed42.yaml" in script
+    assert "runs/nytimes/v3_seed42" in script
+    assert "/workspace/nytimes-v3/v3_seed42" in script
+    assert "REAL=/workspace/data-cache/nytimes_250k.npy" in script
+
+
+def test_v3_requires_amp_off():
+    assert _flatten(_load("v3.yaml"))["training.amp"] is False
+    assert _flatten(_load("v3_seed42.yaml"))["training.amp"] is False

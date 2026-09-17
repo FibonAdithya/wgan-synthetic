@@ -1,0 +1,249 @@
+{
+  "config": "/workspace/nytimes-v2/v2c_seed42/run_config.yaml",
+  "real_path": "/workspace/data-cache/nytimes_250k_l2_clean.npy",
+  "num_samples": 50000,
+  "sample_seed": 42,
+  "conditions": {
+    "k": 100,
+    "k_hub": 10,
+    "nlist": 256,
+    "max_rows": 20000,
+    "seed": 42,
+    "metric": "angular"
+  },
+  "scales": [
+    0.0,
+    0.25,
+    0.5,
+    1.0,
+    2.0,
+    4.0
+  ],
+  "real": {
+    "lid_median": 55.84171653253679,
+    "relative_contrast_median": 1.2691843077488718,
+    "hubness_skew": 2.5937613241228137,
+    "ivf_gini": 0.7958828124999999,
+    "lid_discarded_queries": 0,
+    "median_nn1_distance": 1.1046121716499329,
+    "effective_rank": 247.94334411621094
+  },
+  "checkpoints": {
+    "best_step4000": {
+      "path": "/workspace/nytimes-v2/v2c_seed42/best_generator.pt",
+      "step": 4000,
+      "trunk_energy": 700.4714965820312,
+      "skip_energy": 247.4662628173828,
+      "skip_share": 0.2610575012584901,
+      "rows": {
+        "scale_0": {
+          "lid_median": 70.20001743016135,
+          "relative_contrast_median": 1.1885611781242176,
+          "hubness_skew": 1.2521201983748789,
+          "ivf_gini": 0.798168359375,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 1.1889438033103943,
+          "effective_rank": 210.17266845703125
+        },
+        "scale_0.25": {
+          "lid_median": 68.69940083304488,
+          "relative_contrast_median": 1.1957554732888234,
+          "hubness_skew": 4.011562647206739,
+          "ivf_gini": 0.78815234375,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 1.0888478755950928,
+          "effective_rank": 210.1435089111328
+        },
+        "scale_0.5": {
+          "lid_median": 65.71821326472178,
+          "relative_contrast_median": 1.21026781215766,
+          "hubness_skew": 11.866293115754754,
+          "ivf_gini": 0.821333984375,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 0.8937504589557648,
+          "effective_rank": 210.04554748535156
+        },
+        "scale_1": {
+          "lid_median": 61.83731684130899,
+          "relative_contrast_median": 1.2302856096805939,
+          "hubness_skew": 24.23301148908801,
+          "ivf_gini": 0.8554109375000001,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 0.5887885987758636,
+          "effective_rank": 209.871337890625
+        },
+        "scale_2": {
+          "lid_median": 59.967627007333334,
+          "relative_contrast_median": 1.2407208157023089,
+          "hubness_skew": 29.807943109903253,
+          "ivf_gini": 0.878481640625,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 0.32846060395240784,
+          "effective_rank": 210.15292358398438
+        },
+        "scale_4": {
+          "lid_median": 59.94713179684243,
+          "relative_contrast_median": 1.2406426225041878,
+          "hubness_skew": 27.461769055755553,
+          "ivf_gini": 0.87082734375,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 0.17510662227869034,
+          "effective_rank": 210.81243896484375
+        },
+        "trunk_only": {
+          "lid_median": 41.26488172549941,
+          "relative_contrast_median": 1.3822523927825796,
+          "hubness_skew": 11.424100093312035,
+          "ivf_gini": 0.6403433593750001,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 0.045944733545184135,
+          "effective_rank": 90.1646499633789
+        }
+      }
+    },
+    "step30000": {
+      "path": "/workspace/nytimes-v2/v2c_seed42/checkpoint_step_30000.pt",
+      "step": 30000,
+      "trunk_energy": 366.46258544921875,
+      "skip_energy": 394.5076904296875,
+      "skip_share": 0.5184272013437563,
+      "rows": {
+        "scale_0": {
+          "lid_median": 64.71858254874094,
+          "relative_contrast_median": 1.2046266799272827,
+          "hubness_skew": 1.2550110192083035,
+          "ivf_gini": 0.7346257812500001,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 1.172999620437622,
+          "effective_rank": 184.45443725585938
+        },
+        "scale_0.25": {
+          "lid_median": 64.44790503580785,
+          "relative_contrast_median": 1.206706999925549,
+          "hubness_skew": 1.82758188338109,
+          "ivf_gini": 0.741595703125,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 1.1383153796195984,
+          "effective_rank": 184.51547241210938
+        },
+        "scale_0.5": {
+          "lid_median": 63.316571557256275,
+          "relative_contrast_median": 1.2132190421448934,
+          "hubness_skew": 3.7396899231637812,
+          "ivf_gini": 0.7617800781249999,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 1.0492069721221924,
+          "effective_rank": 184.63235473632812
+        },
+        "scale_1": {
+          "lid_median": 60.15979534620099,
+          "relative_contrast_median": 1.2333596783828762,
+          "hubness_skew": 10.247864563405091,
+          "ivf_gini": 0.785707421875,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 0.8273530900478363,
+          "effective_rank": 184.86492919921875
+        },
+        "scale_2": {
+          "lid_median": 56.715615172786826,
+          "relative_contrast_median": 1.2589225003823914,
+          "hubness_skew": 17.308186819641172,
+          "ivf_gini": 0.832365625,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 0.5235033333301544,
+          "effective_rank": 185.1997528076172
+        },
+        "scale_4": {
+          "lid_median": 54.7937558325151,
+          "relative_contrast_median": 1.2738286598335935,
+          "hubness_skew": 19.66761403068994,
+          "ivf_gini": 0.82558359375,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 0.29067470133304596,
+          "effective_rank": 182.7524871826172
+        },
+        "trunk_only": {
+          "lid_median": 22.90762450167967,
+          "relative_contrast_median": 1.9108630361074104,
+          "hubness_skew": 2.6987503856962087,
+          "ivf_gini": 0.35057812499999996,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 0.052328627556562424,
+          "effective_rank": 23.5983829498291
+        }
+      }
+    },
+    "step100000": {
+      "path": "/workspace/nytimes-v2/v2c_seed42_100k/checkpoint_step_100000.pt",
+      "step": 100000,
+      "trunk_energy": 507.6294250488281,
+      "skip_energy": 653.3189697265625,
+      "skip_share": 0.5627459176193276,
+      "rows": {
+        "scale_0": {
+          "lid_median": 62.19964046077973,
+          "relative_contrast_median": 1.2145132112415786,
+          "hubness_skew": 1.5308831665880653,
+          "ivf_gini": 0.697705078125,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 1.163212776184082,
+          "effective_rank": 182.49984741210938
+        },
+        "scale_0.25": {
+          "lid_median": 62.13810953550701,
+          "relative_contrast_median": 1.2153731532164271,
+          "hubness_skew": 1.6263608387459325,
+          "ivf_gini": 0.706379296875,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 1.1364045143127441,
+          "effective_rank": 183.0734405517578
+        },
+        "scale_0.5": {
+          "lid_median": 62.00648195059349,
+          "relative_contrast_median": 1.217574382482763,
+          "hubness_skew": 2.7503833161508275,
+          "ivf_gini": 0.7383488281249999,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 1.0665749907493591,
+          "effective_rank": 184.45523071289062
+        },
+        "scale_1": {
+          "lid_median": 61.024782936396534,
+          "relative_contrast_median": 1.2265204782795989,
+          "hubness_skew": 8.874425066089143,
+          "ivf_gini": 0.783265234375,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 0.8819396197795868,
+          "effective_rank": 187.417236328125
+        },
+        "scale_2": {
+          "lid_median": 57.980462322032615,
+          "relative_contrast_median": 1.243883607154362,
+          "hubness_skew": 16.432721745368827,
+          "ivf_gini": 0.7771460937500001,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 0.6073892712593079,
+          "effective_rank": 184.5713653564453
+        },
+        "scale_4": {
+          "lid_median": 48.603585820673786,
+          "relative_contrast_median": 1.3036982859310609,
+          "hubness_skew": 8.86261059577478,
+          "ivf_gini": 0.6997535156250001,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 0.3851671516895294,
+          "effective_rank": 141.8572998046875
+        },
+        "trunk_only": {
+          "lid_median": 21.569313104569964,
+          "relative_contrast_median": 1.7725302034552877,
+          "hubness_skew": 2.460742294335333,
+          "ivf_gini": 0.17955312499999998,
+          "lid_discarded_queries": 0,
+          "median_nn1_distance": 0.18666116148233414,
+          "effective_rank": 30.875532150268555
+        }
+      }
+    }
+  }
+}

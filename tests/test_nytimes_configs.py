@@ -224,7 +224,9 @@ def test_v3_seed42_100k_is_v3_seed42_with_the_budget_raised():
 
 
 def test_v3_100k_job_script_resumes_the_30k_run_into_the_100k_config():
-    script = (ROOT.parent.parent / "scripts" / "nytimes_v3_seed42_100k_job.sh").read_text()
+    script = (
+        ROOT.parent.parent / "scripts" / "nytimes_v3_seed42_100k_job.sh"
+    ).read_text()
     assert "configs/nytimes/v3_seed42_100k.yaml" in script
     assert "runs/nytimes/v3_seed42_100k" in script
     assert "--resume" in script

@@ -63,14 +63,14 @@ The synthetic column is `v4` at 100k, the retrain's selected checkpoint
 `docs/results/sift-v4-x100k-retrain/eda/summary.json`. One seed; see `## Gate`
 for how far off real each is and the bands that admit it.
 
-Fill the real column with:
+Reproduce the real column with:
 
-    python -m src.eval.eda_report \
-        --real-path data/sift_250k.npy \
-        --output-dir runs/sift/profile \
-        --ann-max-rows 20000 --ann-k 100 --ann-hub-k 10
+    python -m src.data.fetch sift --rows 1000000 --seed 42
+    PYTHONPATH=. python scripts/sift_real_noise_floor.py \
+        --real-path data/sift_1m.npy --out runs/sift/sift_noise_floor.json
 
-Read the four values out of runs/sift/profile/summary.json (written by the command above).
+and read `spread.<statistic>.mean` out of the JSON it writes. On the training
+box the whole step is one queue job, `scripts/sift_data_job.sh`.
 
 ## Model family
 

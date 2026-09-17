@@ -1,20 +1,19 @@
-# GloVe probe: v0_seed42 plus the covariance-spectrum regularizer (spectrum_reg).
-# One seed of a five-seed measurement instrument (seeds 42-46), not a ladder rung: promoting a probe to
-# v1 is a human decision (AGENTS.md).
+# GloVe v1 seed sweep, run 42: v0_seed42 plus the covariance-spectrum
+# regularizer, which is v1's one delta (configs/glove/v1.yaml). A measurement
+# instrument of the rung, not a rung.
 #
-# Why this term: v0 spreads GloVe's variance over too few directions --
-# participation ratio 50 vs real 88, top-50 eigenvalue share 81% vs 60%.
-# spectrum_reg matches the normalized eigenvalue spectrum directly.
+# Provenance: trained at commit b17bd5f under the name probe_spectrum_seed42
+# (output_dir runs/glove/probe_spectrum_seed42), before the probe was chosen
+# as v1. Renamed afterwards for clarity; only the file name and output_dir
+# changed. Run records and the committed sweep JSONs still use the old name.
 #
-# Why alpha 5.0: DEEP's sweep (docs/datasets/deep_seed_sweep_summary.json) moved
-# effective_rank at 5.0 and not at 0.1 or 1.0 -- a threshold, not a slope. On
-# DEEP it moved effective_rank without moving the four gate statistics, so this
-# probe asks whether widening the spectrum brings GloVe's hubs with it.
-#
-# Deltas from v0_seed42: device, output_dir, and spectrum_reg_alpha.
+# Deltas from configs/glove/v1.yaml: seed, output_dir, data.real_path (absolute,
+# because gpuq runs each job in a fresh worktree without data/) and device
+# (cuda:0, the card the runner pins through CUDA_VISIBLE_DEVICES).
+# Deltas from v0_seed42: device, output_dir and spectrum_reg_alpha.
 seed: 42
 device: cuda:0
-output_dir: runs/glove/probe_spectrum_seed42
+output_dir: runs/glove/v1_seed42
 
 data:
   real_path: /workspace/data-cache/glove_250k.npy

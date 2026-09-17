@@ -464,6 +464,16 @@ CALIBRATED_BANDS = {
     # hubness_skew and ivf_gini stay unset because the ladder already matches
     # real within noise (0.04 and 0.27 pooled sd), not because they are noisy.
     "deep": {"lid_median", "relative_contrast_median"},
+    # GloVe, 2026-09-17: a tolerance around real's mean, not DEEP's regression
+    # guard. Real side is the eight-draw floor, docs/datasets/glove_noise_floor.json;
+    # the five-seed v1 and v0 sweeps it was checked against are
+    # docs/datasets/glove_v1_noise_floor.json and glove_v0_*noise_floor.json.
+    "glove": {
+        "lid_median",
+        "relative_contrast_median",
+        "hubness_skew",
+        "ivf_gini",
+    },
 }
 
 
@@ -525,6 +535,55 @@ def test_the_calibrated_deep_bands_admit_every_cell_of_the_sweep_they_came_from(
             assert low <= value <= high, (
                 f"deep.{name} band [{low}, {high}] excludes {cell} ({value}), "
                 "which it was calibrated from"
+            )
+
+
+def _glove_per_seed(filename: str) -> list[dict]:
+    path = Path(__file__).resolve().parents[1] / "docs" / "datasets" / filename
+    return json.loads(path.read_text(encoding="utf-8"))["per_seed"]
+
+
+def test_the_glove_bands_admit_every_real_draw_and_every_v1_seed():
+    """The bands say how close to real counts as close enough, and v1 was
+    judged close enough. Real draws must pass too: these bands are centred on
+    real, unlike DEEP's, so a real draw outside them means a mis-derived band.
+    """
+    gate = check_gate.load_gate(check_gate.GATES_DIR / "glove.yaml")
+    cells = {
+        **{
+            f"real_draw{i}": row
+            for i, row in enumerate(_glove_per_seed("glove_noise_floor.json"))
+        },
+        **{
+            f"v1_seed{42 + i}": row
+            for i, row in enumerate(_glove_per_seed("glove_v1_noise_floor.json"))
+        },
+    }
+
+    for name in check_gate.GATE_STATISTICS:
+        low, high = check_gate.band_bounds(gate["statistics"][name])
+        for cell, row in cells.items():
+            assert low <= row[name] <= high, (
+                f"glove.{name} band [{low}, {high}] excludes {cell} ({row[name]})"
+            )
+
+
+@pytest.mark.parametrize(
+    "filename", ["glove_v0_noise_floor.json", "glove_v0_new_box_noise_floor.json"]
+)
+def test_every_glove_band_rejects_every_v0_seed(filename: str):
+    """Each statistic on its own must reject v0, on both boxes it was measured
+    on. Checked per statistic so that loosening any one band until v0 fits it
+    fails here, even though v0 would still fail the gate on the other three.
+    """
+    gate = check_gate.load_gate(check_gate.GATES_DIR / "glove.yaml")
+
+    for name in check_gate.GATE_STATISTICS:
+        low, high = check_gate.band_bounds(gate["statistics"][name])
+        for i, row in enumerate(_glove_per_seed(filename)):
+            assert not low <= row[name] <= high, (
+                f"glove.{name} band [{low}, {high}] admits v0 seed {42 + i} "
+                f"from {filename} ({row[name]})"
             )
 
 

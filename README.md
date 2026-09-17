@@ -27,10 +27,9 @@ AI working notes, kept for provenance and **not** authoritative:
 
 ## Datasets
 
-Each family gets its own ladder of variants and its own gate. SIFT, DEEP and
-NYTimes have trained ladders; GloVe has a trained `v0` and no rung above it;
-the other two have a `v0` baseline config and a documented profile waiting to
-be measured.
+Each family gets its own ladder of variants and its own gate. SIFT, DEEP,
+GloVe and NYTimes have trained ladders; GIST and OpenAI have a `v0` baseline
+config and a documented profile waiting to be measured.
 
 | Family | Dim | Metric | Ladder | Page |
 |---|---|---|---|---|

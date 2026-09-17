@@ -485,6 +485,16 @@ CALIBRATED_BANDS = {
         "hubness_skew",
         "ivf_gini",
     },
+    # SIFT, 2026-09-17: a tolerance around real's mean, set so the v4 100k
+    # retrain passes. Real side is the ten-draw floor,
+    # docs/datasets/sift_noise_floor.json; v4 is one seed, run twice
+    # (docs/results/v4-logratio/ and docs/results/sift-v4-x100k-retrain/).
+    "sift": {
+        "lid_median",
+        "relative_contrast_median",
+        "hubness_skew",
+        "ivf_gini",
+    },
 }
 
 
@@ -681,13 +691,113 @@ def test_v3_best_is_the_only_committed_nytimes_checkpoint_the_gate_passes():
     assert passed == {"v3_best"}
 
 
+SIFT_RESULTS = Path(__file__).resolve().parents[1] / "docs" / "results"
+SIFT_SUMMARIES = [
+    "sift-v4-x100k-retrain/eda/summary.json",
+    "v3-structured/eda_v3_30k/summary.json",
+    "v4-logratio/eda_ladder_100k_summary.json",
+    "v4-logratio/eda_ladder_all_summary.json",
+    "v4-logratio/eda_v0_v3_v4_30k_summary.json",
+    "v4-logratio/eda_v3_v4/summary.json",
+]
+# The entries measured from a v4 generator trained to 100,000 steps: the
+# retrain's selected and final checkpoints, and the 2026-08-10 run.
+SIFT_V4_100K = {
+    "sift-v4-x100k-retrain/eda/summary.json:v4_best",
+    "sift-v4-x100k-retrain/eda/summary.json:v4_step100000",
+    "v4-logratio/eda_ladder_100k_summary.json:v4",
+}
+
+
+def _sift_summary_entries() -> dict[str, dict]:
+    """Every stats entry in every committed SIFT canonical summary, keyed
+    `<path under docs/results>:<entry name>`."""
+    entries = {}
+    for rel in SIFT_SUMMARIES:
+        summary = json.loads((SIFT_RESULTS / rel).read_text(encoding="utf-8"))
+        for entry in summary["stats"]:
+            entries[f"{rel}:{entry['name']}"] = entry
+    return entries
+
+
+def test_the_sift_bands_admit_every_real_draw_and_the_v4_retrain():
+    """The owner chose to admit v4 at 100k, and the bands record that. Real
+    must pass too: these bands are centred on real, so a real draw outside
+    them means a mis-derived band."""
+    gate = check_gate.load_gate(check_gate.GATES_DIR / "sift.yaml")
+    floor = json.loads(
+        (
+            Path(__file__).resolve().parents[1]
+            / "docs"
+            / "datasets"
+            / "sift_noise_floor.json"
+        ).read_text(encoding="utf-8")
+    )["per_seed"]
+    entries = _sift_summary_entries()
+    real_rows = {k: v for k, v in entries.items() if k.endswith(":real")}
+    assert len(floor) == 10 and len(real_rows) == len(SIFT_SUMMARIES)
+    cells = {
+        **{f"real_draw{i}": row for i, row in enumerate(floor)},
+        **real_rows,
+        **{k: entries[k] for k in SIFT_V4_100K},
+    }
+
+    for name in check_gate.GATE_STATISTICS:
+        low, high = check_gate.band_bounds(gate["statistics"][name])
+        for cell, row in cells.items():
+            assert low <= row[name] <= high, (
+                f"sift.{name} band [{low}, {high}] excludes {cell} ({row[name]})"
+            )
+
+
+def test_the_v4_100k_entries_are_the_only_committed_sift_sets_the_gate_passes():
+    """Through the real verdict, conditions included. A band loose enough to
+    pass a dense rung or a 30k v4 was not what the owner accepted."""
+    gate_file = check_gate.GATES_DIR / "sift.yaml"
+    gate = check_gate.load_gate(gate_file)
+    passed = set()
+    for key, entry in _sift_summary_entries().items():
+        if key.endswith(":real"):
+            continue
+        report = check_gate.evaluate(
+            gate,
+            entry,
+            run_dir=SIFT_RESULTS,
+            gate_file=gate_file,
+            stats_name=entry["name"],
+            allow_unset=False,
+            allow_condition_mismatch=False,
+        )
+        if report["verdict"] == "pass":
+            passed.add(key)
+
+    assert passed == SIFT_V4_100K
+
+
+def test_every_sift_band_rejects_some_committed_rung_on_its_own():
+    """No band may be decorative. Checked per statistic, so loosening any one
+    band until every rung fits it fails here even though the other three
+    would still hold the verdict."""
+    gate = check_gate.load_gate(check_gate.GATES_DIR / "sift.yaml")
+    others = {
+        k: v
+        for k, v in _sift_summary_entries().items()
+        if not k.endswith(":real") and k not in SIFT_V4_100K
+    }
+
+    for name in check_gate.GATE_STATISTICS:
+        low, high = check_gate.band_bounds(gate["statistics"][name])
+        rejected = [k for k, row in others.items() if not low <= row[name] <= high]
+        assert rejected, f"sift.{name} band [{low}, {high}] rejects no other rung"
+
+
 def test_check_gate_main_exits_non_zero_on_an_unset_shipped_gate(
     tmp_path: Path, write_run, monkeypatch
 ):
     run_dir = write_run(tmp_path)
     monkeypatch.setattr(
         "sys.argv",
-        ["check_gate", "--dataset", "sift", "--run-dir", str(run_dir)],
+        ["check_gate", "--dataset", "gist", "--run-dir", str(run_dir)],
     )
 
     with pytest.raises(SystemExit) as excinfo:

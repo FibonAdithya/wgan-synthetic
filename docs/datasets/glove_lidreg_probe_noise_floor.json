@@ -1,0 +1,99 @@
+{
+  "series": [
+    "probe_lidreg_seed42",
+    "probe_lidreg_seed43",
+    "probe_lidreg_seed44",
+    "probe_lidreg_seed45",
+    "probe_lidreg_seed46"
+  ],
+  "real_name": "real",
+  "conditions": {
+    "n": 20000,
+    "k": 100,
+    "nlist": 256
+  },
+  "real": {
+    "lid_median": 35.077082146972515,
+    "relative_contrast_median": 1.3894197834890463,
+    "hubness_skew": 5.639745524089706,
+    "ivf_gini": 0.5807324218750001
+  },
+  "per_seed": [
+    {
+      "lid_median": 33.817111862552395,
+      "relative_contrast_median": 1.3939851495682776,
+      "hubness_skew": 3.279268725318877,
+      "ivf_gini": 0.56237265625
+    },
+    {
+      "lid_median": 33.79929116881618,
+      "relative_contrast_median": 1.3965604204317175,
+      "hubness_skew": 3.6796719903995223,
+      "ivf_gini": 0.504858203125
+    },
+    {
+      "lid_median": 33.33434252045717,
+      "relative_contrast_median": 1.3999308138517184,
+      "hubness_skew": 3.567149141638215,
+      "ivf_gini": 0.5439535156249999
+    },
+    {
+      "lid_median": 33.85516437797523,
+      "relative_contrast_median": 1.3965235661963136,
+      "hubness_skew": 3.3327862961721926,
+      "ivf_gini": 0.584275390625
+    },
+    {
+      "lid_median": 33.41241424041979,
+      "relative_contrast_median": 1.4000954271317196,
+      "hubness_skew": 3.4018586568588667,
+      "ivf_gini": 0.5583339843749999
+    }
+  ],
+  "spread": {
+    "lid_median": {
+      "mean": 33.64366483404415,
+      "std": 0.2490946685451087,
+      "min": 33.33434252045717,
+      "max": 33.85516437797523,
+      "range_pct_of_mean": 1.548053281612283,
+      "cv_pct": 0.7403910060744894
+    },
+    "relative_contrast_median": {
+      "mean": 1.3974190754359495,
+      "std": 0.002588569119607066,
+      "min": 1.3939851495682776,
+      "max": 1.4000954271317196,
+      "range_pct_of_mean": 0.4372544837013807,
+      "cv_pct": 0.18523928613179383
+    },
+    "hubness_skew": {
+      "mean": 3.452146962077535,
+      "std": 0.16707476377997915,
+      "min": 3.279268725318877,
+      "max": 3.6796719903995223,
+      "range_pct_of_mean": 11.598673795731997,
+      "cv_pct": 4.839734971173764
+    },
+    "ivf_gini": {
+      "mean": 0.55075875,
+      "std": 0.029448275040009256,
+      "min": 0.504858203125,
+      "max": 0.584275390625,
+      "range_pct_of_mean": 14.419596148041233,
+      "cv_pct": 5.3468555951238645
+    }
+  },
+  "distance_from_real": {
+    "lid_median": -1.4334173129283627,
+    "relative_contrast_median": 0.007999291946903186,
+    "hubness_skew": -2.1875985620121714,
+    "ivf_gini": -0.029973671875000107
+  },
+  "distance_in_spreads": {
+    "lid_median": 2.7522218820830937,
+    "relative_contrast_median": 1.3091536127201708,
+    "hubness_skew": 5.46348831988562,
+    "ivf_gini": 0.3774204655006209
+  }
+}

@@ -50,10 +50,18 @@ locked here so a gate result stays readable against an older one.
 
 | Statistic | Real | Synthetic (best variant) |
 |---|---|---|
-| LID median | not yet measured | — |
-| Relative contrast | not yet measured | — |
-| Hubness skew | not yet measured | — |
-| IVF cell-balance Gini | not yet measured | — |
+| LID median | 17.6911 | 16.4147 |
+| Relative contrast | 2.2599 | 2.3231 |
+| Hubness skew | 1.9026 | 1.7937 |
+| IVF cell-balance Gini | 0.3039 | 0.2987 |
+
+The real column is the mean of ten disjoint 20,000-row draws of `sift_1m.npy`,
+L2-normalised, committed with per-draw values as
+`docs/datasets/sift_noise_floor.json` (`scripts/sift_real_noise_floor.py`).
+The synthetic column is `v4` at 100k, the retrain's selected checkpoint
+(`v4_best`, step 86,000), from
+`docs/results/sift-v4-x100k-retrain/eda/summary.json`. One seed; see `## Gate`
+for how far off real each is and the bands that admit it.
 
 Fill the real column with:
 

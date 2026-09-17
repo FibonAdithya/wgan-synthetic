@@ -378,7 +378,10 @@ Measured 2026-09-17 on the RTX 3060 Ti box, under the canonical conditions
 (N 20000, k 100, k_hub 10, nlist 256). Seeds 43-46 of all three families
 were trained at commit `b17bd5f`; seed 42 of `v1` and `lid_reg` at `5774227`,
 whose seed-42 configs differ from `b17bd5f`'s only in comments; and
-`v0_seed42` at `f0b47ec`. `src/` is identical across the three commits. Every
+`v0_seed42` at `f0b47ec`. The data, model, training and sampling code
+(`src/data/`, `src/models/`, `src/train/`, `src/sample/generate.py`,
+`src/device.py`) is identical across the three commits; `f0b47ec` also carries
+benchmark tooling the other two lack, none of it on the training path. Every
 run was sampled for 50,000 vectors at sampling seed 42, and `real` and all
 fifteen series were measured in one `eda_report` invocation. The report is
 committed as `docs/datasets/glove_reg_sweep_summary.json`, and each family's

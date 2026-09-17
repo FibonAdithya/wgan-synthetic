@@ -2,7 +2,7 @@
 # regularizer, which is v1's one delta (configs/glove/v1.yaml). A measurement
 # instrument of the rung, not a rung.
 #
-# Provenance: trained at commit b17bd5f under the name probe_spectrum_seed42
+# Provenance: trained at commit 5774227 under the name probe_spectrum_seed42
 # (output_dir runs/glove/probe_spectrum_seed42), before the probe was chosen
 # as v1. Renamed afterwards for clarity; only the file name and output_dir
 # changed. Run records and the committed sweep JSONs still use the old name.

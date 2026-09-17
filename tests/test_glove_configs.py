@@ -18,8 +18,9 @@ SEEDS = [42, 43, 44, 45, 46]
 INSTRUMENTS = [f"v0_seed{seed}" for seed in SEEDS]
 
 # v1 is v0 plus the covariance-spectrum regularizer. Its five seed instruments
-# were trained at b17bd5f under the name probe_spectrum_seed<N> and renamed
-# afterwards; only the file name and output_dir changed.
+# were trained under the name probe_spectrum_seed<N> (seed 42 at 5774227,
+# seeds 43-46 at b17bd5f) and renamed afterwards; only the file name and
+# output_dir changed.
 V1_DELTA = {"training.spectrum_reg_alpha"}
 V1_INSTRUMENTS = [f"v1_seed{seed}" for seed in SEEDS]
 
@@ -172,6 +173,20 @@ def test_lidreg_probe_seeds_agree_on_every_lid_reg_key():
     for key in LIDREG_KEYS:
         values = {_flatten(_load(name)).get(key) for name in LIDREG_PROBES}
         assert len(values) == 1, (key, values)
+
+
+def test_lidreg_probe_keeps_the_values_the_scale_probe_sized():
+    """Agreement across seeds is not enough: all five moving to k=10 together
+    would pass it, but alpha was sized from the gap measured at k=20."""
+    values = {
+        key: {_flatten(_load(name)).get(key) for name in LIDREG_PROBES}
+        for key in LIDREG_KEYS
+    }
+    assert values == {
+        "training.lid_reg_alpha": {0.01858},
+        "training.lid_reg_k": {20},
+        "training.lid_reg_max_points": {256},
+    }
 
 
 @pytest.mark.parametrize("name", ["v0", "v1"])

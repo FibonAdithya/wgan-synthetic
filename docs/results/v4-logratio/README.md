@@ -203,8 +203,9 @@ statistics are not sufficient on their own.
   both noise estimates that they are unlikely to be reseeds, but a paired
   comparison of two single runs is not a seed sweep. The open issue asking for 3–5
   seeds still applies before any of this justifies a band in `gates/sift.yaml`.
-- **No band was set.** `gates/sift.yaml` is unchanged and every band there is
-  still null.
+- **No band was set here.** `gates/sift.yaml` was left null by this page. Bands
+  were set on 2026-09-17, around real, after `v4` at 100k was retrained; see
+  `docs/results/sift-v4-x100k-retrain/` and `docs/datasets/sift.md`, `## Gate`.
 
 ## Supporting diagnostics
 

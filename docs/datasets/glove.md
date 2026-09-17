@@ -165,12 +165,31 @@ naming it. The gate file also pins the measurement conditions the bands were
 set under, since these statistics are not comparable across different N, k or
 nlist.
 
-Every band is currently null. Bands are set once this family has a trained
-ladder to show what is achievable; until then the gate file records that they
-are unset, and the checker says so instead of passing.
+**All four bands are set** (2026-09-17, after the `v1` five-seed sweep in
+`## v1: the covariance-spectrum regularizer`). They mean something different
+from DEEP's. `gates/deep.yaml` is a regression guard around what DEEP's ladder
+reaches, and real DEEP fails it. GloVe's bands are a **tolerance around
+real**: each is centred on the mean of the eight real-corpus draws in
+`docs/datasets/glove_noise_floor.json` and says how far from real still
+counts as close enough, so real passes.
 
-When they are set, `hubness_skew` is the one to be careful with, though not
-for the reason once written here. The measured profile above shows its
+The tolerances were a human judgement, made after seeing `v1`'s results: `v1`
+was judged close enough, and the bands record that. They are not derived from
+a noise floor. The real-side ranges on LID and contrast are 0.5% and 0.3% of
+their means, and bands that narrow would reject every trained rung, `v1`
+included. The tolerance and the rung numbers for each statistic are written
+next to its band in `gates/glove.yaml`. `v1` passes with little margin on LID:
+its highest seed is 0.011 under the upper bound.
+
+`tests/test_check_gate.py` checks the bands against the committed per-seed
+JSONs: all eight real draws and all five `v1` seeds pass every band, and each
+band on its own rejects every `v0` seed from both boxes. Running `check_gate`
+over `docs/datasets/glove_reg_sweep_summary.json` gives `pass` for `real` and
+for `v1`'s five seeds (`probe_spectrum_seed42`--`46`), and `fail` on all
+four statistics for every `v0` seed. The `lid_reg` probe passes on one seed
+of five; the other four fail on hubness (three seeds) or Gini (one).
+
+`hubness_skew` needs care, though not for the reason once written here. The measured profile above shows its
 subsample noise at the canonical N spans 3.46 to 8.33 on the real corpus
 alone. That does not make a band on it useless, only coarse: the `v0`
 five-seed sweep in `## Noise floor` below put `v0`'s own hubness skew at
@@ -186,8 +205,8 @@ Check a run against it:
     python -m src.eval.check_gate --dataset glove --run-dir runs/glove/profile
 
 It reads `summary.json` from that run directory, prints a JSON verdict, and
-exits non-zero when the run fails -- or, as now, when the bands are still
-unset, which is verdict `unset` and exit code 2. Pass `--allow-unset` to get
+exits non-zero when the run fails, or with verdict `unset` and exit code 2 if
+a band is null. Pass `--allow-unset` to get
 the report without the non-zero exit, and `--stats-name <label>` to check a
 synthetic series rather than `real`.
 
@@ -302,9 +321,9 @@ and seed-to-seed training variance are different sources of variance,
 measured by different procedures, which is why the two are reported as
 separate tables above rather than merged into one.
 
-No band is set from this measurement. Every band in `gates/glove.yaml`
-remains null: setting one is reserved for a human working from a full ladder,
-not from `v0` alone.
+No band was set from this measurement: setting one was reserved for a human
+working from a full ladder, not from `v0` alone. The bands were set later,
+from `v1`; see `## Gate`.
 
 Reproduce with. First, train each of the five seeds:
 
@@ -434,8 +453,8 @@ What the table supports:
 `v1` was chosen over `lid_reg` because it reaches the corpus on the two
 statistics tied to hub structure without being trained on either, and
 because its remaining misses make the synthetic set harder to search, not
-easier. It does not meet the corpus on LID or contrast. No gate band is set
-from this; see `## Gate`.
+easier. It does not reach the real-draw range on LID or contrast. The gate
+bands set afterwards treat those misses as within tolerance; see `## Gate`.
 
 ### v0 measures differently on the new box
 

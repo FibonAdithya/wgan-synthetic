@@ -7,11 +7,25 @@
 # different directions: a set can be too easy on contrast while being too
 # clustered on Gini, and one number would hide that.
 #
-# EVERY BAND BELOW IS UNSET (null). Bands are set once this family has a
-# trained ladder to show what is achievable; inventing numbers before that
-# would gate against a guess. While they are null, `check_gate` reports each
-# statistic as "unset" and exits non-zero with verdict "unset" -- an
-# unenforceable gate must not be mistaken for a passing one. Pass
+# ALL FOUR BANDS ARE SET, set 2026-09-17 after the v1 five-seed sweep.
+#
+# These bands mean something different from gates/deep.yaml's. DEEP's are a
+# regression guard around what its ladder reaches, and real DEEP fails them.
+# These are a TOLERANCE AROUND REAL: each is centred on the mean of eight
+# 20000-row draws of the real corpus (docs/datasets/glove_noise_floor.json),
+# and says how far from real still counts as close enough. Real passes, as it
+# should.
+#
+# The tolerances are a human judgement, made after seeing v1's results
+# (docs/datasets/glove_v1_noise_floor.json), not derived from a noise floor.
+# The real-side floor alone is far too narrow to admit any trained rung on LID
+# and contrast (ranges of 0.5% and 0.3% of the mean), so a band built from it
+# would gate against a standard no generator here meets. Every bound is
+# rounded outward to four decimals. Checked against the committed per-seed
+# JSONs by tests/test_check_gate.py: all eight real draws and all five v1
+# seeds pass every band, and every v0 seed, on both boxes, fails every band.
+#
+# While any band is null, `check_gate` exits 2 with verdict "unset". Pass
 # `--allow-unset` to run the checker for its report alone.
 #
 # To set a band, replace min and/or max with numbers. A band with one bound is
@@ -41,15 +55,22 @@ canonical:
 statistics:
   # Local intrinsic dimensionality, median over surviving queries. Too low
   # means the synthetic set is easier to search than the real one.
+  #
+  # Band = real mean 35.1238 +/- 10%. v1's five seeds span 36.08 to 38.62, so
+  # its highest seed sits 0.011 inside the upper bound: the 10% was chosen with
+  # that in view. v0 spans 15.70 to 22.00 across both boxes.
   lid_median:
-    min: null
-    max: null
+    min: 31.6113
+    max: 38.6362
 
   # Median (mean distance / nearest distance). Collapses toward 1.0 when
   # neighbours stop being distinguishable from the bulk.
+  #
+  # Band = real mean 1.3895 +/- 2.5%. v1 spans 1.3572 to 1.3744, all below
+  # real (harder to search); v0 spans 1.6393 to 1.8958.
   relative_contrast_median:
-    min: null
-    max: null
+    min: 1.3547
+    max: 1.4243
 
   # Skew of the k-occurrence distribution. High skew means a few hub vectors
   # dominate neighbour lists, which is a real property of glove and not
@@ -69,12 +90,21 @@ statistics:
   # See the "Hubness skew is below the noise floor at this N" and
   # "Noise floor" sections of docs/datasets/glove.md, and
   # docs/datasets/glove_noise_floor.json / docs/datasets/glove_v0_noise_floor.json.
+  #
+  # Band = the real eight-draw range itself, 3.4630 to 8.3308, rounded out. No
+  # tolerance is added: the range is already wide. v1 spans 3.95 to 4.64; v0
+  # spans 1.54 to 2.36. The lower bound is the lowest of only eight draws, so
+  # an unlucky real draw could land just under it.
   hubness_skew:
-    min: null
-    max: null
+    min: 3.4630
+    max: 8.3309
 
   # Gini of IVF cell occupancy at nlist above. 0.0 is a perfectly even
   # partition; a lopsided one drives how many cells a query must probe.
+  #
+  # Band = real mean 0.5932 +/- 10%. v1's seed spread (0.5690 to 0.6289) is
+  # wider than the real range (0.5816 to 0.6034), so a band on the real range
+  # would reject three of v1's five seeds on noise. v0 spans 0.2367 to 0.3369.
   ivf_gini:
-    min: null
-    max: null
+    min: 0.5339
+    max: 0.6526

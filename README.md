@@ -37,7 +37,7 @@ config and a documented profile waiting to be measured.
 | `gist` | 960 | `l2` | `v0` defined, not trained | `docs/datasets/gist.md` |
 | `deep` | 96 | `angular` | `v0`–`v2` trained | `docs/datasets/deep.md` |
 | `glove` | 100 | `angular` | `v0`–`v1` trained (5 seeds each) | `docs/datasets/glove.md` |
-| `nytimes` | 256 | `angular` | `v0`–`v3` trained, none meeting the bar | `docs/datasets/nytimes.md` |
+| `nytimes` | 256 | `angular` | `v0`–`v3` trained, `v3` meeting the bar | `docs/datasets/nytimes.md` |
 | `openai` | 1536 | `angular` | `v0` defined, not trained | `docs/datasets/openai.md` |
 
 Variant numbers are per dataset and are comparable only within one family.

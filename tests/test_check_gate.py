@@ -474,6 +474,17 @@ CALIBRATED_BANDS = {
         "hubness_skew",
         "ivf_gini",
     },
+    # NYTimes, 2026-09-17: a tolerance around the cleaned corpus's mean, set so
+    # v3's gate-selected checkpoint passes. Real side is the ten-draw floor,
+    # docs/datasets/nytimes_noise_floor.json (zero_and_duplicate_rows_removed).
+    # There is no seed sweep behind it: v3 is one seed,
+    # docs/results/nytimes-v3/, re-measured in nytimes-v3-seed42-100k/.
+    "nytimes": {
+        "lid_median",
+        "relative_contrast_median",
+        "hubness_skew",
+        "ivf_gini",
+    },
 }
 
 
@@ -585,6 +596,89 @@ def test_every_glove_band_rejects_every_v0_seed(filename: str):
                 f"glove.{name} band [{low}, {high}] admits v0 seed {42 + i} "
                 f"from {filename} ({row[name]})"
             )
+
+
+NYTIMES_RESULTS = Path(__file__).resolve().parents[1] / "docs" / "results"
+
+
+def _nytimes_summary_entries() -> dict[str, dict]:
+    """Every stats entry in every committed NYTimes canonical summary, keyed
+    `<results dir>:<entry name>`."""
+    entries = {}
+    for path in sorted(NYTIMES_RESULTS.glob("nytimes-*/eda_clean*summary.json")):
+        summary = json.loads(path.read_text(encoding="utf-8"))
+        for entry in summary["stats"]:
+            entries[f"{path.parent.name}:{entry['name']}"] = entry
+    return entries
+
+
+def test_the_nytimes_bands_admit_every_real_draw_and_v3_best():
+    """The owner judged v3's selected checkpoint close enough, and the bands
+    record that. Real must pass too: these bands are centred on the cleaned
+    real corpus, so a real draw outside them means a mis-derived band."""
+    gate = check_gate.load_gate(check_gate.GATES_DIR / "nytimes.yaml")
+    floor = json.loads(
+        (
+            Path(__file__).resolve().parents[1]
+            / "docs"
+            / "datasets"
+            / "nytimes_noise_floor.json"
+        ).read_text(encoding="utf-8")
+    )["zero_and_duplicate_rows_removed"]["per_seed"]
+    entries = _nytimes_summary_entries()
+    cells = {
+        **{f"real_draw{i}": row for i, row in enumerate(floor)},
+        **{k: v for k, v in entries.items() if k.endswith(":real")},
+        "nytimes-v3:v3_best": entries["nytimes-v3:v3_best"],
+        "nytimes-v3-seed42-100k:v3_best": entries["nytimes-v3-seed42-100k:v3_best"],
+    }
+    assert len(cells) > len(floor) + 2, "no committed real rows were found"
+
+    for name in check_gate.GATE_STATISTICS:
+        low, high = check_gate.band_bounds(gate["statistics"][name])
+        for cell, row in cells.items():
+            assert low <= row[name] <= high, (
+                f"nytimes.{name} band [{low}, {high}] excludes {cell} ({row[name]})"
+            )
+
+
+def test_every_nytimes_band_rejects_v0():
+    """Each statistic on its own must reject v0, so that loosening any one band
+    until v0 fits it fails here even though v0 would still fail the other
+    three."""
+    gate = check_gate.load_gate(check_gate.GATES_DIR / "nytimes.yaml")
+    v0 = _nytimes_summary_entries()["nytimes-v0-seed42:v0"]
+
+    for name in check_gate.GATE_STATISTICS:
+        low, high = check_gate.band_bounds(gate["statistics"][name])
+        assert not low <= v0[name] <= high, (
+            f"nytimes.{name} band [{low}, {high}] admits v0 ({v0[name]})"
+        )
+
+
+def test_v3_best_is_the_only_committed_nytimes_checkpoint_the_gate_passes():
+    """Through the real verdict, conditions included. A band loose enough to
+    pass a second checkpoint -- v2c's endpoint, a collapsed step -- was not
+    what the owner accepted."""
+    gate_file = check_gate.GATES_DIR / "nytimes.yaml"
+    gate = check_gate.load_gate(gate_file)
+    passed = set()
+    for key, entry in _nytimes_summary_entries().items():
+        if key.endswith(":real"):
+            continue
+        report = check_gate.evaluate(
+            gate,
+            entry,
+            run_dir=NYTIMES_RESULTS,
+            gate_file=gate_file,
+            stats_name=entry["name"],
+            allow_unset=False,
+            allow_condition_mismatch=False,
+        )
+        if report["verdict"] == "pass":
+            passed.add(entry["name"])
+
+    assert passed == {"v3_best"}
 
 
 def test_check_gate_main_exits_non_zero_on_an_unset_shipped_gate(

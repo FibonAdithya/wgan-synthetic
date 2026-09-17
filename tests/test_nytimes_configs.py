@@ -208,3 +208,33 @@ def test_v3_job_script_runs_the_v3_seed42_config():
 def test_v3_requires_amp_off():
     assert _flatten(_load("v3.yaml"))["training.amp"] is False
     assert _flatten(_load("v3_seed42.yaml"))["training.amp"] is False
+
+
+def test_v3_seed42_100k_is_v3_seed42_with_the_budget_raised():
+    """The continuation is the same instrument with only the budget and the
+    output directory moved; any other key drifting (the radius band, the
+    critic, the selector) would make the resume measure something else."""
+    inst = _flatten(_load("v3_seed42.yaml"))
+    cont = _flatten(_load("v3_seed42_100k.yaml"))
+    assert cont.pop("output_dir") == "runs/nytimes/v3_seed42_100k"
+    assert cont.pop("training.num_gen_steps") == 100000
+    inst.pop("output_dir")
+    assert inst.pop("training.num_gen_steps") == 30000
+    assert cont == inst
+
+
+def test_v3_100k_job_script_resumes_the_30k_run_into_the_100k_config():
+    script = (
+        ROOT.parent.parent / "scripts" / "nytimes_v3_seed42_100k_job.sh"
+    ).read_text()
+    assert "configs/nytimes/v3_seed42_100k.yaml" in script
+    assert "runs/nytimes/v3_seed42_100k" in script
+    assert "--resume" in script
+    assert "/workspace/nytimes-v3/v3_seed42/checkpoint_step_30000.pt" in script
+    assert "checkpoint_step_100000.pt" in script
+    # The restored best_score may never be beaten; the script must then carry
+    # the 30k run's selection over instead of failing on a missing file.
+    assert "/workspace/nytimes-v3/v3_seed42/best_generator.pt" in script
+    # runs/nytimes points at the box's persistent disk, so a crash 2 hours in
+    # leaves its checkpoints behind rather than losing them with the worktree.
+    assert "ln -sfn /workspace/nytimes-v3 runs/nytimes" in script

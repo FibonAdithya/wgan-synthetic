@@ -31,24 +31,24 @@ AI working notes, kept for provenance and **not** authoritative:
 
 ## Datasets
 
-Each family gets its own ladder of variants and its own gate. SIFT, DEEP and
-NYTimes have trained ladders; GloVe has a trained `v0` and no rung above it;
-the other two have a `v0` baseline config and a documented profile waiting to
-be measured.
+Each family gets its own ladder of variants and its own gate. SIFT, DEEP,
+GloVe and NYTimes have trained ladders; GIST and OpenAI have a `v0` baseline
+config and a documented profile waiting to be measured.
 
 | Family | Dim | Metric | Ladder | Page |
 |---|---|---|---|---|
 | `sift` | 128 | `l2` | `v0`–`v2` trained | `docs/datasets/sift.md` |
 | `gist` | 960 | `l2` | `v0` defined, not trained | `docs/datasets/gist.md` |
 | `deep` | 96 | `angular` | `v0`–`v2` trained | `docs/datasets/deep.md` |
-| `glove` | 100 | `angular` | `v0` trained (5 seeds) | `docs/datasets/glove.md` |
-| `nytimes` | 256 | `angular` | `v0`–`v2c` trained, none meeting the bar | `docs/datasets/nytimes.md` |
+| `glove` | 100 | `angular` | `v0`–`v1` trained (5 seeds each) | `docs/datasets/glove.md` |
+| `nytimes` | 256 | `angular` | `v0`–`v3` trained, `v3` meeting the bar | `docs/datasets/nytimes.md` |
 | `openai` | 1536 | `angular` | `v0` defined, not trained | `docs/datasets/openai.md` |
 
 Variant numbers are per dataset and are comparable only within one family.
 The SIFT and DEEP ladders live in `configs/sift/` and `configs/deep/`; every
-family except SIFT, DEEP and NYTimes has a single `v0.yaml` under its own
-directory in `configs/`; NYTimes has `v0` to `v2c` under `configs/nytimes/`.
+family except SIFT, DEEP, GloVe and NYTimes has a single `v0.yaml` under its own
+directory in `configs/`; GloVe has `v0` and `v1` under `configs/glove/`, and
+NYTimes has `v0` to `v3` under `configs/nytimes/`.
 To see all four SIFT variants overlaid on real SIFT
 in one report:
 
@@ -83,7 +83,8 @@ fetcher does not produce") for why the SIFT configs still point at
 
 ## Quick start
 
-1. Create environment and install dependencies:
+1. Create environment and install dependencies (`make setup` does all four
+   steps and is safe to re-run):
    - `python3 -m venv .venv`
    - `source .venv/bin/activate`
    - `pip install -r requirements.txt`

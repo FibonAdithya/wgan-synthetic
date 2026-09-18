@@ -7,12 +7,35 @@
 # different directions: a set can be too easy on contrast while being too
 # clustered on Gini, and one number would hide that.
 #
-# EVERY BAND BELOW IS UNSET (null). Bands are set once this family has a
-# trained ladder to show what is achievable; inventing numbers before that
-# would gate against a guess. While they are null, `check_gate` reports each
-# statistic as "unset" and exits non-zero with verdict "unset" -- an
-# unenforceable gate must not be mistaken for a passing one. Pass
-# `--allow-unset` to run the checker for its report alone.
+# ALL FOUR BANDS ARE SET, set 2026-09-17 after v3 and its 100k continuation.
+#
+# Like gates/glove.yaml, and unlike gates/deep.yaml, these are a TOLERANCE
+# AROUND REAL: each is centred on the mean of the ten 20000-row draws of the
+# CLEANED corpus in docs/datasets/nytimes_noise_floor.json
+# (`zero_and_duplicate_rows_removed`), and says how far from real still counts
+# as close enough. Real passes, as it should.
+#
+# The bands therefore fix the row filter as part of the locked conditions: a
+# run is measured against nytimes_250k_l2_clean.npy (scripts/make_nytimes_clean.py,
+# 197 zero rows and 31,949 exact duplicates dropped), never the as-shipped
+# corpus. Against the as-shipped corpus the real side scores hubness 28.8 to
+# 40.8 and LID 13.9 to 22.1, set by the zero rows each draw happens to get,
+# and would fail every band here. See "What needs a human" and "## Gate" in
+# docs/datasets/nytimes.md.
+#
+# The tolerances are a human judgement, made after seeing v3's results: the
+# owner judged v3's gate-selected checkpoint (step 9,000) close enough, and the
+# bands record that. They are not derived from a noise floor -- the real-side
+# ranges are 3.4% (LID), 0.8% (contrast), 18% (hubness) and 5.0% (Gini) of
+# their means -- and they rest on ONE training seed of v3, where GloVe's rested
+# on five. Every bound is rounded outward to four decimals. Checked against the
+# committed summaries by tests/test_check_gate.py: all ten real draws, the
+# canonical real row, and v3_best pass every band; each band on its own
+# rejects v0; and no other gate-selected or endpoint checkpoint in the family
+# passes all four.
+#
+# If a band is ever set back to null, `check_gate` exits 2 with verdict
+# "unset"; `--allow-unset` runs the checker for its report alone.
 #
 # To set a band, replace min and/or max with numbers. A band with one bound is
 # legal and counts as set: several of these statistics only fail in one
@@ -41,15 +64,23 @@ canonical:
 statistics:
   # Local intrinsic dimensionality, median over surviving queries. Too low
   # means the synthetic set is easier to search than the real one.
+  #
+  # Band = real mean 56.0130 +/- 5%. v3_best reads 55.6884. Every other
+  # gate-selected rung reads 61.6 or higher (v1 62.58, v2 61.61, v2b 68.13,
+  # v2c 62.73; v4, not committed here, 61.81); v0 reads 26.00.
   lid_median:
-    min: null
-    max: null
+    min: 53.2123
+    max: 58.8137
 
   # Median (mean distance / nearest distance). Collapses toward 1.0 when
   # neighbours stop being distinguishable from the bulk.
+  #
+  # Band = real mean 1.2695 +/- 5%. v3_best reads 1.2183, 4.0% below the mean
+  # and 0.0123 inside the lower bound: 5% was chosen with that in view, and is
+  # wider than the 3% allowance the v3 design spec states. v0 reads 1.5984.
   relative_contrast_median:
-    min: null
-    max: null
+    min: 1.2060
+    max: 1.3330
 
   # Skew of the k-occurrence distribution. High skew means a few hub vectors
   # dominate neighbour lists, which is a real property of nytimes and not
@@ -67,12 +98,24 @@ statistics:
   # the row filter becomes part of these locked conditions is a human
   # decision; see "What needs a human" in docs/datasets/nytimes.md and
   # docs/datasets/nytimes_noise_floor.json.
+  #
+  # Band = real mean 2.5072 -20% / +40%, asymmetric on purpose. The upper
+  # bound admits v3_best (3.3920, 1.22x the real ten-draw top of 2.7785) with
+  # 0.118 to spare. The lower bound
+  # rejects v0 (1.5361), which a symmetric +/-40% would admit by 0.03, and
+  # the collapsed endpoints whose flat neighbourhoods form no hubs (v1 at
+  # 100k 0.80, v3 at 100k 0.99). Every earlier gate-selected rung reads 10.4
+  # to 18.7.
   hubness_skew:
-    min: null
-    max: null
+    min: 2.0057
+    max: 3.5101
 
   # Gini of IVF cell occupancy at nlist above. 0.0 is a perfectly even
   # partition; a lopsided one drives how many cells a query must probe.
+  #
+  # Band = real mean 0.8002 +/- 5%. The canonical real row itself (0.7767)
+  # sits under the ten-draw bottom edge (0.7832), so a band on the draw range
+  # would fail real; v3_best reads 0.7704. v0 reads 0.2946.
   ivf_gini:
-    min: null
-    max: null
+    min: 0.7602
+    max: 0.8403

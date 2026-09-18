@@ -1,0 +1,137 @@
+# Deletes a branch when it is finished, and only then.
+#
+# GitHub's delete-on-merge setting deletes the head branch the moment a PR
+# merges, with no way to say "this one continues". This workflow applies a
+# rule instead. A branch is finished only when a PR from it merged and the
+# branch still points at that PR's head commit. Branches merged without a
+# PR are never deleted by the sweep; delete those by hand. No `keep-branch`
+# label, no keep pattern, no open PR based on it, and it is this
+# repository's own branch. Every skip is printed with its reason.
+#
+# Two triggers, one script:
+#   - a PR closing as merged: decide about that PR's head branch;
+#   - manual dispatch: sweep every branch whose tip is a merged PR's head.
+#     `apply` defaults to false, so the first run only lists.
+#
+# It is a rule and not a model judgement because the action is a deletion.
+name: branch-hygiene
+
+on:
+  pull_request:
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Delete the finished branches. Off lists them and stops."
+        type: boolean
+        default: false
+
+# The only write this workflow makes is deleting a ref. Never widen this.
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: branch-hygiene
+  cancel-in-progress: false
+
+env:
+  # Space-separated shell globs. A branch matching one is never deleted.
+  KEEP_PATTERNS: "release/* hotfix/*"
+  # A PR carrying this label keeps its branch after merge.
+  KEEP_LABEL: keep-branch
+
+jobs:
+  prune:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Decide per branch, then delete only what is finished
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT: ${{ github.event_name }}
+          APPLY: ${{ github.event_name == 'pull_request' || inputs.apply }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          PR_HEAD: ${{ github.event.pull_request.head.ref }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          PR_LABELS: ${{ github.event_name == 'pull_request' && join(github.event.pull_request.labels.*.name, ' ') || '' }}
+        run: |
+          set -euo pipefail
+          git fetch --prune --quiet origin
+
+          # Open PRs protect their base branches. If there are more than the
+          # page holds, an unlisted one could lose its base: refuse rather
+          # than guess. The merged page has no such failure mode (an unlisted
+          # squash-merged branch is merely kept).
+          open_prs=$(gh pr list --state open --limit 500 --json headRefName,baseRefName \
+            --jq '.[] | "\(.headRefName) \(.baseRefName)"')
+          if [ "$(grep -c . <<<"$open_prs")" -ge 500 ]; then
+            echo "refusing: 500 or more open PRs; the page may be incomplete" >&2
+            exit 1
+          fi
+          merged_tips=$(gh pr list --state merged --limit 500 --json headRefName,headRefOid \
+            --jq '.[] | "\(.headRefName) \(.headRefOid)"')
+          merged_keep=$(gh pr list --state merged --limit 500 --json headRefName,labels \
+            --jq ".[] | select(any(.labels[]; .name == \"$KEEP_LABEL\")) | .headRefName")
+
+          if [ "$EVENT" = pull_request ]; then
+            candidates="$PR_HEAD"
+          else
+            # A prefix, not a glob: for-each-ref's `*` does not cross a slash,
+            # which would hide every branch named like release/1 from the sweep.
+            candidates=$(git for-each-ref refs/remotes/origin/ --format='%(refname:lstrip=3)')
+          fi
+
+          deleted=0
+          for branch in $candidates; do
+            reason=""
+            tip=""
+            if git rev-parse --verify --quiet "origin/$branch" >/dev/null; then
+              tip=$(git rev-parse "origin/$branch")
+            fi
+            for pattern in $KEEP_PATTERNS; do
+              case "$branch" in
+                $pattern) reason="matches keep pattern $pattern" ;;
+              esac
+            done
+            if [ "$branch" = "$DEFAULT_BRANCH" ] || [ "$branch" = HEAD ]; then
+              reason="default branch"
+            elif [ -z "$tip" ]; then
+              reason="already gone"
+            elif [ -n "$reason" ]; then
+              :
+            elif [ "$EVENT" = pull_request ] && [ "$PR_HEAD_REPO" != "$GITHUB_REPOSITORY" ]; then
+              reason="head is on a fork"
+            elif [ "$EVENT" = pull_request ] && [[ " $PR_LABELS " == *" $KEEP_LABEL "* ]]; then
+              reason="labelled $KEEP_LABEL"
+            elif grep -qx "$branch" <<<"$merged_keep"; then
+              reason="a merged PR from it is labelled $KEEP_LABEL"
+            elif [ "$EVENT" = pull_request ] && [ "$tip" != "$PR_HEAD_SHA" ]; then
+              reason="moved past the merged commit"
+            elif grep -q " $branch\$" <<<"$open_prs"; then
+              reason="an open PR is based on it"
+            elif grep -q "^$branch " <<<"$open_prs"; then
+              reason="an open PR is from it"
+            elif [ "$EVENT" = workflow_dispatch ] && ! grep -q "^$branch $tip\$" <<<"$merged_tips"; then
+              reason="no merged PR at its tip"
+            fi
+
+            if [ -n "$reason" ]; then
+              echo "keep    $branch: $reason"
+              continue
+            fi
+            if [ "$APPLY" = true ]; then
+              gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$branch"
+              echo "deleted $branch"
+              deleted=$((deleted + 1))
+            else
+              echo "would delete $branch (run again with apply=true)"
+            fi
+          done
+          echo "done: $deleted deleted"

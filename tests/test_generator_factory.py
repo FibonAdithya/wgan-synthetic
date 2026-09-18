@@ -7,6 +7,7 @@ from src.models.generator import (
     GatedGenerator,
     Generator,
     LinearSkipGenerator,
+    SphericalGenerator,
     StructuredGateGenerator,
     build_generator,
 )
@@ -182,3 +183,62 @@ def test_linear_skip_rejects_identity_init_of_the_wrong_width():
     )
     with pytest.raises(ValueError, match="identity"):
         build_generator(cfg, output_dim=128)
+
+
+def test_spherical_defaults():
+    cfg = dict(BASE_CFG, generator_type="spherical", latent_dim=16 + 128)
+    generator = build_generator(cfg, output_dim=128)
+    assert isinstance(generator, SphericalGenerator)
+    assert generator.skip_dim == 128
+    assert generator.trunk_latent_dim == 16
+    assert generator.tangent_in.out_features == 512
+    assert abs(float(generator.radius.detach()) - 0.95) < 1e-6
+    assert generator.radius_min == 0.2 and generator.radius_max == 1.5
+
+
+def test_spherical_honours_overrides():
+    cfg = dict(
+        BASE_CFG,
+        generator_type="spherical",
+        latent_dim=16 + 64,
+        skip_dim=64,
+        tangent_hidden_dim=96,
+        radius_init=0.6,
+        radius_min=0.1,
+        radius_max=1.0,
+    )
+    generator = build_generator(cfg, output_dim=128)
+    assert generator.skip_dim == 64
+    assert generator.tangent_in.out_features == 96
+    assert abs(float(generator.radius.detach()) - 0.6) < 1e-6
+    assert generator.radius_min == 0.1 and generator.radius_max == 1.0
+
+
+@pytest.mark.parametrize(
+    "overrides, match",
+    [
+        (dict(latent_dim=16, skip_dim=16), "skip_dim"),
+        # latent_dim 16 + 128 so skip_dim (default output_dim = 128) is valid
+        # and the radius check, not the skip_dim check, is what raises.
+        (dict(latent_dim=16 + 128, radius_min=0.95), "radius_min"),
+        (dict(latent_dim=16 + 128, radius_init=1.5), "radius_init"),
+        (dict(latent_dim=16 + 128, radius_max=1.6), "radius_max"),
+    ],
+)
+def test_spherical_rejects_bad_keys(overrides, match):
+    cfg = dict(BASE_CFG, generator_type="spherical", **overrides)
+    with pytest.raises(ValueError, match=match):
+        build_generator(cfg, output_dim=128)
+
+
+def test_spherical_state_dict_round_trips_through_a_rebuild():
+    cfg = dict(BASE_CFG, generator_type="spherical", latent_dim=16 + 32, skip_dim=32)
+    torch.manual_seed(0)
+    a = build_generator(cfg, output_dim=32)
+    with torch.no_grad():
+        a.radius_raw.fill_(1.0)
+    b = build_generator(cfg, output_dim=32)
+    b.load_state_dict(a.state_dict())
+    z = torch.randn(8, 16 + 32)
+    assert torch.allclose(a(z), b(z))
+    assert float(b.radius.detach()) == float(a.radius.detach())

@@ -143,7 +143,7 @@ L2 numbers bit for bit.
 
 ## Model family
 
-`mlp` today, `spherical` when phase (b) lands.
+`mlp` today, `spherical` not yet adopted.
 
 ### What the geometry says about `v0`
 

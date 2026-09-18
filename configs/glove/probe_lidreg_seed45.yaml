@@ -1,0 +1,73 @@
+# GloVe probe: v0_seed45 plus the local log-ratio LID regularizer (lid_reg).
+# One seed of a five-seed measurement instrument (seeds 42-46), not a ladder rung: promoting a probe to
+# v1 is a human decision (AGENTS.md).
+#
+# Why this term: v0 learns GloVe's shared mean direction (mean unit vector norm
+# 0.364 vs real 0.355) but collapses the spread around it -- participation
+# ratio 50 vs 88, LID median 16 vs 35, nearest-neighbour cosine median 0.74 vs
+# 0.55 -- and hubness falls with it (skew 1.64 vs 4.08). lid_reg is the one term
+# in this repo with a result on hubness (SIFT v4). It trains on LID's sufficient
+# statistic, so this probe's lid_median is fitted, not evidence: judge it on
+# participation ratio, hubness, contrast and IVF Gini.
+#
+# Deltas from v0_seed45: device, output_dir, and the three lid_reg keys.
+# device is cuda:0 (runner pins CUDA_VISIBLE_DEVICES to the claimed card) because
+# tools/probes/lid_reg_scale_probe.py passes it straight to torch.device.
+seed: 45
+device: cuda:0
+output_dir: runs/glove/probe_lidreg_seed45
+
+data:
+  real_path: /workspace/data-cache/glove_250k.npy
+  format: npy
+  metric: angular
+  descriptor_dim: 100
+  holdout_fraction: 0.05
+  synthetic_if_missing: false
+  synthetic_num_vectors: 100000
+  preprocess:
+    center: false
+    whiten: false
+    l2_normalize: true
+
+model:
+  # 128 over a 100-dimensional corpus is deliberate. GloVe's measured
+  # effective rank is 94.6 of 100, so there is no bottleneck to discover and a
+  # latent at or below the corpus rank would impose one. configs/deep/v0.yaml
+  # corrected the same sift-inherited 128 down to its descriptor_dim, but that
+  # was driven by deep's effective rank of 65 of 96 and does not transfer.
+  latent_dim: 128
+  generator_hidden_dims: [512, 1024, 1024]
+  critic_hidden_dims: [1024, 512, 256]
+  negative_slope: 0.2
+  generator_type: mlp
+
+training:
+  batch_size: 512
+  num_gen_steps: 30000
+  n_critic: 3
+  lr_g: 1.0e-4
+  lr_d: 1.0e-4
+  betas: [0.0, 0.9]
+  lambda_gp: 5.0
+  distance_reg_alpha: 0.0
+  distance_reg_max_points: 256
+  # Sized by tools/probes/lid_reg_scale_probe.py on GloVe at this k (gpuq job
+  # wgan-synthetic-20260916T113625Z-8da203, 80 trials per row):
+  #
+  #   real vs real (noise floor) : 0.0322 +/- 0.0239
+  #   untrained mlp vs real      : 0.0622 +/- 0.0107
+  #   trained v0_seed42 vs real  : 0.7238 +/- 0.0534  -> 22.5x the floor
+  #
+  # Unlike SIFT, the untrained generator starts near the floor and training
+  # moves it away, so alpha is sized on the trained-v0 gap: 2.5% of v0's
+  # |adv_loss| (0.538, mean over steps 20000-30000), matching the share
+  # configs/sift/v4.yaml chose. At the floor it contributes ~0.1%.
+  lid_reg_alpha: 0.01858
+  lid_reg_k: 20
+  lid_reg_max_points: 256
+  num_workers: 0
+  amp: false
+  log_every: 250
+  eval_every: 1000
+  save_every: 2000

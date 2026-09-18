@@ -190,9 +190,15 @@ family's profile *is*, so it is raised here and not made. Until it is made,
 the profile table above is the number the locked procedure produces, and
 the cleaned figures are what the corpus looks like without the artefact.
 
+**Decided 2026-09-17.** Setting the gate bands (see `## Gate`) settled this:
+the bands are centred on the cleaned corpus, so the row filter
+(`scripts/make_nytimes_clean.py`, exact-zero rows and exact duplicates
+dropped) is now part of the locked measurement conditions. Every rung from
+`v2` on was already measured that way.
+
 ## Model family
 
-`mlp` for `v0`, `linear_skip` for `v1`; `spherical` when phase (b) lands.
+`mlp` for `v0`, `linear_skip` from `v1`, `spherical` from `v3`.
 
 ## Ladder
 
@@ -205,7 +211,9 @@ the cleaned figures are what the corpus looks like without the artefact.
 | `v2` | + neighbourhood-aware critic (`critic_type: neighbourhood`, k 20, floor 0.01) and `drop_zero_rows: true`; duplicates kept | `configs/nytimes/v2.yaml`; box instrument `configs/nytimes/v2_seed42.yaml` | `runs/nytimes/v2_seed42` (box: `/workspace/nytimes-v2/v2_seed42`) | trained -- n=1 seed, misses the gate on LID, hubness and Gini, contrast within 3%; no collapse (effective rank 244 at 30k) but drifts to the Gaussian end instead; see `## v2, measured` |
 | `v2b` | `v2` with the critic's neighbours drawn from a bank (`critic_type: neighbourhood_bank`, `critic_bank_size: 16384`) | `configs/nytimes/v2b.yaml`; box instrument `configs/nytimes/v2b_seed42.yaml` | `runs/nytimes/v2b_seed42` (box: `/workspace/nytimes-v2b/v2b_seed42`) | trained -- n=1 seed, misses the gate on LID, contrast and hubness, Gini in range; the selected checkpoint is a transient; drifts to the Gaussian end like v2; see `## v2b, measured` |
 | `v2c` | `v2` with a learned set critic (`critic_type: neighbourhood_set`, EdgeConv 128, max pool) | `configs/nytimes/v2c.yaml`; box instrument `configs/nytimes/v2c_seed42.yaml` | `runs/nytimes/v2c_seed42` (box: `/workspace/nytimes-v2/v2c_seed42`) | trained -- n=1 seed, misses the gate on all four at the selected step (LID 12% high, contrast 3.3% low, hubness 11.9, Gini 0.847); no collapse and no Gaussian drift, LID holds a band around real for the whole run; see `## v2c, measured` |
-| `v2c` at 100k steps | same rung, budget raised | `configs/nytimes/v2c_seed42_100k.yaml`, resumed from the row above | `runs/nytimes/v2c_seed42_100k` (box: `/workspace/nytimes-v2/v2c_seed42_100k`) | submitted 2026-09-15 (`scripts/nytimes_v2c_seed42_100k_job.sh`); not yet measured |
+| `v2c` at 100k steps | same rung, budget raised | `configs/nytimes/v2c_seed42_100k.yaml`, resumed from the row above | `runs/nytimes/v2c_seed42_100k` (box: `/workspace/nytimes-v2/v2c_seed42_100k`) | trained -- selected step 44,000 misses on all four like step 4,000 did; step 100,000 halves hubness (`5.45`) and lands Gini on real but LID stays 9% high; effective rank stopped falling, no collapse, no drift; see `### Continued to 100,000 steps` under v2c |
+| `v3` | `v2c` with the generator changed to `spherical` (`generator_type: spherical`, `tangent_hidden_dim` 512, radius band 0.2 to 1.5 from 0.95) | `configs/nytimes/v3.yaml`; box instrument `configs/nytimes/v3_seed42.yaml` | `runs/nytimes/v3_seed42` (box: `/workspace/nytimes-v3/v3_seed42`) | trained -- n=1 seed on a rebuilt box (RTX 3060 Ti), job `wgan-synthetic-20260916T104213Z-56ba0c` at commit `61dcacd`; misses the gate on contrast, hubness and Gini, but LID is inside the ten-draw range for the first time in this family, at near-real global rank; the selected step is a transient by the spec's own test; see `## v3, measured`. **Meets the bar** since the bands in `gates/nytimes.yaml` were set on 2026-09-17 to admit it; see `## Gate` |
+| `v3` at 100k steps | same rung, budget raised | `configs/nytimes/v3_seed42_100k.yaml`, resumed from the row above | `runs/nytimes/v3_seed42_100k` (box: `/workspace/nytimes-v3/v3_seed42_100k`) | trained -- no evaluation after the resume comes near the step-9,000 selection, which is carried over; the collapse deepens to LID `13.5` at step 100,000 with the radius at its `1.5` ceiling; see `### Continued to 100,000 steps` under v3 |
 
 Train `v0`:
 
@@ -966,6 +974,374 @@ matches. Whether the next rung is the
 weights hubness, or a hubness-aware term in the critic, is a human
 decision per the spec's own rule.
 
+### Continued to 100,000 steps
+
+Asked for after the table above, because the 30k run was the first whose
+second half looked selectable while two of its diagnostics were still
+moving: effective rank falling (`210` at the selected step, `185` at
+30,000) and skip energy growing. `configs/nytimes/v2c_seed42_100k.yaml`
+is the same instrument with the budget raised (`output_dir` and
+`num_gen_steps` are the only keys that move;
+`tests/test_nytimes_configs.py` pins the rest), run with `--resume` from
+the 30k run's `checkpoint_step_30000.pt` on the box
+(`scripts/nytimes_v2c_seed42_100k_job.sh`, commit `2f39a76`, branch
+`nytimes-v2c-100k`, gpuq job `wgan-synthetic-20260915T101838Z-23086c`).
+The runner created the job's stderr log at 10:18:56Z and last wrote its
+stdout at 12:54:57Z: **2 hours 36 minutes wall for the remaining 70,000
+steps** plus two 50,000-vector samplings and the report (MEASURED from the
+log timestamps, 2026-09-15), i.e. `0.134` seconds per step, the same rate
+as the 30k run's 67 minutes. `resumed_from_step` `30000`; first logged
+step 30,250; no `gate_error` on any of the 70 evaluations; the same
+237,313-row training split and 12,490-row holdout. The restored
+`best_score` of `0.0190` (step 4,000) **was beaten**, at step 44,000
+(`0.0168`), so the selected checkpoint below is new and not the 30k
+run's file carried over (the two `best_generator.pt` files differ by
+sha256). 50,000 samples at sampling seed 42 from that checkpoint and from
+`checkpoint_step_100000.pt` were measured together against the cleaned
+real corpus at the canonical conditions. Summary, `run_config.yaml` and
+`run_metadata.json` are committed under
+`docs/results/nytimes-v2c-seed42-100k/` (sha256 verified against the box
+copy line for line); checkpoints and samples stay on the box under
+`/workspace/nytimes-v2/v2c_seed42_100k`.
+
+Same convention as the table above: distance from real in units of the
+real corpus's ten-draw spread, and the percentage off the real median the
+spec's 3% bar is stated in. The 30k run's two columns are repeated so the
+four checkpoints can be read side by side.
+
+| Statistic | real, cleaned (10-draw range) | step 4,000 (30k run's selection) | step 30,000 | `v2c_best` (step 44,000, gate-selected) | step 100,000 |
+|---|---|---|---|---|---|
+| LID median | `55.97` (54.97 -- 56.86) | `62.73` (12.1% off, 3.6x) | `60.00` (7.2% off, 2.1x) | `62.04` (10.8% off, 3.2x) | `61.25` (9.4% off, 2.8x) |
+| Relative contrast | `1.271` (1.265 -- 1.276) | `1.229` (3.3% off, 3.9x) | `1.235` (2.8% off, 3.3x) | `1.232` (3.1% off, 3.6x) | `1.226` (3.5% off, 4.2x) |
+| Hubness skew | `2.529` (2.315 -- 2.779) | `11.87` (369% off, 20.2x) | `10.70` (323% off, 17.6x) | `13.93` (451% off, 24.6x) | `5.45` (116% off, 6.3x) |
+| IVF cell-balance Gini | `0.7767` (0.7832 -- 0.8231) | `0.8467` (9.0% off, 1.8x) | `0.8075` (4.0% off, inside the range) | `0.8504` (9.5% off, 1.8x) | `0.7747` (0.3% off, 0.1x; 0.009 below the range) |
+| Effective rank | `247.4` | `210.0` | `184.9` | `207.0` | `187.6` |
+| Median 5-NN distance | `1.205` | `0.605` | `0.850` | `0.810` | `0.906` |
+| Median pairwise distance | `1.404` | `0.725` | `1.022` | `0.974` | `1.083` |
+
+**The selected checkpoint did not improve.** Step 44,000 reads within a
+point or two of step 4,000 on every gate statistic: LID `62.0` against
+`62.7`, contrast `1.232` against `1.229`, hubness `13.9` against `11.9`,
+Gini `0.850` against `0.847`. It misses the bar on all four, contrast by
+`0.1` of a percentage point. It is also a transient by the spec's
+factor-of-two test, on both sides this time: its neighbours score
+`0.1052` at 43,000 (6.3x) and `0.0469` at 45,000 (2.8x). The gate
+selector found the same kind of step it found at 4,000 -- the moment LID
+crosses the reference while hubness spikes -- and 40,000 steps later it
+is no better a checkpoint.
+
+**The endpoint did improve, on two of four.** Step 100,000 against step
+30,000: hubness halved (`5.45` from `10.70`, the lowest of any sampled
+`v2`-family checkpoint, still 2.2x real), Gini landed on the real median
+(`0.7747` against `0.7767`), LID and contrast moved slightly the wrong way
+(`61.3` from `60.0`, `1.226` from `1.235`). The median 5-NN distance kept
+rising toward real (`0.850` to `0.906`, against `1.205`) and the median
+pairwise distance with it (`1.022` to `1.083`, against `1.404`): the
+neighbourhoods are still a quarter narrower than real's at the same local
+dimension.
+
+**The two trends the continuation was run to resolve.** Effective rank
+stopped falling: `184.9` at 30,000, `187.6` at 100,000, `207` at the
+selected step, so the 30k run's decline from `210` did not continue into
+`v1`'s collapse. Skip energy did not stop growing: `396` at 31,000 to
+`652` at 100,000, monotone but for one dip at 78,000, while the trunk
+term swings between `55` and `1,109` and skip share runs `0.36` to `0.89`
+with no trend (`0.551` at 31,000, `0.564` at 100,000). The critic still
+reads the balance and pushes back each time it moves; the skip path's
+absolute scale keeps rising underneath that.
+
+Trajectory on the holdout (`run_metadata.json` `eval`, one row every
+5,000 steps plus the selected step and its neighbours; all 70 rows are in
+the file). The reference is the same as the 30k run's: LID `59.44`,
+contrast `1.240`, hubness `2.30`, Gini `0.816`, `near_duplicate_fraction`
+`0.022`.
+
+| step | fake LID | fake RC | hubness | Gini | score | skip share | \|\|trunk\|\|^2 | \|\|skip\|\|^2 |
+|---|---|---|---|---|---|---|---|---|
+| 35000 | 61.74 | 1.2048 | 6.05 | 0.814 | 0.0668 | 0.698 | 176.3 | 407.5 |
+| 40000 | 60.61 | 1.2142 | 10.55 | 0.859 | 0.0403 | 0.524 | 382.4 | 421.4 |
+| 43000 | 63.78 | 1.1997 | 5.31 | 0.825 | 0.1052 | 0.754 | 142.3 | 435.0 |
+| 44000 | 59.23 | 1.2232 | 11.06 | 0.848 | 0.0168 | 0.465 | 501.9 | 435.9 |
+| 45000 | 60.92 | 1.2125 | 10.02 | 0.840 | 0.0469 | 0.649 | 237.3 | 438.8 |
+| 50000 | 58.89 | 1.2212 | 7.69 | 0.828 | 0.0241 | 0.535 | 399.1 | 460.0 |
+| 55000 | 61.63 | 1.2057 | 4.16 | 0.803 | 0.0642 | 0.801 | 119.4 | 481.8 |
+| 60000 | 59.18 | 1.2193 | 11.22 | 0.837 | 0.0209 | 0.525 | 453.8 | 501.1 |
+| 65000 | 58.52 | 1.2230 | 10.68 | 0.817 | 0.0289 | 0.459 | 609.6 | 517.6 |
+| 70000 | 58.94 | 1.2216 | 9.97 | 0.823 | 0.0229 | 0.557 | 425.7 | 534.9 |
+| 75000 | 58.85 | 1.2216 | 9.91 | 0.825 | 0.0245 | 0.442 | 689.7 | 546.8 |
+| 80000 | 57.96 | 1.2230 | 6.07 | 0.792 | 0.0382 | 0.501 | 562.7 | 564.7 |
+| 85000 | 55.53 | 1.2376 | 7.58 | 0.801 | 0.0675 | 0.398 | 878.6 | 582.0 |
+| 90000 | 56.09 | 1.2338 | 6.63 | 0.814 | 0.0611 | 0.417 | 841.2 | 602.4 |
+| 95000 | 56.90 | 1.2282 | 8.12 | 0.786 | 0.0519 | 0.454 | 753.0 | 626.7 |
+| 100000 | 58.75 | 1.2181 | 5.04 | 0.784 | 0.0291 | 0.564 | 504.0 | 652.5 |
+
+Against the spec's two mechanism checks:
+
+- **No collapse and no drift, for 70,000 more steps.** Holdout LID stays
+  in `55.5--65.1` across all 70 evaluations, and in `55.5--58.8` over the
+  last 20 (steps 81,000 to 100,000), i.e. within 7% of the reference
+  `59.4` -- below it now, where the 30k run's last 12,000 steps sat
+  within 12% on either side. The late run is the closest the generator
+  has come to real on contrast (`1.225--1.238` against `1.240` over the
+  same 20 evaluations) and the furthest from it on the trunk term
+  (`560--1,109`, skip share `0.36--0.52`). Whether a slowly falling LID
+  with a rising trunk term is the start of `v1`'s collapse or a plateau
+  cannot be told from one seed at 100,000 steps; nothing in the run
+  crossed the reference and kept going. The fake `near_duplicate_fraction`
+  reads exactly `0.0` on all 70 evaluations, as it did on all 30 before.
+- **The selector still picks transients.** The score reads `0.0168` at
+  the selected step and `0.017--0.134` elsewhere; 23 of the 70
+  evaluations are within 2x of the best, but the best itself has a 6.3x
+  neighbour. Over the last 20 evaluations the score sits at
+  `0.029--0.068`, a plateau, and the selector never picks from it because
+  the plateau's hubness (`5.0--13.9`) keeps every plateau step above the
+  transient. `cov_fro`, the non-gate diagnostic, is flat across the
+  continuation (`0.0355` at 31,000, `0.0361` at 100,000, lowest `0.0314`
+  at 43,000) and would have picked the step just before the gate's
+  choice.
+
+The gradient penalty stays in `0.001--0.069` for the whole continuation
+(largest logged value `0.0694` at step 65,250, against the 30k run's
+`0.0161`), with the Wasserstein estimate between `-0.25` and `+0.13`.
+
+Hubness on the holdout is never below `3.35` (step 42,000) against
+real's `2.30`, and above 2x real on 68 of the 70 evaluations; it is
+worst, as before, where LID crosses the reference (`11.1` at the selected
+step, `18.9` at 72,000).
+
+So the answer to "does it improve with a longer budget" is: the
+checkpoint the selector picks does not, the endpoint does on hubness and
+Gini and not on LID or contrast, and the effective-rank decline that
+motivated the run did not continue. Step 100,000 is not a rung either --
+LID 9.4% high, contrast 3.5% low, hubness 2.2x real -- but it is the
+closest sampled checkpoint on Gini and hubness in the `v2` family. What
+the longer budget did not change is the thing every page since `v2` ends
+on: the four-way equal-weight selection score prefers a hubness spike at
+the LID crossing over a hubness-quiet plateau step. Whether the next step
+is a hubness-weighted selector, a hubness-aware critic term, or a second
+seed of `v2c` to see whether this plateau is reproducible, is a human
+decision per the spec's own rule.
+
+## v3, measured
+
+Trained 2026-09-16 on a different box than every earlier NYTimes rung:
+`tig-gpu` now carries an RTX 3060 Ti (8 GiB,
+uuid `db114322-208d-7d84-df3d-fc13018123a3`, driver 580.178.04, torch
+2.13.0+cu130) in place of the RTX 3060 the family trained on through
+`v2c`. One gpuq job, `wgan-synthetic-20260916T104213Z-56ba0c`
+(`scripts/nytimes_v3_seed42_job.sh` at commit `61dcacd`, branch
+`nytimes-v3`): 30,000 generator steps of `configs/nytimes/v3_seed42.yaml`
+(`v2c` with `generator_type: spherical`, `tangent_hidden_dim` 512, radius
+band 0.2 to 1.5 from 0.95; every other key byte-identical to `v2c`).
+Submitted 10:42:13Z; the runner created the job's stderr log at
+11:13:01Z and the last stdout write is 12:21:39Z, so **68 minutes wall
+for the whole job** against `v2c`'s 67. Exit 0, no `gate_error` on any of
+the 30 evaluations, `resumed_from_step` 0. The trainer dropped `197`
+exact-zero rows at load (same file, same count as every earlier rung),
+leaving 237,313 training rows and a 12,490-row holdout, the same split
+as `v2c`.
+
+Two things to disclose before the numbers. First, this is the second
+attempt: `wgan-synthetic-20260916T074115Z-dbce65` at commit `f84ba86`, on
+the previous box (RTX 3060, driver 570.181, torch 2.13.0+cu126), died
+with a segmentation fault after its step-1,000 evaluation. Random-timed
+segfaults and one `std::bad_alloc` abort also hit unrelated GloVe runs on
+that box, across two different torch builds; the cause was never
+established and the instance was replaced. Commit `61dcacd` (moving the
+effective-rank eigendecomposition off the GPU) landed in the code before
+this run, but it was never shown to be the cause of the earlier crash --
+it should not be read as a fix. Second, the real corpus was refetched on
+the new box: `nytimes_250k.npy` sha256
+`ba8e8d512cc465e983661cbbabba64ead8251c3f313de86c3b1c3abe56c03428`,
+identical to the hash `configs/nytimes/v3_seed42.yaml` records, and the
+cleaned corpus was rebuilt with the current `scripts/make_nytimes_clean.py`:
+250,000 rows in, 197 zero rows and 31,949 duplicates dropped, 217,854
+rows out, sha256
+`edcff7ab374bc345b2340ee5cd3f1186a3c48d6502b69dde59e336c34e354809`. The
+job was also submitted through a two-line wrapper that symlinks `runs/`
+to `/workspace/nytimes-v3/live` before exec'ing the pinned
+`scripts/nytimes_v3_seed42_job.sh`, so a crash leaves checkpoints behind
+instead of losing them with the job's worktree; nothing else differs
+from the pinned script.
+
+`best_generator.pt` records step `9,000`, `best_score` `0.108758`,
+`select_on: gate`, live weights. 50,000 samples at sampling seed 42 were
+drawn from it and from the step-30,000 checkpoint, measured together
+against the cleaned real corpus in one `eda_report` invocation at the
+canonical conditions (20,000 rows, k 100, hub k 10, nlist 256, angular).
+The summary, `run_config.yaml` and `run_metadata.json` are committed
+under `docs/results/nytimes-v3/`; checkpoints and samples stay on the
+box.
+
+Same convention as the `v2c` table: distance from real in units of the
+real corpus's ten-draw spread, and the percentage off the real median
+the spec's 3% bar is stated in, both from
+`docs/datasets/nytimes_noise_floor.json`
+(`zero_and_duplicate_rows_removed`).
+
+| Statistic | real, cleaned (10-draw range) | `v3_best` (step 9,000, gate-selected) | step 30,000 |
+|---|---|---|---|
+| LID median | `55.97` (54.97 -- 56.86) | `55.69` (0.5% off, inside the range) | `24.07` (57.0% off, 16.9x) |
+| Relative contrast | `1.271` (1.265 -- 1.276) | `1.218` (4.1% off, 4.9x) | `1.452` (14.3% off, 16.9x) |
+| Hubness skew | `2.529` (2.315 -- 2.779) | `3.392` (34.1% off, 1.9x) | `2.196` (13.2% off, 0.7x) |
+| IVF cell-balance Gini | `0.7767` (0.7832 -- 0.8231) | `0.7704` (0.8% off, 0.16x) | `0.5109` (34.2% off, 6.7x) |
+
+**Misses the bar on three of four.** LID is inside the ten-draw range --
+the first NYTimes rung to manage that -- at `0.5%` off the real median.
+Contrast misses low by `4.1%`, outside the spec's 3% allowance and `4.9`
+range-widths off. Hubness misses high at `3.392` against the range's
+`2.779` top: `1.9` range-widths off by the table's convention, but only
+`1.22x` that top edge in plain value-over-edge terms -- a different
+ratio from the table's multiplier, and the vivid one against the
+family's earlier rungs, which missed hubness by `4x` to `7x` on that
+same value-over-edge measure. Gini misses low by `0.8%`, `0.16`
+range-widths off; despite the small range-width figure it is not inside
+the range -- like the real corpus's own single draw (`0.7767`), which
+itself sits under its own ten-draw bottom edge (`0.7832`), `v3_best`'s
+`0.7704` sits under that same edge too. Effective rank: real `247.42`,
+`v3_best` `230.31`, step 30,000 `203.05` -- among gate-selected
+checkpoints, `v3_best` is closer to real's effective rank than any
+earlier NYTimes rung's selection (`v2c`'s closest reached `210.0`); two
+Gaussian-drifted, gate-failing checkpoints elsewhere in the family sit
+nearer real's rank still (`v2`'s step 30,000 at `244.4`, `v2b`'s at
+`238.7`), neither selected and neither close to real on anything else.
+Median 5-NN distance: real `1.2049`, `v3_best` `1.1922`, step 30,000
+`1.0353`.
+
+Against the spec's mechanism checks:
+
+- **Holdout hubness across the run.** Min `1.87`, median `2.25`, max
+  `3.66` across all 30 evaluations. The spec predicted at or below about
+  4 for the whole run; that held, and with more room to spare than any
+  earlier rung reached even at its cleanest step -- `v2c`'s holdout
+  hubness never dropped below `3.35` across its 100,000-step
+  continuation.
+- **Radius trajectory.** `r` reads `0.976` at the first evaluation (step
+  1,000), rising to `1.448` by step 30,000, against the band ceiling
+  `radius_max` `1.5`. At the selected step (9,000) it reads `1.1957`.
+  Not pinned at the ceiling, but close to it by the end of the run --
+  close enough that the spec's "radius pinned at `radius_max`" fallback
+  is the branch to read, alongside the direction rank, rather than
+  "radius pinned at `radius_min`".
+- **Direction rank trajectory.** `3.8` at step 1,000, `64.8237` at the
+  selected step, `48.7664` at step 30,000. No collapse to a sheet: rank
+  rises through the run and stays high even as radius climbs toward the
+  ceiling, so the reading above (critic pushing toward pure residual)
+  does not come with a degenerate direction distribution.
+- **Transient test.** Disqualifying on the spec's own terms. The
+  selected step's score is `0.108758`; its neighbours read, as a ratio
+  of that score: step 6,000 `3.06x`, 7,000 `2.79x`, 8,000 `2.02x`, 10,000
+  `1.09x`, 11,000 `1.06x`, 12,000 `1.49x`. Steps 10,000 and 11,000 are
+  within `1.1x`, so the selection sits on a narrow plateau rather than a
+  spike of one evaluation -- but 8,000 is already `2.02x` away, outside
+  the factor-of-two window on that side, so the plateau is one
+  evaluation wide in one direction and not the other.
+- **Wall time.** 68 minutes against `v2c`'s 67 -- unchanged within
+  measurement noise, despite the architecture change and the new box.
+
+Holdout readings at the selected step (training conditions, 12,490
+holdout rows, not comparable to the canonical table above): LID
+`54.4414`, contrast `1.2091`, hubness `2.9674`, Gini `0.7599`. Step
+30,000 is worse than the selection on every statistic except hubness
+(`2.196` against `3.392`), the same pattern `v2c`'s continuation showed
+after its own selection point.
+
+**What it means for the next rung.** `v3` does not pass the gate --
+three of four statistics miss, one of them (contrast) outside the
+spec's allowance. But it is the first NYTimes rung whose LID sits
+inside the real ten-draw range at all, and it does so at a near-real
+global rank (effective rank `230.3` against real's `247.4`, the closest
+of any gate-selected checkpoint in the family) rather than by drifting
+to a degenerate LID that happens to cross the band. Holdout hubness
+stayed at or below `4` for the entire run, confirming the
+constant-radius design's prediction under training, and the canonical
+hubness miss (`1.22x` the range top, by value-over-edge -- not the
+gate table's range-width multiplier) is far smaller than every earlier
+rung's (`4x` to `7x` on that same value-over-edge measure). What
+disqualifies the selection is the transient test: the
+selected step is not an isolated spike, but it is not settled either --
+one evaluation to either side already breaks the factor-of-two window on
+one side. Per the spec's fallback table, the radius trajectory (rising
+to `1.448` against ceiling `1.5`, without pinning) puts this closest to
+the "radius pinned at `radius_max`" branch: the critic is pushing the
+generator toward pure residual and finding nothing objectionable in the
+trunk direction (rank `64.8` at the selected step, no collapse), which
+the spec says is a critic finding for the family page rather than a call
+for a further generator change on its own. Whether the next rung widens
+the radius band, changes the critic, or reruns this seed to see whether
+the plateau at steps 9,000-11,000 is reproducible is a human decision
+per the spec's own rule.
+
+**Superseded on the bar, not on the numbers.** The owner has since judged
+`v3_best` close enough, and the gate bands set on 2026-09-17 record that; see
+`## Gate`. "Misses the bar" above is the verdict against the ten-draw ranges
+and the spec's 3% allowance, which were the only bar there was when this
+section was written. The transient test above still stands as measured.
+
+### Continued to 100,000 steps
+
+Asked for by the owner after `v3` came closest of any rung on hubness, to see
+whether a longer budget settles the radius drift or only extends the decay
+after the selection. `configs/nytimes/v3_seed42_100k.yaml` is
+`configs/nytimes/v3_seed42.yaml` with `output_dir` and `num_gen_steps` moved
+and nothing else (pinned by a test), resumed from the 30k run's
+`checkpoint_step_30000.pt` so the first 30,000 steps are that run itself.
+One gpuq job, `wgan-synthetic-20260917T081245Z-e3cd4c`
+(`scripts/nytimes_v3_seed42_100k_job.sh`, branch `nytimes-v3-100k`), on the
+same RTX 3060 Ti. `resumed_from_step` `30000`; exit 0; the runner created
+the job's logs at 08:12:46Z and the last stdout write is 10:54:54Z, so **162
+minutes wall** for 70,000 steps plus sampling and the report. The job script
+symlinks `runs/nytimes` to `/workspace/nytimes-v3`, so checkpoints were
+written straight to the box's persistent disk. Summary, `run_config.yaml`
+and `run_metadata.json` are committed under
+`docs/results/nytimes-v3-seed42-100k/`, sha256-verified against the box.
+
+**No new selection.** The best score across the 70 evaluations after the
+resume is `0.7536` at step 31,000, against the restored `0.108758`; the job
+log reads `best_generator.pt not beaten after resume; carried over from the
+30k run`, and the carried file's sha256 matches the 30k run's.
+
+Canonical conditions, 50,000 samples at sampling seed 42 against the cleaned
+corpus:
+
+| Statistic | real, cleaned | `v3_best` (step 9,000, carried over) | step 100,000 |
+|---|---|---|---|
+| LID median | `55.97` | `55.69` | `13.46` |
+| Relative contrast | `1.271` | `1.218` | `1.831` |
+| Hubness skew | `2.529` | `3.392` | `0.987` |
+| IVF cell-balance Gini | `0.7767` | `0.7704` | `0.2777` |
+| Effective rank | `247.4` | `230.3` | `191.2` |
+| Median pairwise distance | `1.404` | `1.405` | `1.406` |
+| Median 5-NN distance | `1.205` | `1.192` | `0.892` |
+
+The `real` and `v3_best` entries are identical in every field to the
+committed `docs/results/nytimes-v3/` summary, so the measurement reproduces
+exactly across jobs.
+
+What the 70 holdout evaluations show:
+
+- **The decay after the selection keeps going and does not turn back.**
+  Holdout LID stays between `13.0` and `23.8` (real holdout `59.44`), lowest
+  at step 84,000; Gini between `0.256` and `0.534` (real `0.816`); contrast
+  between `1.431` and `1.839` (real `1.240`). The selection score rises from
+  `0.754` to a peak of `1.264` at step 84,000 and eases to `1.187` by step
+  100,000 without approaching the bar.
+- **The radius reaches its ceiling.** `1.4526` at step 31,000, `1.4919` at
+  50,000, `1.500` to three decimals from step 81,000. Direction effective
+  rank drifts from `48.25` to `41.96`.
+- **Hubness falls below real for the wrong reason.** Holdout hubness ranges
+  `0.94` to `3.24` and reads `0.987` canonically at step 100,000 -- below
+  real's `2.529`, because a set with LID `13` has flat neighbourhoods that
+  form no hubs. The median pairwise distance stays at real's `1.406`, so the
+  set keeps its global spread and loses only local dimension, the same
+  failure the 30k run's endpoint showed, further along.
+
+**What it means.** A longer budget does not help `v3`. Its near-real hubness
+belongs to the region around step 9,000 and is not something training
+converges to, and the radius at the ceiling says the critic keeps pushing
+toward pure residual for as long as it trains. The step-9,000 checkpoint
+remains the family's selection.
+
 ## Gate
 
 `gates/nytimes.yaml` is the gate. The bands live there rather than in this
@@ -979,16 +1355,38 @@ naming it. The gate file also pins the measurement conditions the bands were
 set under, since these statistics are not comparable across different N, k or
 nlist.
 
-Every band is currently null. Bands are set once this family has a trained
-ladder to show what is achievable; until then the gate file records that they
-are unset, and the checker says so instead of passing.
+**All four bands are set** (2026-09-17, after `v3` and its continuation to
+100,000 steps). Like GloVe's, and unlike DEEP's regression guard, they are a
+**tolerance around real**: each is centred on the mean of the ten
+cleaned-corpus draws in `docs/datasets/nytimes_noise_floor.json`
+(`zero_and_duplicate_rows_removed`), so real passes. That makes the row
+filter part of the locked conditions; see `### What needs a human`.
+
+The tolerances were a human judgement made after seeing `v3`'s results: the
+owner judged `v3_best` close enough, and the bands record that. They are not
+derived from a noise floor, and they rest on one training seed where GloVe's
+rested on five. LID, contrast and Gini are real mean +/- 5%; hubness is real
+mean -20% / +40%, asymmetric so that it admits `v3_best` (`3.392`) and still
+rejects `v0` (`1.536`). The 5% on contrast is wider than the spec's 3%
+allowance, which `v3_best` misses at `4.0%` below the mean. The tolerance and
+the rung numbers for each statistic sit next to its band in
+`gates/nytimes.yaml`.
+
+`tests/test_check_gate.py` checks the bands against the committed files: all
+ten real draws, every committed canonical real row and `v3_best` pass every
+band; each band on its own rejects `v0`; and running the checker's own verdict
+over every synthetic entry in every committed `docs/results/nytimes-*`
+summary passes `v3_best` and nothing else -- not `v2c`'s step 100,000,
+which is inside the contrast and Gini bands but fails LID (`61.25`) and
+hubness (`5.45`), and not any collapsed endpoint. `v4` (not yet
+committed) fails on LID (`61.81`) and hubness (`6.29`).
 
 Check a run against it:
 
     python -m src.eval.check_gate --dataset nytimes --run-dir runs/nytimes/profile
 
 It reads `summary.json` from that run directory, prints a JSON verdict, and
-exits non-zero when the run fails -- or, as now, when the bands are still
-unset, which is verdict `unset` and exit code 2. Pass `--allow-unset` to get
+exits non-zero when the run fails, or with verdict `unset` and exit code 2 if
+a band is null. Pass `--allow-unset` to get
 the report without the non-zero exit, and `--stats-name <label>` to check a
 synthetic series rather than `real`.

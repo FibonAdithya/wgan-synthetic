@@ -102,7 +102,7 @@ geometry and stand unchanged.
 
 ## Model family
 
-`mlp` today, `spherical` when phase (b) lands — being the smallest angular
+`mlp` today, `spherical` not yet adopted — being the smallest angular
 family, this is the first candidate for the unit-norm-native generator.
 
 ## Ladder

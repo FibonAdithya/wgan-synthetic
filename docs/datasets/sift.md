@@ -50,19 +50,27 @@ locked here so a gate result stays readable against an older one.
 
 | Statistic | Real | Synthetic (best variant) |
 |---|---|---|
-| LID median | not yet measured | — |
-| Relative contrast | not yet measured | — |
-| Hubness skew | not yet measured | — |
-| IVF cell-balance Gini | not yet measured | — |
+| LID median | 17.6911 | 16.4147 |
+| Relative contrast | 2.2599 | 2.3231 |
+| Hubness skew | 1.9026 | 1.7937 |
+| IVF cell-balance Gini | 0.3039 | 0.2987 |
 
-Fill the real column with:
+The real column is the mean of ten disjoint 20,000-row draws of `sift_1m.npy`,
+L2-normalised, committed with per-draw values as
+`docs/datasets/sift_noise_floor.json` (`scripts/sift_real_noise_floor.py`).
+The synthetic column is `v4` at 100k, the retrain's selected checkpoint
+(`v4_best`, step 86,000), from
+`docs/results/sift-v4-x100k-retrain/eda/summary.json`. One seed; see `## Gate`
+for how far off real each is and the bands that admit it.
 
-    python -m src.eval.eda_report \
-        --real-path data/sift_250k.npy \
-        --output-dir runs/sift/profile \
-        --ann-max-rows 20000 --ann-k 100 --ann-hub-k 10
+Reproduce the real column with:
 
-Read the four values out of runs/sift/profile/summary.json (written by the command above).
+    python -m src.data.fetch sift --rows 1000000 --seed 42
+    PYTHONPATH=. python scripts/sift_real_noise_floor.py \
+        --real-path data/sift_1m.npy --out runs/sift/sift_noise_floor.json
+
+and read `spread.<statistic>.mean` out of the JSON it writes. On the training
+box the whole step is one queue job, `scripts/sift_data_job.sh`.
 
 ## Model family
 
@@ -78,7 +86,7 @@ exact zeros and quantized lattice that a dense MLP generator cannot.
 | `v1_5` | + distance reg (`alpha: 0.1`, 256 points) | `configs/sift/v1_5.yaml` | `runs/x100k_improved` | trained |
 | `v2` | + gated generator | `configs/sift/v2.yaml` | `runs/x100k_sparse_clamp4` | trained |
 | `v3` | + structured gate (`generator_type: structured_gated`) | `configs/sift/v3.yaml` | `runs/sift_gan_v3`, `runs/x100k_structured` | trained |
-| `v4` | + log-ratio regularizer (`lid_reg_alpha: 0.015`) | `configs/sift/v4.yaml` | `runs/sift/v4_sift1m`, `runs/sift/v4_sift1m_x100k` | trained, 30k and 100k |
+| `v4` | + log-ratio regularizer (`lid_reg_alpha: 0.015`) | `configs/sift/v4.yaml` | `runs/sift/v4_sift1m`, `runs/sift/v4_sift1m_x100k` (box: `/workspace/sift-v4/v4_sift1m_x100k`) | trained, 30k and 100k; 100k retrained 2026-09-17 (`docs/results/sift-v4-x100k-retrain/`). **Meets the bar** since the bands in `gates/sift.yaml` were set to admit it; see `## Gate` |
 
 `v3` and `v4` were measured as a matched pair on one corpus in
 `docs/results/v4-logratio/`; `v3`'s original run against the now-missing
@@ -124,9 +132,35 @@ naming it. The gate file also pins the measurement conditions the bands were
 set under, since these statistics are not comparable across different N, k or
 nlist.
 
-Every band is currently null. Bands are set once this family has a trained
-ladder to show what is achievable; until then the gate file records that they
-are unset, and the checker says so instead of passing.
+**All four bands are set** (2026-09-17, after `v4` was retrained at 100,000
+steps). Like GloVe's and NYTimes', and unlike DEEP's regression guard, they
+are a **tolerance around real**: each is centred on the mean of ten disjoint
+20,000-row draws of `sift_1m.npy` in `docs/datasets/sift_noise_floor.json`
+(made by `scripts/sift_real_noise_floor.py`), so real passes.
+
+The tolerances are a human judgement made after seeing the retrain in
+`docs/results/sift-v4-x100k-retrain/`. `v4` sits below real on LID (`-7.2%`)
+and hubness skew (`-5.7%`) and above on relative contrast (`+2.8%`), so
+NYTimes' +/-5% would reject it; the owner chose to admit it instead: LID is
+real mean -9% / +5%, contrast +/-5%, hubness and IVF Gini +/-8%. The hubness
+and Gini tolerances are wider mainly because real itself spreads 7.2% and
+10.4% of the mean across the ten draws. The rung numbers for each statistic
+sit next to its band in `gates/sift.yaml`.
+
+What passing does not cover: `v4` still loses LID to the dense rungs (`v1_5`
+is `-1.3%`), and no rung reproduces SIFT's duplicate rows (real `0.00062`).
+What it does cover that the dense rungs cannot: exact-zero fraction `0.239`
+against real `0.230`, where `v1_5` emits none. That is a diagnostic, not part
+of the gate. One training seed, run twice: the 2026-08-10 run and the retrain
+agree to within 0.6 points of the real mean on every statistic.
+
+`tests/test_check_gate.py` checks the bands against the committed files: all
+ten real draws and every committed canonical real row pass; the checker's own
+verdict over every committed SIFT summary passes the three `v4` 100k entries
+(the retrain's selected and final checkpoints, and the August run) and
+nothing else; and each band on its own rejects at least one other rung --
+LID and contrast reject `v2` and `v3`, hubness rejects `v1` and `v1_5`, Gini
+rejects `v1_5` by `0.0004`.
 
 Check a run against it:
 
@@ -168,7 +202,8 @@ comfortably usable statistic; hubness skew is marginal.
 establishes the floor's order of magnitude and nothing more, and the true spread
 could be wider. Three to five seeds are needed before any of these numbers
 justifies writing a band into `gates/sift.yaml`. No band was set from this
-measurement -- `gates/sift.yaml` is unchanged and every band there is still null.
+measurement. The bands set on 2026-09-17 are centred on a separate ten-draw
+real-side floor, not on this one; see `## Gate`.
 
 Two later findings sharpen this, both from `docs/results/v4-logratio/`:
 

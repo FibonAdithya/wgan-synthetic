@@ -53,11 +53,14 @@ def make_config(tmp_path, generator_type):
             cfg["model"]["layout"] = [2, 2, 4]
         if generator_type == "linear_skip":
             cfg["model"]["skip_dim"] = 4  # latent_dim is 8: 4 trunk + 4 skip
+        if generator_type == "spherical":
+            cfg["model"]["skip_dim"] = 4  # latent_dim is 8: 4 trunk + 4 skip
+            cfg["model"]["tangent_hidden_dim"] = 8
     return cfg
 
 
 @pytest.mark.parametrize(
-    "generator_type", ["mlp", "gated", "structured_gated", "linear_skip"]
+    "generator_type", ["mlp", "gated", "structured_gated", "linear_skip", "spherical"]
 )
 def test_training_loop_runs(tmp_path, generator_type):
     ckpt_path, meta = train(make_config(tmp_path, generator_type))
@@ -83,6 +86,37 @@ def test_linear_skip_evals_log_the_trunk_skip_balance(tmp_path):
         assert math.isfinite(e["trunk_energy"]) and math.isfinite(e["skip_energy"])
     _, meta_mlp = train(make_config(tmp_path, "mlp"))
     assert "skip_share" not in meta_mlp["eval"][0]
+
+
+def test_spherical_evals_log_radius_and_direction_rank(tmp_path):
+    """Catches the diagnostics not reaching the eval entry, or reaching it
+    for the wrong generator type."""
+    _, meta = train(make_config(tmp_path, "spherical"))
+    assert meta["eval"]
+    for e in meta["eval"]:
+        assert 0.2 <= e["radius"] <= 1.5
+        assert 1.5 < e["direction_effective_rank"] <= 16.0
+    _, meta_mlp = train(make_config(tmp_path, "mlp"))
+    assert "radius" not in meta_mlp["eval"][0]
+
+
+def test_spherical_diagnostics_failure_does_not_lose_the_eval_history(
+    tmp_path, monkeypatch
+):
+    """Catches an unguarded `generator.diagnostics` call: a checkpoint whose
+    diagnostics readout raises (e.g. a non-finite eigendecomposition) must
+    not take the whole run down and discard every eval entry with it."""
+    from src.models.generator import SphericalGenerator
+
+    def boom(self, energy_probe):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(SphericalGenerator, "diagnostics", boom)
+    ckpt_path, meta = train(make_config(tmp_path, "spherical"))
+    assert ckpt_path.exists()
+    assert meta["eval"]
+    for e in meta["eval"]:
+        assert "boom" in e["diagnostics_error"]
 
 
 def test_checkpoints_record_their_generator_weight_provenance(tmp_path):

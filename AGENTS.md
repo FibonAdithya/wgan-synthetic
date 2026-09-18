@@ -11,9 +11,9 @@ Train WGAN-GP models that reproduce the *nearest-neighbour search difficulty*
 of six benchmark vector families, so ANN algorithms can be stressed against
 synthetic corpora instead of the real ones. The target is not a matching
 distribution: a synthetic set succeeds when an index finds it as hard, and
-hard in the same way, as the real set. SIFT, DEEP and NYTimes have trained
-ladders and GloVe has a trained `v0`; the other two families have a `v0`
-config and a documented profile.
+hard in the same way, as the real set. SIFT, DEEP, GloVe and NYTimes have
+trained ladders; the other two families have a `v0` config and a documented
+profile.
 
 ## Source of truth, in order
 
@@ -103,12 +103,21 @@ Do not decide these yourself. Raise them and stop.
   record of a run that happened.
 - Changing a pinned version in `requirements.txt`.
 
+To report a bug in this project, file an issue with the `agent-reported`
+label:
+
+    gh issue create --label agent-reported --title "..." --body "..."
+
+The label is what routes the issue to a person. An issue without it notifies
+nobody.
+
 ## Where to look
 
 | Task | Start here |
 |---|---|
 | Understand the goal and the gate | `PROJECT_DOCUMENTATION.md#ann-difficulty--the-gate` |
 | Set up and run day-to-day commands | `README.md` (quick start) |
+| Set up a development environment in one step | `make setup` (a target in `Makefile`) |
 | Get data onto disk | `data/README.md`, `src/data/fetch.py` |
 | Facts about one family (N, k, profile, bands) | `docs/datasets/<family>.md` |
 | Preprocessing contract | `data/README.md`, `src/data/dataset.py` |

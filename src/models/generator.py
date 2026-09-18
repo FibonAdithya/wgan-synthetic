@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
@@ -120,6 +121,160 @@ class LinearSkipGenerator(nn.Module):
             "skip_energy": skip_energy,
             "skip_share": skip_energy / total if total > 0.0 else 0.0,
             "trunk_skip_abs_cos": float(cos.abs().mean()),
+        }
+
+
+def _unit(x: Tensor, eps: float) -> Tensor:
+    return x / torch.linalg.vector_norm(x, dim=1, keepdim=True).clamp(min=eps)
+
+
+def _effective_rank(x: Tensor) -> float:
+    """exp(Shannon entropy of the covariance eigenvalue ratios): the same
+    definition as `src.eval.eda.metrics.effective_rank`, in torch, so this
+    module does not import the report.
+
+    The eigendecomposition runs on the CPU even when `x` sits on a GPU. On
+    the box (torch 2.13.0+cu126, driver 570.181) `torch.linalg.eigvalsh` on a
+    CUDA tensor takes the whole process down with a segfault when it is
+    called from inside a training run -- not at the call itself, but at the
+    next cuBLAS matmul, which lands in the critic and reads as a critic bug.
+    Measured 2026-09-16: jobs `...T074115Z-dbce65` and `...T084249Z-58ed20`
+    died that way on the first critic step after an evaluation, while the
+    same run with this decomposition on the CPU (`...T091023Z-18c25d`) and
+    one with the readout stubbed out (`...T090023Z-8f1ee2`) both completed.
+    A segfault cannot be caught, so the trainer's try/except around the
+    readout does not help; keeping the decomposition off the GPU does. The
+    covariance is `output_dim` square (256 on NYTimes), so both the copy and
+    the decomposition are negligible beside one evaluation.
+    """
+    x = x.detach().float().cpu()
+    x = x - x.mean(dim=0, keepdim=True)
+    eig = torch.linalg.eigvalsh(x.T @ x / max(x.shape[0] - 1, 1)).clamp(min=0.0)
+    ratio = eig / eig.sum().clamp(min=1.0e-12)
+    return float(torch.exp(-(ratio * torch.log(ratio + 1.0e-12)).sum()))
+
+
+class SphericalGenerator(nn.Module):
+    """Unit-norm output with a constant residual angle and a residual shape
+    conditioned on the trunk.
+
+        u = unit(direction(h)),  h = trunk(z[:, :t])
+        v = tangent_out(act(tangent_in(z[:, t:]) * (1 + gamma(h)) + beta(h)))
+        t = unit(v - (v . u) u)
+        x = cos(r) u + sin(r) t,     r = radius_min + (radius_max - radius_min) sigmoid(radius_raw)
+
+    Why: on NYTimes the linear-skip generator's hubs are rows whose residual
+    share is a few percent smaller than their neighbours' (trunk-norm CV
+    0.06-0.08 was enough for hubness 17-30; equalising it gave 3-6), and a
+    fixed linear residual cannot reach the corpus's local dimension without
+    losing its global rank. So the angle `r` is one scalar shared by every
+    sample, and the tangent direction's shape follows `h` through the
+    per-channel modulation while its magnitude, sin(r), does not. See
+    docs/ai/specs/2026-09-15-spherical-generator-design.md.
+
+    Output is unit-norm to float precision, so the trainer's `normalize_l2`
+    and the sampler's normalisation are no-ops on it.
+    """
+
+    def __init__(
+        self,
+        latent_dim: int,
+        output_dim: int,
+        hidden_dims: Iterable[int],
+        negative_slope: float = 0.2,
+        skip_dim: int | None = None,
+        tangent_hidden_dim: int = 512,
+        radius_init: float = 0.95,
+        radius_min: float = 0.2,
+        radius_max: float = 1.5,
+        eps: float = 1.0e-8,
+    ):
+        super().__init__()
+        hidden_dims = list(hidden_dims)
+        skip_dim = output_dim if skip_dim is None else int(skip_dim)
+        if skip_dim <= 0 or skip_dim >= latent_dim:
+            raise ValueError(
+                f"skip_dim must be in (0, latent_dim); got skip_dim={skip_dim}, "
+                f"latent_dim={latent_dim}"
+            )
+        if not hidden_dims:
+            raise ValueError("hidden_dims must not be empty: the tangent head reads h")
+        if tangent_hidden_dim <= 0:
+            raise ValueError(
+                f"tangent_hidden_dim must be positive, got {tangent_hidden_dim}"
+            )
+        if not 0.0 < radius_min:
+            raise ValueError(f"radius_min must be positive, got {radius_min}")
+        if not radius_min < radius_init:
+            raise ValueError(
+                f"radius_min must be below radius_init; got radius_min={radius_min}, "
+                f"radius_init={radius_init}"
+            )
+        if not radius_init < radius_max:
+            raise ValueError(
+                f"radius_init must be below radius_max; got radius_init={radius_init}, "
+                f"radius_max={radius_max}"
+            )
+        if not radius_max < math.pi / 2:
+            raise ValueError(f"radius_max must be below pi/2, got {radius_max}")
+        self.skip_dim = skip_dim
+        self.trunk_latent_dim = latent_dim - skip_dim
+        self.radius_min = float(radius_min)
+        self.radius_max = float(radius_max)
+        self.eps = float(eps)
+
+        dims = [self.trunk_latent_dim, *hidden_dims]
+        layers: list[nn.Module] = []
+        for i in range(len(dims) - 1):
+            layers.append(nn.Linear(dims[i], dims[i + 1]))
+            layers.append(nn.LeakyReLU(negative_slope=negative_slope, inplace=True))
+        self.trunk = nn.Sequential(*layers)
+        self.direction = nn.Linear(hidden_dims[-1], output_dim, bias=False)
+        self.tangent_in = nn.Linear(skip_dim, tangent_hidden_dim)
+        # Default init, not zero: the residual's dependence on h exists from
+        # step one, which is what the location-dependence test measures.
+        self.gamma = nn.Linear(hidden_dims[-1], tangent_hidden_dim)
+        self.beta = nn.Linear(hidden_dims[-1], tangent_hidden_dim)
+        self.tangent_act = nn.LeakyReLU(negative_slope=negative_slope)
+        self.tangent_out = nn.Linear(tangent_hidden_dim, output_dim)
+        p = (radius_init - radius_min) / (radius_max - radius_min)
+        self.radius_raw = nn.Parameter(torch.tensor(math.log(p / (1.0 - p))))
+
+    @property
+    def radius(self) -> Tensor:
+        return self.radius_min + (self.radius_max - self.radius_min) * torch.sigmoid(
+            self.radius_raw
+        )
+
+    def tangent_raw(self, h: Tensor, z_skip: Tensor) -> Tensor:
+        """The tangent head's output before projection onto the tangent
+        space at u. Exposed so a test can hold the modulation constant and
+        confirm the head then stops depending on the trunk."""
+        a = self.tangent_in(z_skip) * (1.0 + self.gamma(h)) + self.beta(h)
+        return self.tangent_out(self.tangent_act(a))
+
+    def components(self, z: Tensor) -> tuple[Tensor, Tensor]:
+        t_dim = self.trunk_latent_dim
+        h = self.trunk(z[:, :t_dim])
+        u = _unit(self.direction(h), self.eps)
+        v = self.tangent_raw(h, z[:, t_dim:])
+        v = v - (v * u).sum(dim=1, keepdim=True) * u
+        return u, _unit(v, self.eps)
+
+    def forward(self, z: Tensor) -> Tensor:
+        u, t = self.components(z)
+        r = self.radius
+        return torch.cos(r) * u + torch.sin(r) * t
+
+    @torch.no_grad()
+    def diagnostics(self, z: Tensor) -> dict[str, float]:
+        """Per-evaluation readout: the shared angle, and the effective rank
+        of the trunk's direction over `z`, which shows whether u is
+        collapsing into a sheet the way linear_skip's trunk did."""
+        u, _ = self.components(z)
+        return {
+            "radius": float(self.radius),
+            "direction_effective_rank": _effective_rank(u),
         }
 
 
@@ -496,5 +651,14 @@ def build_generator(model_cfg: Mapping[str, Any], output_dim: int) -> nn.Module:
             skip_dim=model_cfg.get("skip_dim"),
             skip_init=str(model_cfg.get("skip_init", "orthogonal")),
             skip_init_gain=float(model_cfg.get("skip_init_gain", 1.0)),
+        )
+    if kind == "spherical":
+        return SphericalGenerator(
+            **common,
+            skip_dim=model_cfg.get("skip_dim"),
+            tangent_hidden_dim=int(model_cfg.get("tangent_hidden_dim", 512)),
+            radius_init=float(model_cfg.get("radius_init", 0.95)),
+            radius_min=float(model_cfg.get("radius_min", 0.2)),
+            radius_max=float(model_cfg.get("radius_max", 1.5)),
         )
     raise ValueError(f"Unknown generator_type: {kind}")

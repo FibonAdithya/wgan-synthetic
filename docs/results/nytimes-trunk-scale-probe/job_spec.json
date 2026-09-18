@@ -1,0 +1,25 @@
+{
+  "state": "done",
+  "orphaned": false,
+  "id": "wgan-synthetic-20260915T132234Z-6c9e64",
+  "lane": "cpu",
+  "project": "wgan-synthetic",
+  "commit": "ea008388c3df8e2b7d554c5a8ed4b69475d6f7de",
+  "branch": "probe/nytimes-trunk-scale",
+  "cmd": [
+    "bash",
+    "scripts/nytimes_trunk_scale_probe_job.sh"
+  ],
+  "artifacts": [],
+  "timeout_s": 5400,
+  "vram_mb": null,
+  "attempts": 0,
+  "dedupe_key": "nytimes-trunk-scale-probe-ea00838",
+  "submitted_at": "2026-09-15T13:22:34Z",
+  "pid": null,
+  "runner_pid": 899,
+  "exit_code": 0,
+  "error": null,
+  "stdout_log": "/workspace/queue/logs/wgan-synthetic-20260915T132234Z-6c9e64.out",
+  "stderr_log": "/workspace/queue/logs/wgan-synthetic-20260915T132234Z-6c9e64.err"
+}

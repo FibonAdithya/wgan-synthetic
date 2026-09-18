@@ -464,6 +464,37 @@ CALIBRATED_BANDS = {
     # hubness_skew and ivf_gini stay unset because the ladder already matches
     # real within noise (0.04 and 0.27 pooled sd), not because they are noisy.
     "deep": {"lid_median", "relative_contrast_median"},
+    # GloVe, 2026-09-17: a tolerance around real's mean, not DEEP's regression
+    # guard. Real side is the eight-draw floor, docs/datasets/glove_noise_floor.json;
+    # the five-seed v1 and v0 sweeps it was checked against are
+    # docs/datasets/glove_v1_noise_floor.json and glove_v0_*noise_floor.json.
+    "glove": {
+        "lid_median",
+        "relative_contrast_median",
+        "hubness_skew",
+        "ivf_gini",
+    },
+    # NYTimes, 2026-09-17: a tolerance around the cleaned corpus's mean, set so
+    # v3's gate-selected checkpoint passes. Real side is the ten-draw floor,
+    # docs/datasets/nytimes_noise_floor.json (zero_and_duplicate_rows_removed).
+    # There is no seed sweep behind it: v3 is one seed,
+    # docs/results/nytimes-v3/, re-measured in nytimes-v3-seed42-100k/.
+    "nytimes": {
+        "lid_median",
+        "relative_contrast_median",
+        "hubness_skew",
+        "ivf_gini",
+    },
+    # SIFT, 2026-09-17: a tolerance around real's mean, set so the v4 100k
+    # retrain passes. Real side is the ten-draw floor,
+    # docs/datasets/sift_noise_floor.json; v4 is one seed, run twice
+    # (docs/results/v4-logratio/ and docs/results/sift-v4-x100k-retrain/).
+    "sift": {
+        "lid_median",
+        "relative_contrast_median",
+        "hubness_skew",
+        "ivf_gini",
+    },
 }
 
 
@@ -528,13 +559,245 @@ def test_the_calibrated_deep_bands_admit_every_cell_of_the_sweep_they_came_from(
             )
 
 
+def _glove_per_seed(filename: str) -> list[dict]:
+    path = Path(__file__).resolve().parents[1] / "docs" / "datasets" / filename
+    return json.loads(path.read_text(encoding="utf-8"))["per_seed"]
+
+
+def test_the_glove_bands_admit_every_real_draw_and_every_v1_seed():
+    """The bands say how close to real counts as close enough, and v1 was
+    judged close enough. Real draws must pass too: these bands are centred on
+    real, unlike DEEP's, so a real draw outside them means a mis-derived band.
+    """
+    gate = check_gate.load_gate(check_gate.GATES_DIR / "glove.yaml")
+    cells = {
+        **{
+            f"real_draw{i}": row
+            for i, row in enumerate(_glove_per_seed("glove_noise_floor.json"))
+        },
+        **{
+            f"v1_seed{42 + i}": row
+            for i, row in enumerate(_glove_per_seed("glove_v1_noise_floor.json"))
+        },
+    }
+
+    for name in check_gate.GATE_STATISTICS:
+        low, high = check_gate.band_bounds(gate["statistics"][name])
+        for cell, row in cells.items():
+            assert low <= row[name] <= high, (
+                f"glove.{name} band [{low}, {high}] excludes {cell} ({row[name]})"
+            )
+
+
+@pytest.mark.parametrize(
+    "filename", ["glove_v0_noise_floor.json", "glove_v0_new_box_noise_floor.json"]
+)
+def test_every_glove_band_rejects_every_v0_seed(filename: str):
+    """Each statistic on its own must reject v0, on both boxes it was measured
+    on. Checked per statistic so that loosening any one band until v0 fits it
+    fails here, even though v0 would still fail the gate on the other three.
+    """
+    gate = check_gate.load_gate(check_gate.GATES_DIR / "glove.yaml")
+
+    for name in check_gate.GATE_STATISTICS:
+        low, high = check_gate.band_bounds(gate["statistics"][name])
+        for i, row in enumerate(_glove_per_seed(filename)):
+            assert not low <= row[name] <= high, (
+                f"glove.{name} band [{low}, {high}] admits v0 seed {42 + i} "
+                f"from {filename} ({row[name]})"
+            )
+
+
+NYTIMES_RESULTS = Path(__file__).resolve().parents[1] / "docs" / "results"
+
+
+def _nytimes_summary_entries() -> dict[str, dict]:
+    """Every stats entry in every committed NYTimes canonical summary, keyed
+    `<results dir>:<entry name>`."""
+    entries = {}
+    for path in sorted(NYTIMES_RESULTS.glob("nytimes-*/eda_clean*summary.json")):
+        summary = json.loads(path.read_text(encoding="utf-8"))
+        for entry in summary["stats"]:
+            entries[f"{path.parent.name}:{entry['name']}"] = entry
+    return entries
+
+
+def test_the_nytimes_bands_admit_every_real_draw_and_v3_best():
+    """The owner judged v3's selected checkpoint close enough, and the bands
+    record that. Real must pass too: these bands are centred on the cleaned
+    real corpus, so a real draw outside them means a mis-derived band."""
+    gate = check_gate.load_gate(check_gate.GATES_DIR / "nytimes.yaml")
+    floor = json.loads(
+        (
+            Path(__file__).resolve().parents[1]
+            / "docs"
+            / "datasets"
+            / "nytimes_noise_floor.json"
+        ).read_text(encoding="utf-8")
+    )["zero_and_duplicate_rows_removed"]["per_seed"]
+    entries = _nytimes_summary_entries()
+    cells = {
+        **{f"real_draw{i}": row for i, row in enumerate(floor)},
+        **{k: v for k, v in entries.items() if k.endswith(":real")},
+        "nytimes-v3:v3_best": entries["nytimes-v3:v3_best"],
+        "nytimes-v3-seed42-100k:v3_best": entries["nytimes-v3-seed42-100k:v3_best"],
+    }
+    assert len(cells) > len(floor) + 2, "no committed real rows were found"
+
+    for name in check_gate.GATE_STATISTICS:
+        low, high = check_gate.band_bounds(gate["statistics"][name])
+        for cell, row in cells.items():
+            assert low <= row[name] <= high, (
+                f"nytimes.{name} band [{low}, {high}] excludes {cell} ({row[name]})"
+            )
+
+
+def test_every_nytimes_band_rejects_v0():
+    """Each statistic on its own must reject v0, so that loosening any one band
+    until v0 fits it fails here even though v0 would still fail the other
+    three."""
+    gate = check_gate.load_gate(check_gate.GATES_DIR / "nytimes.yaml")
+    v0 = _nytimes_summary_entries()["nytimes-v0-seed42:v0"]
+
+    for name in check_gate.GATE_STATISTICS:
+        low, high = check_gate.band_bounds(gate["statistics"][name])
+        assert not low <= v0[name] <= high, (
+            f"nytimes.{name} band [{low}, {high}] admits v0 ({v0[name]})"
+        )
+
+
+def test_v3_best_is_the_only_committed_nytimes_checkpoint_the_gate_passes():
+    """Through the real verdict, conditions included. A band loose enough to
+    pass a second checkpoint -- v2c's endpoint, a collapsed step -- was not
+    what the owner accepted."""
+    gate_file = check_gate.GATES_DIR / "nytimes.yaml"
+    gate = check_gate.load_gate(gate_file)
+    passed = set()
+    for key, entry in _nytimes_summary_entries().items():
+        if key.endswith(":real"):
+            continue
+        report = check_gate.evaluate(
+            gate,
+            entry,
+            run_dir=NYTIMES_RESULTS,
+            gate_file=gate_file,
+            stats_name=entry["name"],
+            allow_unset=False,
+            allow_condition_mismatch=False,
+        )
+        if report["verdict"] == "pass":
+            passed.add(entry["name"])
+
+    assert passed == {"v3_best"}
+
+
+SIFT_RESULTS = Path(__file__).resolve().parents[1] / "docs" / "results"
+SIFT_SUMMARIES = [
+    "sift-v4-x100k-retrain/eda/summary.json",
+    "v3-structured/eda_v3_30k/summary.json",
+    "v4-logratio/eda_ladder_100k_summary.json",
+    "v4-logratio/eda_ladder_all_summary.json",
+    "v4-logratio/eda_v0_v3_v4_30k_summary.json",
+    "v4-logratio/eda_v3_v4/summary.json",
+]
+# The entries measured from a v4 generator trained to 100,000 steps: the
+# retrain's selected and final checkpoints, and the 2026-08-10 run.
+SIFT_V4_100K = {
+    "sift-v4-x100k-retrain/eda/summary.json:v4_best",
+    "sift-v4-x100k-retrain/eda/summary.json:v4_step100000",
+    "v4-logratio/eda_ladder_100k_summary.json:v4",
+}
+
+
+def _sift_summary_entries() -> dict[str, dict]:
+    """Every stats entry in every committed SIFT canonical summary, keyed
+    `<path under docs/results>:<entry name>`."""
+    entries = {}
+    for rel in SIFT_SUMMARIES:
+        summary = json.loads((SIFT_RESULTS / rel).read_text(encoding="utf-8"))
+        for entry in summary["stats"]:
+            entries[f"{rel}:{entry['name']}"] = entry
+    return entries
+
+
+def test_the_sift_bands_admit_every_real_draw_and_the_v4_retrain():
+    """The owner chose to admit v4 at 100k, and the bands record that. Real
+    must pass too: these bands are centred on real, so a real draw outside
+    them means a mis-derived band."""
+    gate = check_gate.load_gate(check_gate.GATES_DIR / "sift.yaml")
+    floor = json.loads(
+        (
+            Path(__file__).resolve().parents[1]
+            / "docs"
+            / "datasets"
+            / "sift_noise_floor.json"
+        ).read_text(encoding="utf-8")
+    )["per_seed"]
+    entries = _sift_summary_entries()
+    real_rows = {k: v for k, v in entries.items() if k.endswith(":real")}
+    assert len(floor) == 10 and len(real_rows) == len(SIFT_SUMMARIES)
+    cells = {
+        **{f"real_draw{i}": row for i, row in enumerate(floor)},
+        **real_rows,
+        **{k: entries[k] for k in SIFT_V4_100K},
+    }
+
+    for name in check_gate.GATE_STATISTICS:
+        low, high = check_gate.band_bounds(gate["statistics"][name])
+        for cell, row in cells.items():
+            assert low <= row[name] <= high, (
+                f"sift.{name} band [{low}, {high}] excludes {cell} ({row[name]})"
+            )
+
+
+def test_the_v4_100k_entries_are_the_only_committed_sift_sets_the_gate_passes():
+    """Through the real verdict, conditions included. A band loose enough to
+    pass a dense rung or a 30k v4 was not what the owner accepted."""
+    gate_file = check_gate.GATES_DIR / "sift.yaml"
+    gate = check_gate.load_gate(gate_file)
+    passed = set()
+    for key, entry in _sift_summary_entries().items():
+        if key.endswith(":real"):
+            continue
+        report = check_gate.evaluate(
+            gate,
+            entry,
+            run_dir=SIFT_RESULTS,
+            gate_file=gate_file,
+            stats_name=entry["name"],
+            allow_unset=False,
+            allow_condition_mismatch=False,
+        )
+        if report["verdict"] == "pass":
+            passed.add(key)
+
+    assert passed == SIFT_V4_100K
+
+
+def test_every_sift_band_rejects_some_committed_rung_on_its_own():
+    """No band may be decorative. Checked per statistic, so loosening any one
+    band until every rung fits it fails here even though the other three
+    would still hold the verdict."""
+    gate = check_gate.load_gate(check_gate.GATES_DIR / "sift.yaml")
+    others = {
+        k: v
+        for k, v in _sift_summary_entries().items()
+        if not k.endswith(":real") and k not in SIFT_V4_100K
+    }
+
+    for name in check_gate.GATE_STATISTICS:
+        low, high = check_gate.band_bounds(gate["statistics"][name])
+        rejected = [k for k, row in others.items() if not low <= row[name] <= high]
+        assert rejected, f"sift.{name} band [{low}, {high}] rejects no other rung"
+
+
 def test_check_gate_main_exits_non_zero_on_an_unset_shipped_gate(
     tmp_path: Path, write_run, monkeypatch
 ):
     run_dir = write_run(tmp_path)
     monkeypatch.setattr(
         "sys.argv",
-        ["check_gate", "--dataset", "sift", "--run-dir", str(run_dir)],
+        ["check_gate", "--dataset", "gist", "--run-dir", str(run_dir)],
     )
 
     with pytest.raises(SystemExit) as excinfo:

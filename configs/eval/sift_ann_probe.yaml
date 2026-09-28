@@ -1,0 +1,18 @@
+# Variants for the real / v0 / v4 ANN probe (`src.eval.ann_benchmark`).
+#
+# Both runs are at 100k steps on sift_1m, so the comparison is at matched run
+# length. The run dirs are absolute paths on the training box (tig-gpu) and do
+# not exist in a fresh clone.
+#
+#   v0  trained 2026-09-23 from configs/sift/v0_sift1m_x100k.yaml, which is on
+#       the writeup-latex branch (commit bd486e0), not on this one; the
+#       run_config.yaml in run_dir is what the generator is rebuilt from.
+#   v4  the admitted generator, retrained 2026-09-17
+#       (docs/results/sift-v4-x100k-retrain).
+variants:
+  - name: v0
+    config: configs/sift/v0.yaml
+    run_dir: /workspace/sift-v4/v0_sift1m_x100k
+  - name: v4
+    config: configs/sift/v4_sift1m_x100k.yaml
+    run_dir: /workspace/sift-v4/v4_sift1m_x100k

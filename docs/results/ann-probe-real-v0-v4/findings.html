@@ -1,0 +1,35 @@
+<div class="note"><b>Read this first.</b> All three corpora are 1,000,000 × 128,
+L2-normalized, because the generators only emit unit-norm vectors. These figures do not
+describe raw SIFT1M and are not comparable with published results. v0 and v4
+are both 100k-step runs on sift_1m (v0 trained 2026-09-23, v4 the admitted
+2026-09-17 retrain). Queries: 10,000 per corpus. Real uses SIFT's own query set;
+synthetic queries are a separate draw from each generator. Ground truth is exact k=10.
+<b>This is one run.</b> The only measurement of run-to-run noise is the
+2026-08-13 repeat on a different card (RTX 4060): recall moved ≤ 0.005 and
+QPS ≤ 4.6% at a fixed setting. That floor was not re-measured on this card.</div>
+
+<h2>Findings</h2>
+<ul>
+<li><b>Build time does not tell the corpora apart.</b> IVF-Flat 1.33–1.34 s,
+IVF-PQ 2.93–3.05 s, CAGRA 4.58–5.08 s. Real's CAGRA build is 0.5 s slower
+than the others. Real was built first in the process, so this may be warm-up
+rather than data, but that was not tested.</li>
+<li><b>At a fixed search setting, QPS is the same on all three corpora</b>
+(max/min spread ≤ 3% at 38 of 39 settings, 4.3% at the worst). Search cost follows the knob, not the data. The corpora
+differ only in the recall that cost buys.</li>
+<li><b>v0 tracks real.</b> At QPS for recall 0.90 and 0.95, v0/real is
+0.98–1.02 on IVF-Flat and CAGRA. The one visible gap is at very low IVF probe
+counts: n_probes=1 gives recall 0.251 against 0.271. That is about 4× the August
+recall noise, and it closes by n_probes=16.</li>
+<li><b>v4 is easier to search than real</b>, on both families. At equal
+settings it has higher recall: CAGRA max_iterations=20 gives 0.934 against 0.901,
+and IVF-Flat n_probes=8 gives 0.724 against 0.709. Its CAGRA recall ceiling is
+0.982 against 0.966. As QPS at a matched recall, v4 is 1.10× real on IVF-Flat
+at 0.90 and 1.14× at 0.95. On CAGRA (max_iterations sweep) it is 1.19× at 0.90
+and 1.30× at 0.95.</li>
+<li><b>IVF-PQ never reaches 0.90 on any corpus</b> (peaks 0.879–0.886). That
+limit comes from the pq_dim=64 compression, not from the data.</li>
+<li><b>The CAGRA itopk rows are not a comparison.</b> The cheapest setting
+(itopk=32) already exceeds 0.96 on every corpus, so the table shows each
+corpus's floor at a different recall.</li>
+</ul>

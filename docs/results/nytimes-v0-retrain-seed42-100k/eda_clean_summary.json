@@ -1,0 +1,325 @@
+{
+  "real_path": "/workspace/data-cache/nytimes_250k_l2_clean.npy",
+  "synthetic_paths": [
+    "v0_step30000=runs/nytimes/v0_seed42_100k/synthetic_50k_step30000.npy",
+    "v0_step100000=runs/nytimes/v0_seed42_100k/synthetic_50k_step100000.npy",
+    "v3_best=/workspace/nytimes-v3/live/nytimes/v3_seed42/synthetic_50k_best.npy"
+  ],
+  "preprocess": "l2",
+  "seed": 42,
+  "ann_settings": {
+    "k": 100,
+    "k_hub": 10,
+    "max_rows": 20000,
+    "nlist": 256,
+    "metric": "angular"
+  },
+  "knn_settings": {
+    "k": 5,
+    "max_rows": 20000
+  },
+  "stats": [
+    {
+      "name": "real",
+      "num_vectors": 50000,
+      "dim": 256,
+      "value_mean": 0.00029404458473436534,
+      "value_std": 0.062499307096004486,
+      "value_min": -0.324775367975235,
+      "value_max": 0.31607556343078613,
+      "exact_zero_fraction": 0.0,
+      "negative_fraction": 0.4981146875,
+      "norm_mean": 1.0,
+      "norm_std": 2.203599258621125e-08,
+      "duplicate_row_fraction": 0.0,
+      "median_pairwise_distance": 1.403799295425415,
+      "median_5nn_distance": 1.2048945426940918,
+      "effective_rank": 247.4195556640625,
+      "lid_median": 55.97422906108723,
+      "relative_contrast_median": 1.2705325931542948,
+      "hubness_skew": 2.5287887763407393,
+      "ivf_gini": 0.7767078125,
+      "lid_discarded_queries": 0,
+      "ann_measured_rows": 20000,
+      "ann_measured_k": 100,
+      "ann_measured_nlist": 256
+    },
+    {
+      "name": "v0_step30000",
+      "num_vectors": 50000,
+      "dim": 256,
+      "value_mean": 0.00025475386064499617,
+      "value_std": 0.062499482184648514,
+      "value_min": -0.5081931352615356,
+      "value_max": 0.4651603102684021,
+      "exact_zero_fraction": 0.0,
+      "negative_fraction": 0.4981415625,
+      "norm_mean": 1.0,
+      "norm_std": 2.122628472989163e-08,
+      "duplicate_row_fraction": 0.0,
+      "median_pairwise_distance": 1.411454439163208,
+      "median_5nn_distance": 0.6700458824634552,
+      "effective_rank": 33.60723114013672,
+      "lid_median": 13.772461992749491,
+      "relative_contrast_median": 2.297207620377226,
+      "hubness_skew": 1.1355603199532502,
+      "ivf_gini": 0.18666249999999995,
+      "lid_discarded_queries": 0,
+      "ann_measured_rows": 20000,
+      "ann_measured_k": 100,
+      "ann_measured_nlist": 256
+    },
+    {
+      "name": "v0_step100000",
+      "num_vectors": 50000,
+      "dim": 256,
+      "value_mean": 0.0005177558050490916,
+      "value_std": 0.062497854232788086,
+      "value_min": -0.3751504123210907,
+      "value_max": 0.34174057841300964,
+      "exact_zero_fraction": 7.8125e-08,
+      "negative_fraction": 0.4975603125,
+      "norm_mean": 1.0,
+      "norm_std": 2.215497474367112e-08,
+      "duplicate_row_fraction": 0.0,
+      "median_pairwise_distance": 1.415022611618042,
+      "median_5nn_distance": 0.6997819244861603,
+      "effective_rank": 45.19567108154297,
+      "lid_median": 13.600751954201971,
+      "relative_contrast_median": 2.24311591809266,
+      "hubness_skew": 1.1227732991836528,
+      "ivf_gini": 0.21604179687499991,
+      "lid_discarded_queries": 0,
+      "ann_measured_rows": 20000,
+      "ann_measured_k": 100,
+      "ann_measured_nlist": 256
+    },
+    {
+      "name": "v3_best",
+      "num_vectors": 50000,
+      "dim": 256,
+      "value_mean": 0.00042786262929439545,
+      "value_std": 0.062498535960912704,
+      "value_min": -0.32002341747283936,
+      "value_max": 0.351958692073822,
+      "exact_zero_fraction": 0.0,
+      "negative_fraction": 0.497308984375,
+      "norm_mean": 1.0,
+      "norm_std": 2.0151306401317015e-08,
+      "duplicate_row_fraction": 0.0,
+      "median_pairwise_distance": 1.4054392576217651,
+      "median_5nn_distance": 1.1921685934066772,
+      "effective_rank": 230.30763244628906,
+      "lid_median": 55.68842196493095,
+      "relative_contrast_median": 1.2182689346153555,
+      "hubness_skew": 3.392049686020121,
+      "ivf_gini": 0.770371484375,
+      "lid_discarded_queries": 0,
+      "ann_measured_rows": 20000,
+      "ann_measured_k": 100,
+      "ann_measured_nlist": 256
+    }
+  ],
+  "worst_dimensions": {
+    "v0_step30000": [
+      {
+        "dim": 188,
+        "wasserstein1": 0.10333898905962682
+      },
+      {
+        "dim": 150,
+        "wasserstein1": 0.07876937618221444
+      },
+      {
+        "dim": 93,
+        "wasserstein1": 0.05705241925546924
+      },
+      {
+        "dim": 40,
+        "wasserstein1": 0.015515761800701862
+      },
+      {
+        "dim": 191,
+        "wasserstein1": 0.009913157128213295
+      },
+      {
+        "dim": 176,
+        "wasserstein1": 0.05053439529073275
+      },
+      {
+        "dim": 135,
+        "wasserstein1": 0.042938069759364886
+      },
+      {
+        "dim": 145,
+        "wasserstein1": 0.011321209991751343
+      },
+      {
+        "dim": 214,
+        "wasserstein1": 0.04079540245084502
+      },
+      {
+        "dim": 111,
+        "wasserstein1": 0.010528449476140619
+      },
+      {
+        "dim": 157,
+        "wasserstein1": 0.03754888895284274
+      },
+      {
+        "dim": 3,
+        "wasserstein1": 0.011644861507591114
+      },
+      {
+        "dim": 25,
+        "wasserstein1": 0.005128929518528128
+      },
+      {
+        "dim": 89,
+        "wasserstein1": 0.018420864112657472
+      },
+      {
+        "dim": 133,
+        "wasserstein1": 0.0033719201271036493
+      },
+      {
+        "dim": 88,
+        "wasserstein1": 0.010771629553753617
+      }
+    ],
+    "v0_step100000": [
+      {
+        "dim": 188,
+        "wasserstein1": 0.005052811326708182
+      },
+      {
+        "dim": 150,
+        "wasserstein1": 0.006234373006288445
+      },
+      {
+        "dim": 93,
+        "wasserstein1": 0.0014912941523070823
+      },
+      {
+        "dim": 40,
+        "wasserstein1": 0.05150927047260417
+      },
+      {
+        "dim": 191,
+        "wasserstein1": 0.05134812266474663
+      },
+      {
+        "dim": 176,
+        "wasserstein1": 0.010513045162447776
+      },
+      {
+        "dim": 135,
+        "wasserstein1": 0.008194196386901843
+      },
+      {
+        "dim": 145,
+        "wasserstein1": 0.04151955237734985
+      },
+      {
+        "dim": 214,
+        "wasserstein1": 0.005837245825205445
+      },
+      {
+        "dim": 111,
+        "wasserstein1": 0.03785158080548073
+      },
+      {
+        "dim": 157,
+        "wasserstein1": 0.010223243233153437
+      },
+      {
+        "dim": 3,
+        "wasserstein1": 0.035091942230401074
+      },
+      {
+        "dim": 25,
+        "wasserstein1": 0.0336890340792067
+      },
+      {
+        "dim": 89,
+        "wasserstein1": 0.02863123380015392
+      },
+      {
+        "dim": 133,
+        "wasserstein1": 0.027954968357047322
+      },
+      {
+        "dim": 88,
+        "wasserstein1": 0.0279427660880781
+      }
+    ],
+    "v3_best": [
+      {
+        "dim": 188,
+        "wasserstein1": 0.003212706558852077
+      },
+      {
+        "dim": 150,
+        "wasserstein1": 0.004983366371021397
+      },
+      {
+        "dim": 93,
+        "wasserstein1": 0.003557535123711362
+      },
+      {
+        "dim": 40,
+        "wasserstein1": 0.00395743224024762
+      },
+      {
+        "dim": 191,
+        "wasserstein1": 0.0014252030673418499
+      },
+      {
+        "dim": 176,
+        "wasserstein1": 0.0020951158560723448
+      },
+      {
+        "dim": 135,
+        "wasserstein1": 0.0006606770366310322
+      },
+      {
+        "dim": 145,
+        "wasserstein1": 0.005304200718498405
+      },
+      {
+        "dim": 214,
+        "wasserstein1": 0.002697902323972815
+      },
+      {
+        "dim": 111,
+        "wasserstein1": 0.002953335011750149
+      },
+      {
+        "dim": 157,
+        "wasserstein1": 0.002796650724624665
+      },
+      {
+        "dim": 3,
+        "wasserstein1": 0.0016225159107173125
+      },
+      {
+        "dim": 25,
+        "wasserstein1": 0.0017666142296910614
+      },
+      {
+        "dim": 89,
+        "wasserstein1": 0.004072173556236146
+      },
+      {
+        "dim": 133,
+        "wasserstein1": 0.005808624536147228
+      },
+      {
+        "dim": 88,
+        "wasserstein1": 0.0023260687738590833
+      }
+    ]
+  },
+  "report_html": "runs/nytimes/v0_seed42_100k/eda_clean/eda_report.html",
+  "png_files": []
+}

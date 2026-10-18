@@ -39,6 +39,7 @@ config and a documented profile waiting to be measured.
 | `glove` | 100 | `angular` | `v0`–`v1` trained (5 seeds each) | `docs/datasets/glove.md` |
 | `nytimes` | 256 | `angular` | `v0`–`v3` trained, `v3` meeting the bar | `docs/datasets/nytimes.md` |
 | `openai` | 1536 | `angular` | `v0` defined, not trained | `docs/datasets/openai.md` |
+| `scout_kv` | 5120 | inner product | `v0` defined for 12 layers, not trained | `docs/datasets/scout_kv.md` |
 
 Variant numbers are per dataset and are comparable only within one family.
 The SIFT and DEEP ladders live in `configs/sift/` and `configs/deep/`; every

@@ -44,7 +44,7 @@ Primary deliverable:
 
 ## Datasets
 
-Six benchmark families. Each has its own page under `docs/datasets/`,
+Six benchmark families, plus `scout_kv` below. Each has its own page under `docs/datasets/`,
 carrying its structure, canonical N and k, measured profile, ladder and gate
 bands; the pages are the source of truth for anything family-specific.
 
@@ -56,6 +56,7 @@ bands; the pages are the source of truth for anything family-specific.
 | `glove` | 100 | `angular` | dense signed word vectors, strong density gradient | `mlp` today, `spherical` not yet adopted | `docs/datasets/glove.md` |
 | `nytimes` | 256 | `angular` | dense signed document embeddings, strong topic clusters | `mlp` at v0, `linear_skip` from v1 (v1, v2, v2b and v2c trained, none meeting the bar), `spherical` from v3 (trained; meets the bar since the 2026-09-17 gate bands, set as a tolerance around real to admit it; continued to 100k without a better selection) | `docs/datasets/nytimes.md` |
 | `openai` | 1536 | `angular` | unit-norm text embeddings, very high ambient dim, low intrinsic dim | `mlp` today, `spherical` not yet adopted | `docs/datasets/openai.md` |
+| `scout_kv` | 5120 | inner product | Llama-4-Scout attention inputs, one generator per global layer; gated on IVF/HNSW search difficulty | `mlp` at v0 (configs defined, not trained) | `docs/datasets/scout_kv.md` |
 
 ### Fetching
 
@@ -583,6 +584,12 @@ which `compare_variants` does for every family.
 The knobs (`--ann-k`, `--ann-hub-k`, `--ann-max-rows`, `--ivf-nlist`,
 `--metric`) are documented under "Visualization tools" with the EDA report
 that exposes them.
+
+The `scout_kv` family is the exception. It gates on IVF and HNSW search
+difficulty, pooled over 96 (layer, KV head) corpora, measured by
+`src/eval/kv_gate.py`; for it the four statistics above are diagnostics
+measured on the generator's `h` output. Its bands are unset until a person
+sets them. See `docs/datasets/scout_kv.md`.
 
 ## Checkpoint-based eval
 

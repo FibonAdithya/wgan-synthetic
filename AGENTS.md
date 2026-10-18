@@ -48,6 +48,9 @@ each is easy to break while believing you are making progress.
    `pairwise_hist_l1` and the rest are diagnostics that explain *why* a gate
    failed. Reporting "MMD improved, looks good" is a misreading of the
    project. See `PROJECT_DOCUMENTATION.md#ann-difficulty--the-gate`.
+   Exception: `scout_kv` gates on IVF/HNSW search difficulty
+   (`src/eval/kv_gate.py`); for it the four statistics are diagnostics. See
+   `docs/datasets/scout_kv.md`.
 2. **Variant numbers are per-family.** Each family's ladder is numbered
    independently from `v0`. SIFT `v2` and a future GIST `v2` are unrelated,
    and comparing variant numbers across families is meaningless. Compare

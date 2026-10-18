@@ -171,6 +171,24 @@ def test_evaluate_distribution_honours_output_normalize(tmp_path):
     assert not np.allclose(np.linalg.norm(x, axis=1), 1.0, atol=1e-3)
 ```
 
+```python
+def test_training_eval_samples_honour_output_normalize(tmp_path, monkeypatch):
+    """Catches the in-training eval call (~796) not passing normalize=norm_out.
+    A spy wraps the real sample_generator, so deleting it still fails the test."""
+    from src.train import train_wgan_gp
+
+    seen = []
+    real = train_wgan_gp.sample_generator
+
+    def spy(*args, **kwargs):
+        seen.append(kwargs.get("normalize", True))
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(train_wgan_gp, "sample_generator", spy)
+    _tiny_unnormalised_run(tmp_path)
+    assert seen and not any(seen)
+```
+
 `sample_fake` gains `normalize: bool = True`. `evaluate_distribution.main` and `generate.main` pass `output_normalize(config["model"])`. If `generate.main` writes extra files (timing JSON) next to `--output-path`, the test's `tmp_path` absorbs them.
 
 - [ ] **Step 2: Run, expect failure**
@@ -195,7 +213,7 @@ def output_normalize(model_cfg: Mapping[str, Any]) -> bool:
 
 Inside `sample_generator`, add `normalize: bool = True` and write `x = generator(z); x = normalize_l2(x) if normalize else x`. Inside `train`, set `norm_out = output_normalize(model_cfg)` once after `model_cfg = config["model"]`. Replace both `normalize_l2(generator(z)...)` sites with `fake = generator(z).detach()` (critic) or `fake = generator(z)` (generator), each followed by `if norm_out: fake = normalize_l2(fake)`. Pass `normalize=norm_out` at the eval call (~796).
 
-In `compare_variants.generate_samples` and `plot_descriptor_grid`, pass `normalize=output_normalize(config["model"])`. In `generate.py`, wrap the existing division in `if output_normalize(model_cfg):`. In `evaluate_distribution.sample_fake`, add `normalize: bool = True` and guard the division with it; its `main` passes `output_normalize(config["model"])`. Import `output_normalize` from `src.train.train_wgan_gp`. `evaluate_distribution` already imports from that module, so check for an import cycle by running the tests.
+In `compare_variants.generate_samples` and `plot_descriptor_grid`, pass `normalize=output_normalize(config["model"])`. In `generate.py`, wrap the existing division in `if output_normalize(model_cfg):`. In `evaluate_distribution.sample_fake`, add `normalize: bool = True` and guard the division with it; its `main` passes `output_normalize(config["model"])`. Import `output_normalize` from `src.train.train_wgan_gp`. `evaluate_distribution` does not import that module today (it imports `src.data.dataset`, `src.device`, `src.models.generator`), and `train_wgan_gp` does not import `evaluate_distribution`, so no cycle is expected; the tests confirm it.
 
 - [ ] **Step 4: Run the new tests and the whole suite**
 
@@ -208,7 +226,7 @@ Expected: all pass. The existing count rises by exactly the new tests.
 |---|---|
 | default in `output_normalize` -> `False` | `test_output_normalize_reads_model_cfg_with_true_default` |
 | `sample_generator` normalises regardless of `normalize` | `test_sample_generator_normalize_false_keeps_norms` |
-| eval call (~796) drops `normalize=norm_out` | `test_training_with_output_normalize_false_learns_scale` is not enough on its own here (it samples after training). Also assert, in that test, that `meta["metrics"][-1]` has `fake_norm_mean` (or the existing norm statistic `collapse_stats` logs) not equal to 1.0. Read `collapse_stats` for the exact key before writing the assertion. |
+| eval call (~796) drops `normalize=norm_out` | `test_training_eval_samples_honour_output_normalize` (below). The logged eval stats can't show this: they live in `run_meta["eval"]`, and neither `collapse_stats` (`fake_std`, `fake_min_pdist`, `fake_mean_pdist`) nor `tensor_stats` records a norm. |
 | `generate.py` division unguarded | `test_generate_cli_honours_output_normalize` |
 | `sample_fake` division unguarded | `test_evaluate_distribution_honours_output_normalize` |
 
@@ -408,7 +426,7 @@ def read_safetensor(path: Path, name: str) -> np.ndarray:
         f.seek(base + start)
         raw = f.read(end - start)
     if dtype == "F32":
-        out = np.frombuffer(raw, "<f4")
+        out = np.frombuffer(raw, "<f4").copy()  # frombuffer is read-only; torch.from_numpy warns on it
     elif dtype == "F16":
         out = np.frombuffer(raw, "<f2").astype(np.float32)
     else:
@@ -504,8 +522,8 @@ def test_xbox_preserves_mips_ranking():
     base = rng.normal(size=(200, 8)).astype(np.float32) * rng.uniform(0.2, 3, (200, 1)).astype(np.float32)
     q = rng.normal(size=(20, 8)).astype(np.float32)
     mips = np.argsort(-(q @ base.T), 1)[:, :10]
-    xb, qx = xbox(base), pad0(q)
-    l2 = np.argsort(((qx[:, None, :] - xb[None]) ** 2).sum(-1), 1)[:, :10]
+    xb, qx = xbox(base).astype(np.float64), pad0(q).astype(np.float64)
+    l2 = np.argsort(((qx[:, None, :] - xb[None]) ** 2).sum(-1), 1)[:, :10]  # float64: no near-tie flips
     np.testing.assert_array_equal(mips, l2)
 ```
 
@@ -837,7 +855,8 @@ def test_ood_queries_cost_more_hnsw_work_than_id():
     p = _profile(keys, q_ood, q_id)
     assert p["plain_ood_k10"]["hnsw_recall_op"] <= p["plain_id_k10"]["hnsw_recall_op"]
     ho, hi = p["plain_ood_k10"]["hnsw_ndis"], p["plain_id_k10"]["hnsw_ndis"]
-    assert ho is None or hi is None or ho > hi
+    assert hi is not None, "key-side queries must reach recall 0.9; otherwise the comparison is vacuous"
+    assert ho is None or ho > hi
 ```
 
 Before Step 3, the implementer runs the last test against the spike's own functions (import `docs/results/kv-cache-profile/spike/profile_v2.py` through `importlib`) to confirm the property holds at these sizes. If it doesn't, they change the planted distribution, not the assertion, and record the change in the test docstring.
@@ -894,6 +913,7 @@ def profile_corpus(keys, q_ood, q_id, *, nlist=256, hnsw_m=48, ef_construction=5
 - Produces:
   - `STATISTICS` (the five names); `GATES_FILE = check_gate.GATES_DIR / "scout_kv.yaml"`; `GLOBAL_LAYERS` (re-exported from `src.data.kv_capture`)
   - `pooled_statistics(records: list[dict]) -> dict[str, float | None]`
+  - `load_books(capture_dir, layer, books) -> list[torch.Tensor]`: full-length `h` per book, position 0 included
   - `load_kv_gate(path: Path) -> dict`
   - `evaluate(records, gate) -> dict` with `verdict` in `{"pass", "fail", "unset"}`, `statistics` and `reasons`
   - CLI `python -m src.eval.kv_gate {measure-real,measure-run,check}`
@@ -1033,7 +1053,7 @@ def test_condition_mismatch_fails(mutate):
     elif mutate == "missing":
         R.pop()
     elif mutate == "duplicate":
-        R[-1] = dict(R[0])
+        R.append(dict(R[0]))  # 97 records, full coverage: only a duplicate/count check catches it
     else:
         R[3]["conditions"]["nlist"] = 1024
     rep = kv_gate.evaluate(R, kv_gate.load_kv_gate(GATE))
@@ -1066,14 +1086,15 @@ def _write_multi(path, tensors):
 
 def test_measure_real_end_to_end_on_a_tiny_capture(tmp_path):
     """Catches measure-real not iterating KV heads, mis-sizing corpora, or not
-    recording conditions. Tiny sizes: 2 books, 1 layer, T=64, D=16."""
+    recording conditions. Tiny sizes: 2 books, 1 layer, T=400, D=16. T must give
+    more than 128 keys, because profile_corpus takes k=128 ground truth."""
     from src.data.kv_capture import h_path, write_bf16_safetensor
 
     rng = np.random.default_rng(0)
     for b in (0, 1):
         p = h_path(tmp_path, b, 3)
         p.parent.mkdir(parents=True)
-        write_bf16_safetensor(p, "h", rng.normal(size=(64, 16)).astype(np.float32))
+        write_bf16_safetensor(p, "h", rng.normal(size=(400, 16)).astype(np.float32))
     (tmp_path / "weights").mkdir()
     _write_multi(tmp_path / "weights" / "layer03.safetensors",
                  {"k_proj": rng.normal(size=(2 * 128, 16)).astype(np.float32),
@@ -1084,12 +1105,30 @@ def test_measure_real_end_to_end_on_a_tiny_capture(tmp_path):
     recs = [json.loads(line) for line in out.read_text().splitlines()]
     assert sorted((r["layer"], r["kv_head"]) for r in recs) == [(3, 0), (3, 1)]
     for r in recs:
-        assert r["n_keys"] == 2 * ((64 - 16 - 1) // 2) and r["n_q_ood"] == 16 * 5 and r["n_q_id"] == 16
+        assert r["n_keys"] == 2 * ((400 - 16 - 1) // 2) and r["n_q_ood"] == 16 * 5 and r["n_q_id"] == 16
         assert r["conditions"]["nlist"] == 4 and r["books"] == [0, 1] and r["source"] == "real"
         assert 0.0 <= r["own_book_share_top10"] <= 1.0
+    with pytest.raises(FileExistsError):
+        kv_gate.measure_real(tmp_path, books=[0, 1], layers=[3], seed=0, out=out,
+                             n_sink=1, n_tail=16, nlist=4, hnsw_m=8, ef_construction=16, threads=1)
+
+
+def test_load_books_keeps_position_zero(tmp_path):
+    """Catches measure_real loading books through load_kv_capture, which already
+    drops the sink: mixed_real_corpus would then drop a second position, and the
+    key count can't show it (31,742 // 8 == 31,743 // 8)."""
+    from src.data.kv_capture import h_path, write_bf16_safetensor
+
+    a = np.arange(48, dtype=np.float32).reshape(12, 4)
+    p = h_path(tmp_path, 0, 3)
+    p.parent.mkdir(parents=True)
+    write_bf16_safetensor(p, "h", a)
+    (b,) = kv_gate.load_books(tmp_path, 3, [0])
+    assert b.shape == (12, 4)
+    np.testing.assert_array_equal(np.asarray(b)[0], a[0])
 ```
 
-`measure_real(capture_dir, books, layers, seed, out, *, n_sink=1, n_tail=1024, nlist=256, hnsw_m=48, ef_construction=500, threads=15)` is the exact signature; the CLI's `--books` accepts `12-19` or `12,13,...`. If an `evaluate` test can't catch its mutation, the implementer reports that rather than weakening the test.
+`measure_real(capture_dir, books, layers, seed, out, *, n_sink=1, n_tail=1024, nlist=256, hnsw_m=48, ef_construction=500, threads=15)` is the exact signature. It raises `FileExistsError` if `out` already exists, so a re-run can't append duplicate records. `load_books(capture_dir, layer, books) -> list[torch.Tensor]` returns each book's full `h` (position 0 included) via `read_safetensor(h_path(...), "h")`; the sink is dropped once, inside `mixed_real_corpus`. the CLI's `--books` accepts `12-19` or `12,13,...`. If an `evaluate` test can't catch its mutation, the implementer reports that rather than weakening the test.
 
 - [ ] **Step 2: Run, expect failure.**
 
@@ -1099,7 +1138,7 @@ def test_measure_real_end_to_end_on_a_tiny_capture(tmp_path):
     - Check conditions first. There must be 96 records with distinct `(layer, kv_head)` covering `GLOBAL_LAYERS x range(8)`. Every record's `n_keys`, `n_q_ood`, `n_q_id`, `n_sink`, `n_tail` and `conditions[nlist|hnsw_m|ef_construction|target]` must equal canonical. Any mismatch gives `fail` with a reason naming the record and key.
     - Then call `check_statistic(name, stats, band)` for each statistic.
     - The verdict follows `check_gate`'s rule: any fail gives `fail`; otherwise any unset gives `unset`; otherwise `pass`.
-  - **`measure_real`:** for each layer, load the books' `h` (torch, CUDA if available), call `load_layer_weights`, and for each `g` build `mixed_real_corpus(..., seed=1009 * layer + g + 7919 * seed)`. Then `profile_corpus`, compute the own-book share of the exact top-10 (as `mix_check.py` does), and append the record.
+  - **`measure_real`:** for each layer, load the books' `h` with `load_books` (torch, CUDA if available; never `load_kv_capture`, which drops the sink), call `load_layer_weights`, and for each `g in range(wk.shape[0] // HEAD_DIM)` (8 on the real model, 2 in the test) build `mixed_real_corpus(..., seed=1009 * layer + g + 7919 * seed)`. Then `profile_corpus`, compute the own-book share of the exact top-10 (as `mix_check.py` does), and append the record.
   - **`measure_run`** takes `--run-dir L=path` pairs (all 12 required). For each layer:
     - Load the generator from `best_generator.pt` (or `--checkpoint-name`), and draw `n_keys + 2 * n_tail` rows with `torch.manual_seed(7919 * seed + layer)` and `sample_generator(..., normalize=output_normalize(cfg["model"]))`.
     - Call `invert_samples(x, load_preprocess_state(run_dir))`.
@@ -1190,6 +1229,7 @@ Move the heavy imports (torch, transformers, pyarrow, safetensors) in the ported
 - Create: `configs/scout_kv/v0/L03.yaml` ... `L47.yaml` (12 files)
 - Create: `docs/datasets/scout_kv.md`
 - Modify: `AGENTS.md` (invariant 1), `PROJECT_DOCUMENTATION.md` (`## ANN difficulty — the gate`: one paragraph; `## Datasets`: one row or line), `README.md` documentation map if it lists every family page
+- Modify: `tests/test_docs_references.py::test_authoritative_docs_has_the_expected_count`. The new `docs/datasets/scout_kv.md` is picked up by its glob, so the pinned count goes from 11 to 12 and its docstring from 6 to 7 dataset pages. Without this, `make check` fails.
 - Test: `tests/test_scout_kv_configs.py`
 
 Template (`L43.yaml`; the others differ only in `kv_layer` and `output_dir`):
@@ -1293,7 +1333,7 @@ def test_norms_are_preserved():
 
 - [ ] **Step 2: Fail. Step 3: write the 12 configs** with a short throwaway generator script, not committed. **Step 4: pass.**
 - [ ] **Step 5: Docs.**
-  - **`docs/datasets/scout_kv.md`:** what a sample is; the book split; locked conditions; the gate statistics; "bands unset"; the mixed-book result with its MEASURED numbers from `docs/results/kv-cache-profile/mixed-book/comparison.txt`. Cite code by symbol and docs by anchor (enforced by `tests/test_docs_references.py`).
+  - **`docs/datasets/scout_kv.md`:** what a sample is; the book split; locked conditions; the gate statistics; "bands unset"; the mixed-book result with its MEASURED numbers from `docs/results/kv-cache-profile/mixed-book/comparison.txt`. Cite code by symbol and docs by anchor (enforced by `tests/test_docs_references.py`). Don't backtick `runs/...` paths: `runs/` is gitignored, so the reference checker can't resolve them. Absolute box paths such as `/workspace/kv/capture` are exempt.
   - **`AGENTS.md` invariant 1:** append "Exception: `scout_kv` gates on IVF/HNSW search difficulty (`src/eval/kv_gate.py`); for it the four statistics are diagnostics. See `docs/datasets/scout_kv.md`."
   - **`PROJECT_DOCUMENTATION.md#ann-difficulty--the-gate`:** add a paragraph saying the same.
 - [ ] **Step 6: `make check`, commit.**

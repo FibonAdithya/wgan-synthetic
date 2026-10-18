@@ -22,6 +22,7 @@ import yaml
 
 from src.device import resolve_device
 from src.models.generator import build_generator
+from src.train.train_wgan_gp import output_normalize
 
 
 def parse_args() -> argparse.Namespace:
@@ -58,6 +59,7 @@ def main() -> None:
     generator.eval()
     print(f"Using device: {device}")
 
+    norm_out = output_normalize(model_cfg)
     out = []
     generated = 0
     generation_start = time.perf_counter()
@@ -66,9 +68,10 @@ def main() -> None:
             cur = min(args.batch_size, args.num_samples - generated)
             z = torch.randn(cur, int(model_cfg["latent_dim"]), device=device)
             x = generator(z)
-            x = x / torch.clamp(
-                torch.linalg.vector_norm(x, dim=1, keepdim=True), min=1.0e-8
-            )
+            if norm_out:
+                x = x / torch.clamp(
+                    torch.linalg.vector_norm(x, dim=1, keepdim=True), min=1.0e-8
+                )
             x = x.cpu().numpy().astype(np.float32, copy=False)
             out.append(x)
             generated += cur

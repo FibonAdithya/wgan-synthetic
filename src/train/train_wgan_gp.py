@@ -5,9 +5,10 @@ import contextlib
 import json
 import math
 import random
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from functools import partial
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import torch
@@ -413,12 +414,23 @@ def save_checkpoint(
         torch.save(ckpt, out_dir / "best_generator.pt")
 
 
+def output_normalize(model_cfg: Mapping[str, Any]) -> bool:
+    """Whether generator output is L2-normalised before the critic and in samples.
+
+    True for every family built so far, which all search on the unit sphere.
+    scout_kv sets it False: inner-product search reads vector norms, so a
+    unit-norm h would erase part of what the gate measures.
+    """
+    return bool(model_cfg.get("output_normalize", True))
+
+
 def sample_generator(
     generator: nn.Module,
     num_samples: int,
     latent_dim: int,
     batch_size: int,
     device: torch.device,
+    normalize: bool = True,
 ) -> np.ndarray:
     # Restore the mode we found rather than forcing train(): callers outside
     # the training loop (evaluate_distribution, compare_variants) hand us an
@@ -434,7 +446,9 @@ def sample_generator(
             if cur <= 0:
                 break
             z = torch.randn(cur, latent_dim, device=device)
-            x = normalize_l2(generator(z)).detach().cpu().numpy()
+            x = generator(z)
+            x = normalize_l2(x) if normalize else x
+            x = x.detach().cpu().numpy()
             out.append(x)
             generated += cur
     generator.train(was_training)
@@ -477,6 +491,7 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
     )
 
     model_cfg = config["model"]
+    norm_out = output_normalize(model_cfg)
     train_cfg = config["training"]
     latent_dim = int(model_cfg["latent_dim"])
     descriptor_dim = int(data_cfg["descriptor_dim"])
@@ -672,7 +687,9 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
 
             optim_d.zero_grad(set_to_none=True)
             with autocast("cuda", enabled=amp):
-                fake = normalize_l2(generator(z).detach())
+                fake = generator(z).detach()
+                if norm_out:
+                    fake = normalize_l2(fake)
                 d_real = score_population(critic, real, "real", row_ids=real_ids)
                 d_fake = score_population(critic, fake, "fake")
                 gp = gradient_penalty(critic, real, fake, device=device)
@@ -701,7 +718,9 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
         optim_g.zero_grad(set_to_none=True)
         with autocast("cuda", enabled=amp):
             z = torch.randn(batch_size, latent_dim, device=device)
-            fake = normalize_l2(generator(z))
+            fake = generator(z)
+            if norm_out:
+                fake = normalize_l2(fake)
             adv_loss = -score_population(critic, fake, "fake").mean()
             g_loss = adv_loss
             # Transferred once and shared: the regularizers all want the same
@@ -799,6 +818,7 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
                     latent_dim=latent_dim,
                     batch_size=int(train_cfg["batch_size"]),
                     device=device,
+                    normalize=norm_out,
                 )
                 stats = tensor_stats(x_holdout, fake_holdout)
                 stats.update(collapse_stats(fake_holdout))

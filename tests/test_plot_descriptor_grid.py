@@ -306,7 +306,9 @@ def test_variant_row_with_nan_output_is_refused(
     spurious red 'negative' trace for the affected variant."""
     variant, _ = write_tiny_gated_run(tmp_path, name="v2", descriptor_dim=128)
 
-    def _nan_sampler(generator, num_samples, latent_dim, batch_size, device):
+    def _nan_sampler(
+        generator, num_samples, latent_dim, batch_size, device, normalize=True
+    ):
         out = np.zeros((num_samples, 128), dtype=np.float32)
         out[0, 0] = np.nan
         return out

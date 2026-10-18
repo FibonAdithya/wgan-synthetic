@@ -18,6 +18,7 @@ from src.data.dataset import (
 )
 from src.device import resolve_device
 from src.models.generator import build_generator
+from src.train.train_wgan_gp import output_normalize
 
 
 def parse_args() -> argparse.Namespace:
@@ -56,6 +57,7 @@ def sample_fake(
     n: int,
     batch_size: int,
     device: torch.device,
+    normalize: bool = True,
 ) -> np.ndarray:
     out = []
     generated = 0
@@ -64,9 +66,10 @@ def sample_fake(
             cur = min(batch_size, n - generated)
             z = torch.randn(cur, latent_dim, device=device)
             x = generator(z)
-            x = x / torch.clamp(
-                torch.linalg.vector_norm(x, dim=1, keepdim=True), min=1.0e-8
-            )
+            if normalize:
+                x = x / torch.clamp(
+                    torch.linalg.vector_norm(x, dim=1, keepdim=True), min=1.0e-8
+                )
             x = x.cpu().numpy().astype(np.float32, copy=False)
             out.append(x)
             generated += cur
@@ -227,6 +230,7 @@ def main() -> None:
         n=n,
         batch_size=int(config["training"]["batch_size"]),
         device=device,
+        normalize=output_normalize(config["model"]),
     )
 
     metrics = {}

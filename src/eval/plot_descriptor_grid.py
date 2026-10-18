@@ -37,7 +37,7 @@ from src.eval.eda import glyphs as eda_glyphs
 from src.eval.eda import html as eda_html
 from src.eval.eda import series as eda_series
 from src.eval.evaluate_distribution import load_generator
-from src.train.train_wgan_gp import sample_generator
+from src.train.train_wgan_gp import output_normalize, sample_generator
 
 # Geometry, the negative-ray treatment and the figure itself come from
 # `eda.glyphs`, which draws the same panel from materialised arrays.
@@ -210,6 +210,7 @@ def variant_rows(
             latent_dim=int(config["model"]["latent_dim"]),
             batch_size=num_samples,
             device=device,
+            normalize=output_normalize(config["model"]),
         )
         if samples.shape[1] != DESCRIPTOR_DIM:
             raise ValueError(

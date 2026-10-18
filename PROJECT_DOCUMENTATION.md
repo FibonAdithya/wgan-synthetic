@@ -219,6 +219,8 @@ repo-wide constant:
 
 No sigmoid on critic output.
 
+`model.output_normalize` (default `true`): generator output is L2-normalised before the critic, in in-training samples and in every sampler. `scout_kv` sets it `false`, because inner-product search reads norms.
+
 ---
 
 ## Model variants: the per-dataset ladder

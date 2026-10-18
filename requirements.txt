@@ -7,6 +7,10 @@ pyyaml==6.0.3
 tqdm==4.68.4
 scikit-learn==1.9.0
 scipy==1.18.0
+# Approximate nearest-neighbour indexes for the scout_kv gate (src/kv/search_profile.py):
+# IVFFlat and HNSW, with the indexIVF_stats / hnsw_stats work counters the gate reads.
+# The same version measured the profiling runs in docs/results/kv-cache-profile/.
+faiss-cpu==1.15.1
 # HDF5 reader for the ann-benchmarks mirrors, used only by src/data/fetch.py.
 h5py==3.16.0
 # Parquet reader for the one family ann-benchmarks generates rather than

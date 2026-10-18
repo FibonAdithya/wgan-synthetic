@@ -1,0 +1,83 @@
+{
+ "row": 5,
+ "title": "The S. W. F. Club by Caroline E. Jacobs",
+ "n_tokens_full": 55263,
+ "n_tokens": 32768,
+ "forward_seconds": 87.0,
+ "peak_gpu_gib": 45.9,
+ "verify": {
+  "3": {
+   "k_rel_err": 0.0016889373414478491,
+   "q_rel_err": 0.0022051568108729745,
+   "q_rel_err_late_with_scale": 0.00233073245224594,
+   "q_rel_err_late_without_scale": 0.09891863969312244
+  },
+  "7": {
+   "k_rel_err": 0.001659187720591331,
+   "q_rel_err": 0.0022371329076900652,
+   "q_rel_err_late_with_scale": 0.0023179715529475235,
+   "q_rel_err_late_without_scale": 0.10105392794942195
+  },
+  "11": {
+   "k_rel_err": 0.0016463415435200713,
+   "q_rel_err": 0.002247150719173456,
+   "q_rel_err_late_with_scale": 0.0023321919963222785,
+   "q_rel_err_late_without_scale": 0.10071366519056368
+  },
+  "15": {
+   "k_rel_err": 0.0016636786871539286,
+   "q_rel_err": 0.002271131750899548,
+   "q_rel_err_late_with_scale": 0.0023497643963208857,
+   "q_rel_err_late_without_scale": 0.10228331447130452
+  },
+  "19": {
+   "k_rel_err": 0.00165522027217312,
+   "q_rel_err": 0.002269119948688124,
+   "q_rel_err_late_with_scale": 0.0023647365099612205,
+   "q_rel_err_late_without_scale": 0.09966166846948205
+  },
+  "23": {
+   "k_rel_err": 0.001656434297992598,
+   "q_rel_err": 0.002232166421984029,
+   "q_rel_err_late_with_scale": 0.002343342142922359,
+   "q_rel_err_late_without_scale": 0.09648626069991227
+  },
+  "27": {
+   "k_rel_err": 0.0016629299635151863,
+   "q_rel_err": 0.0021999719753955527,
+   "q_rel_err_late_with_scale": 0.002327483723027097,
+   "q_rel_err_late_without_scale": 0.09694843359704167
+  },
+  "31": {
+   "k_rel_err": 0.0016662072923544842,
+   "q_rel_err": 0.0022124213528039644,
+   "q_rel_err_late_with_scale": 0.0023346605371515395,
+   "q_rel_err_late_without_scale": 0.09673812929153192
+  },
+  "35": {
+   "k_rel_err": 0.0016688714941344872,
+   "q_rel_err": 0.002234591482688994,
+   "q_rel_err_late_with_scale": 0.0023354483313413137,
+   "q_rel_err_late_without_scale": 0.0988663087406026
+  },
+  "39": {
+   "k_rel_err": 0.0016601944951683528,
+   "q_rel_err": 0.0022426907522668893,
+   "q_rel_err_late_with_scale": 0.002328476255994731,
+   "q_rel_err_late_without_scale": 0.10095331218859849
+  },
+  "43": {
+   "k_rel_err": 0.0016516540258513853,
+   "q_rel_err": 0.002285504609872703,
+   "q_rel_err_late_with_scale": 0.002354006838100506,
+   "q_rel_err_late_without_scale": 0.10366314318121303
+  },
+  "47": {
+   "k_rel_err": 0.0016562871773462729,
+   "q_rel_err": 0.002265947515534357,
+   "q_rel_err_late_with_scale": 0.0023308666426411296,
+   "q_rel_err_late_without_scale": 0.10631478636186807
+  }
+ },
+ "worst_rel_err": 0.002285504609872703
+}

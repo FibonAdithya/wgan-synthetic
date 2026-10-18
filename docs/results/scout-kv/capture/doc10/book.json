@@ -1,0 +1,83 @@
+{
+ "row": 14,
+ "title": "The Life of Gordon Volume II by Demetrius Charles Boulger",
+ "n_tokens_full": 133382,
+ "n_tokens": 32768,
+ "forward_seconds": 77.7,
+ "peak_gpu_gib": 45.9,
+ "verify": {
+  "3": {
+   "k_rel_err": 0.0016901722617288972,
+   "q_rel_err": 0.002207556844473576,
+   "q_rel_err_late_with_scale": 0.0023369735765301873,
+   "q_rel_err_late_without_scale": 0.09916754657694214
+  },
+  "7": {
+   "k_rel_err": 0.0016585380111315434,
+   "q_rel_err": 0.00223723293782861,
+   "q_rel_err_late_with_scale": 0.002318543414339632,
+   "q_rel_err_late_without_scale": 0.10106943342897852
+  },
+  "11": {
+   "k_rel_err": 0.00164890770844765,
+   "q_rel_err": 0.002245835820308028,
+   "q_rel_err_late_with_scale": 0.0023321551085083727,
+   "q_rel_err_late_without_scale": 0.10085165892029134
+  },
+  "15": {
+   "k_rel_err": 0.0016629256802874694,
+   "q_rel_err": 0.002272785022972438,
+   "q_rel_err_late_with_scale": 0.0023487725356643135,
+   "q_rel_err_late_without_scale": 0.10259834901068966
+  },
+  "19": {
+   "k_rel_err": 0.0016557298488913388,
+   "q_rel_err": 0.0022686516377286737,
+   "q_rel_err_late_with_scale": 0.00236136693307446,
+   "q_rel_err_late_without_scale": 0.1001389551131851
+  },
+  "23": {
+   "k_rel_err": 0.0016573327232735362,
+   "q_rel_err": 0.0022285152256485657,
+   "q_rel_err_late_with_scale": 0.0023446736900478832,
+   "q_rel_err_late_without_scale": 0.0958601177797087
+  },
+  "27": {
+   "k_rel_err": 0.0016596133325919296,
+   "q_rel_err": 0.0021946671274822955,
+   "q_rel_err_late_with_scale": 0.002326644740699307,
+   "q_rel_err_late_without_scale": 0.09602329876238598
+  },
+  "31": {
+   "k_rel_err": 0.0016632022387853861,
+   "q_rel_err": 0.0022104154857827967,
+   "q_rel_err_late_with_scale": 0.002331568404881532,
+   "q_rel_err_late_without_scale": 0.09666947017371595
+  },
+  "35": {
+   "k_rel_err": 0.0016651352330444783,
+   "q_rel_err": 0.0022353150080548943,
+   "q_rel_err_late_with_scale": 0.002334584652506332,
+   "q_rel_err_late_without_scale": 0.09949649652547728
+  },
+  "39": {
+   "k_rel_err": 0.0016581685942591157,
+   "q_rel_err": 0.002240173640073434,
+   "q_rel_err_late_with_scale": 0.002327394371168526,
+   "q_rel_err_late_without_scale": 0.10166758913336847
+  },
+  "43": {
+   "k_rel_err": 0.0016533494100365346,
+   "q_rel_err": 0.002284730052323513,
+   "q_rel_err_late_with_scale": 0.0023546606613491163,
+   "q_rel_err_late_without_scale": 0.10449458974264135
+  },
+  "47": {
+   "k_rel_err": 0.0016571710354507856,
+   "q_rel_err": 0.0022723526360903185,
+   "q_rel_err_late_with_scale": 0.0023345071588158424,
+   "q_rel_err_late_without_scale": 0.10691962906554904
+  }
+ },
+ "worst_rel_err": 0.002284730052323513
+}

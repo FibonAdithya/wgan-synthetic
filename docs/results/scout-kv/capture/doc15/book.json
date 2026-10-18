@@ -1,0 +1,83 @@
+{
+ "row": 21,
+ "title": "Carmen Ariza by Charles Francis Stocking",
+ "n_tokens_full": 599111,
+ "n_tokens": 32768,
+ "forward_seconds": 79.5,
+ "peak_gpu_gib": 45.9,
+ "verify": {
+  "3": {
+   "k_rel_err": 0.0016889913478694628,
+   "q_rel_err": 0.002203444695339402,
+   "q_rel_err_late_with_scale": 0.002334950967467173,
+   "q_rel_err_late_without_scale": 0.09864410450575072
+  },
+  "7": {
+   "k_rel_err": 0.001659910408745046,
+   "q_rel_err": 0.0022375730322874805,
+   "q_rel_err_late_with_scale": 0.002318039097313126,
+   "q_rel_err_late_without_scale": 0.10098526452958594
+  },
+  "11": {
+   "k_rel_err": 0.0016481276809752674,
+   "q_rel_err": 0.0022476317992222586,
+   "q_rel_err_late_with_scale": 0.0023316798060901834,
+   "q_rel_err_late_without_scale": 0.10082969261603744
+  },
+  "15": {
+   "k_rel_err": 0.0016610897513080827,
+   "q_rel_err": 0.002274549452229878,
+   "q_rel_err_late_with_scale": 0.002348444304265271,
+   "q_rel_err_late_without_scale": 0.10268340122750798
+  },
+  "19": {
+   "k_rel_err": 0.001656048007483736,
+   "q_rel_err": 0.0022707917098051624,
+   "q_rel_err_late_with_scale": 0.002364768967188215,
+   "q_rel_err_late_without_scale": 0.10043791325077539
+  },
+  "23": {
+   "k_rel_err": 0.00165623826647269,
+   "q_rel_err": 0.002220548255360101,
+   "q_rel_err_late_with_scale": 0.0023403848251780154,
+   "q_rel_err_late_without_scale": 0.09573950887170128
+  },
+  "27": {
+   "k_rel_err": 0.0016607721669302936,
+   "q_rel_err": 0.0021891607042643637,
+   "q_rel_err_late_with_scale": 0.002327036012766536,
+   "q_rel_err_late_without_scale": 0.09602536565887097
+  },
+  "31": {
+   "k_rel_err": 0.001665787717443163,
+   "q_rel_err": 0.0022050142313466106,
+   "q_rel_err_late_with_scale": 0.002333051336993797,
+   "q_rel_err_late_without_scale": 0.0966289043400917
+  },
+  "35": {
+   "k_rel_err": 0.0016674678120490321,
+   "q_rel_err": 0.0022229430429499993,
+   "q_rel_err_late_with_scale": 0.002328676664688335,
+   "q_rel_err_late_without_scale": 0.09954195374838697
+  },
+  "39": {
+   "k_rel_err": 0.0016574174037906765,
+   "q_rel_err": 0.0022357096344576776,
+   "q_rel_err_late_with_scale": 0.0023271782242922866,
+   "q_rel_err_late_without_scale": 0.101481393737724
+  },
+  "43": {
+   "k_rel_err": 0.0016483485565861248,
+   "q_rel_err": 0.002284071315089794,
+   "q_rel_err_late_with_scale": 0.002355424378155935,
+   "q_rel_err_late_without_scale": 0.10431286717221087
+  },
+  "47": {
+   "k_rel_err": 0.0016600270945915706,
+   "q_rel_err": 0.002268296469557719,
+   "q_rel_err_late_with_scale": 0.0023329418912025543,
+   "q_rel_err_late_without_scale": 0.10672698285136002
+  }
+ },
+ "worst_rel_err": 0.002284071315089794
+}

@@ -1,0 +1,83 @@
+{
+ "row": 17,
+ "title": "Turn About Eleanor by Ethel M. Kelley",
+ "n_tokens_full": 79509,
+ "n_tokens": 32768,
+ "forward_seconds": 77.6,
+ "peak_gpu_gib": 45.9,
+ "verify": {
+  "3": {
+   "k_rel_err": 0.0016898062766292968,
+   "q_rel_err": 0.0022062870056580005,
+   "q_rel_err_late_with_scale": 0.002335015127197062,
+   "q_rel_err_late_without_scale": 0.09885897888302195
+  },
+  "7": {
+   "k_rel_err": 0.0016605867865639567,
+   "q_rel_err": 0.002237482555779872,
+   "q_rel_err_late_with_scale": 0.0023176113840414187,
+   "q_rel_err_late_without_scale": 0.10109118042232025
+  },
+  "11": {
+   "k_rel_err": 0.001646641065513184,
+   "q_rel_err": 0.0022466669978194703,
+   "q_rel_err_late_with_scale": 0.0023317983493687335,
+   "q_rel_err_late_without_scale": 0.10083650189533419
+  },
+  "15": {
+   "k_rel_err": 0.0016640108134701426,
+   "q_rel_err": 0.002271888189935271,
+   "q_rel_err_late_with_scale": 0.002349371438244454,
+   "q_rel_err_late_without_scale": 0.10232426681423333
+  },
+  "19": {
+   "k_rel_err": 0.0016556688281746338,
+   "q_rel_err": 0.0022691156241570177,
+   "q_rel_err_late_with_scale": 0.0023672232983714078,
+   "q_rel_err_late_without_scale": 0.09988730935055287
+  },
+  "23": {
+   "k_rel_err": 0.0016577039673978465,
+   "q_rel_err": 0.0022234357300766785,
+   "q_rel_err_late_with_scale": 0.002341114897824646,
+   "q_rel_err_late_without_scale": 0.09596867162756412
+  },
+  "27": {
+   "k_rel_err": 0.00166292113753664,
+   "q_rel_err": 0.002196267965846366,
+   "q_rel_err_late_with_scale": 0.002328885327057887,
+   "q_rel_err_late_without_scale": 0.09590621123689856
+  },
+  "31": {
+   "k_rel_err": 0.0016647611427778998,
+   "q_rel_err": 0.0022111906882668372,
+   "q_rel_err_late_with_scale": 0.00233176391570522,
+   "q_rel_err_late_without_scale": 0.09670910640507786
+  },
+  "35": {
+   "k_rel_err": 0.0016662700122552577,
+   "q_rel_err": 0.002238322864650212,
+   "q_rel_err_late_with_scale": 0.0023365835997450524,
+   "q_rel_err_late_without_scale": 0.0993449432236345
+  },
+  "39": {
+   "k_rel_err": 0.001659600033538161,
+   "q_rel_err": 0.0022421782185937634,
+   "q_rel_err_late_with_scale": 0.0023285280608875327,
+   "q_rel_err_late_without_scale": 0.10108142822064768
+  },
+  "43": {
+   "k_rel_err": 0.0016511536824529297,
+   "q_rel_err": 0.0022850361567617315,
+   "q_rel_err_late_with_scale": 0.002354375173677479,
+   "q_rel_err_late_without_scale": 0.10405701421345923
+  },
+  "47": {
+   "k_rel_err": 0.0016589998166023356,
+   "q_rel_err": 0.0022676489145877173,
+   "q_rel_err_late_with_scale": 0.002332213169657047,
+   "q_rel_err_late_without_scale": 0.10700226995088705
+  }
+ },
+ "worst_rel_err": 0.0022850361567617315
+}

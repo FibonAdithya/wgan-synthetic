@@ -1,0 +1,83 @@
+{
+ "row": 16,
+ "title": "In Her Own Right by John Reed Scott",
+ "n_tokens_full": 100178,
+ "n_tokens": 32768,
+ "forward_seconds": 77.1,
+ "peak_gpu_gib": 45.9,
+ "verify": {
+  "3": {
+   "k_rel_err": 0.0016896645951802384,
+   "q_rel_err": 0.0022021740414266415,
+   "q_rel_err_late_with_scale": 0.002327963658107978,
+   "q_rel_err_late_without_scale": 0.09879968130914815
+  },
+  "7": {
+   "k_rel_err": 0.0016594653379983738,
+   "q_rel_err": 0.002238163434390256,
+   "q_rel_err_late_with_scale": 0.0023177549483434966,
+   "q_rel_err_late_without_scale": 0.10102744558094127
+  },
+  "11": {
+   "k_rel_err": 0.001646992639552776,
+   "q_rel_err": 0.0022486817753891867,
+   "q_rel_err_late_with_scale": 0.0023326009586889873,
+   "q_rel_err_late_without_scale": 0.1008287895429038
+  },
+  "15": {
+   "k_rel_err": 0.0016628877850624617,
+   "q_rel_err": 0.0022735343635224953,
+   "q_rel_err_late_with_scale": 0.0023482043973890206,
+   "q_rel_err_late_without_scale": 0.10251392855410386
+  },
+  "19": {
+   "k_rel_err": 0.0016556479395402196,
+   "q_rel_err": 0.002271039606475485,
+   "q_rel_err_late_with_scale": 0.002364034408950108,
+   "q_rel_err_late_without_scale": 0.09974794563152128
+  },
+  "23": {
+   "k_rel_err": 0.001657492076973268,
+   "q_rel_err": 0.0022315221248493497,
+   "q_rel_err_late_with_scale": 0.0023438748098341985,
+   "q_rel_err_late_without_scale": 0.09603684663783027
+  },
+  "27": {
+   "k_rel_err": 0.0016632916097601342,
+   "q_rel_err": 0.0021945197499100458,
+   "q_rel_err_late_with_scale": 0.0023268175112687497,
+   "q_rel_err_late_without_scale": 0.09676990447627137
+  },
+  "31": {
+   "k_rel_err": 0.0016671249584683018,
+   "q_rel_err": 0.0022106541561366794,
+   "q_rel_err_late_with_scale": 0.0023341888345997028,
+   "q_rel_err_late_without_scale": 0.09680557163416931
+  },
+  "35": {
+   "k_rel_err": 0.0016691087265788503,
+   "q_rel_err": 0.0022327559551523555,
+   "q_rel_err_late_with_scale": 0.0023328442467661845,
+   "q_rel_err_late_without_scale": 0.09984278109141546
+  },
+  "39": {
+   "k_rel_err": 0.0016579516840617954,
+   "q_rel_err": 0.0022397236375583294,
+   "q_rel_err_late_with_scale": 0.0023266719638975453,
+   "q_rel_err_late_without_scale": 0.1017051749521933
+  },
+  "43": {
+   "k_rel_err": 0.001651805458843921,
+   "q_rel_err": 0.0022841225447800223,
+   "q_rel_err_late_with_scale": 0.0023523262693385086,
+   "q_rel_err_late_without_scale": 0.10425406256274185
+  },
+  "47": {
+   "k_rel_err": 0.0016577079365019598,
+   "q_rel_err": 0.0022677545128477685,
+   "q_rel_err_late_with_scale": 0.0023309962897852376,
+   "q_rel_err_late_without_scale": 0.10644095705744319
+  }
+ },
+ "worst_rel_err": 0.0022841225447800223
+}

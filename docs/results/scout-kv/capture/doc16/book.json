@@ -1,0 +1,83 @@
+{
+ "row": 22,
+ "title": "Vestiges of the Mayas by Augustus Le Plongeon",
+ "n_tokens_full": 41208,
+ "n_tokens": 32768,
+ "forward_seconds": 78.2,
+ "peak_gpu_gib": 45.9,
+ "verify": {
+  "3": {
+   "k_rel_err": 0.0016877894824596808,
+   "q_rel_err": 0.002209979035673157,
+   "q_rel_err_late_with_scale": 0.002334075284188724,
+   "q_rel_err_late_without_scale": 0.09873218274316034
+  },
+  "7": {
+   "k_rel_err": 0.001658842432755646,
+   "q_rel_err": 0.0022368236914447974,
+   "q_rel_err_late_with_scale": 0.0023183812256172202,
+   "q_rel_err_late_without_scale": 0.10085478363326082
+  },
+  "11": {
+   "k_rel_err": 0.0016497306016690129,
+   "q_rel_err": 0.002246527716980382,
+   "q_rel_err_late_with_scale": 0.0023314959913329565,
+   "q_rel_err_late_without_scale": 0.10095338780276408
+  },
+  "15": {
+   "k_rel_err": 0.0016632402752681432,
+   "q_rel_err": 0.0022737809801090963,
+   "q_rel_err_late_with_scale": 0.002350233869863589,
+   "q_rel_err_late_without_scale": 0.10242146099073662
+  },
+  "19": {
+   "k_rel_err": 0.0016554341413845786,
+   "q_rel_err": 0.0022679750190310773,
+   "q_rel_err_late_with_scale": 0.0023596999523399173,
+   "q_rel_err_late_without_scale": 0.10028976791243613
+  },
+  "23": {
+   "k_rel_err": 0.0016581560591851553,
+   "q_rel_err": 0.002226050651198393,
+   "q_rel_err_late_with_scale": 0.0023422843245682608,
+   "q_rel_err_late_without_scale": 0.09567974289250368
+  },
+  "27": {
+   "k_rel_err": 0.0016603280819556421,
+   "q_rel_err": 0.0021898015111498116,
+   "q_rel_err_late_with_scale": 0.0023276669227245968,
+   "q_rel_err_late_without_scale": 0.0965289212055331
+  },
+  "31": {
+   "k_rel_err": 0.0016648914739797718,
+   "q_rel_err": 0.002209496102884802,
+   "q_rel_err_late_with_scale": 0.0023348746782478618,
+   "q_rel_err_late_without_scale": 0.09685798751352409
+  },
+  "35": {
+   "k_rel_err": 0.0016662751117870614,
+   "q_rel_err": 0.002227092462110447,
+   "q_rel_err_late_with_scale": 0.0023322666586118685,
+   "q_rel_err_late_without_scale": 0.09944934264003577
+  },
+  "39": {
+   "k_rel_err": 0.0016583779131517215,
+   "q_rel_err": 0.002237126442899158,
+   "q_rel_err_late_with_scale": 0.0023269926230628595,
+   "q_rel_err_late_without_scale": 0.10180437023285188
+  },
+  "43": {
+   "k_rel_err": 0.0016554405226265952,
+   "q_rel_err": 0.002278348802593443,
+   "q_rel_err_late_with_scale": 0.002349009977458174,
+   "q_rel_err_late_without_scale": 0.10450865599733691
+  },
+  "47": {
+   "k_rel_err": 0.0016548429234091722,
+   "q_rel_err": 0.0022686491793892324,
+   "q_rel_err_late_with_scale": 0.0023316293624137327,
+   "q_rel_err_late_without_scale": 0.10690283132055692
+  }
+ },
+ "worst_rel_err": 0.002278348802593443
+}

@@ -1,0 +1,13 @@
+mixed corpora: 96
+
+statistic                                    book0   book1   book2   book3 |   mixed  verdict
+HNSW reach recall@10>=0.9, OOD               0.469   0.552   0.542   0.552 |   0.573  ABOVE [0.469, 0.552]
+HNSW reach recall@128>=0.9, OOD              0.792   0.844   0.844   0.823 |   0.865  ABOVE [0.792, 0.844]
+median HNSW recall@10 at ef176, OOD          0.696   0.764   0.804   0.797 |   0.806  ABOVE [0.696, 0.804]
+median HNSW recall@10 at ef176, ID           1.000   1.000   1.000   1.000 |   1.000  inside [1.000, 1.000]
+median IVF OOD/ID scan ratio, k=128          1.106   1.108   1.051   1.146 |   1.120  inside [1.051, 1.146]
+median IVF recall@128 at nprobe24, OOD       0.795   0.819   0.815   0.843 |   0.817  inside [0.795, 0.843]
+
+per head, HNSW recall@10 at ef176 (OOD), mixed vs range of 4 books: inside 63, below (harder) 6, above (easier) 27
+own-book share of exact top-10 (0.25 = no book preference, 1.0 = only own book): min 0.173  q25 0.249  median 0.253  q75 0.294  max 0.465
+by layer (median own-book share): L3 0.25, L7 0.25, L11 0.25, L15 0.21, L19 0.23, L23 0.26, L27 0.34, L31 0.33, L35 0.33, L39 0.26, L43 0.26, L47 0.28

@@ -43,5 +43,5 @@ training:
   num_workers: 0
   amp: false
   log_every: 250
-  eval_every: 1000
+  eval_every: 5000
   save_every: 5000

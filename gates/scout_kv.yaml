@@ -1,0 +1,30 @@
+# Gate bands for the scout_kv family. Checked by:
+#
+#     python -m src.eval.kv_gate check --records <records.jsonl>
+#
+# Unlike the other gates/*.yaml, these statistics are search difficulty, not
+# the four intrinsic statistics: see docs/datasets/scout_kv.md and
+# docs/ai/specs/2026-10-18-kv-cache-scout-design.md. Each is pooled over all
+# 96 (global layer, KV head) corpora.
+#
+# ALL BANDS ARE UNSET. Setting them is a human decision, made from the
+# reference noise floor (5 draws over books 12-19). Until then the checker
+# exits 2 with verdict "unset".
+dataset: scout_kv
+canonical:
+  n_corpora: 96
+  n_keys: 31736
+  n_q_ood: 5120
+  n_q_id: 1024
+  n_sink: 1
+  n_tail: 1024
+  nlist: 256
+  hnsw_m: 48
+  ef_construction: 500
+  target: 0.9
+statistics:
+  hnsw_reach_k10: null
+  hnsw_recall_k10_ef176: null
+  ivf_ratio_k128: null
+  ivf_recall_k128_np24: null
+  hnsw_recall_k10_ef176_id: null

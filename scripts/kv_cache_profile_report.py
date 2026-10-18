@@ -498,7 +498,25 @@ def render(summary: dict) -> str:
         + "</table></div>"
     )
 
-    # ---- candidate heads table
+    # ---- hardest heads table (diagnostic; the gate pools all heads)
+    def layer_reach(L):
+        rs = [r for r in v2 if r["layer"] == L]
+        return sum(r["plain_ood_k10"]["hnsw_reached"] for r in rs) / len(rs)
+
+    def layer_ivf_ratio(L):
+        return median(
+            r["plain_ood_k128"]["ivf_scan_frac"] / r["plain_id_k128"]["ivf_scan_frac"]
+            for r in v2
+            if r["layer"] == L
+        )
+
+    hardest = sorted(
+        cells,
+        key=lambda c: median(r["plain_ood_k10"]["hnsw_recall_op"] for r in cells[c]),
+    )[:24]
+    hardest_by_layer = {L: sum(c[0] == L for c in hardest) for L in layers}
+    worst_reach = sorted(layers, key=layer_reach)[:3]
+
     def crow(L, g):
         rs = cells[(L, g)]
         po = [r["plain_ood_k10"] for r in rs]
@@ -515,7 +533,7 @@ def render(summary: dict) -> str:
         '<div class="scroll"><table class="num"><tr><th>head</th><th>HNSW recall@10, OOD, ef=176</th>'
         "<th>docs reaching 0.9 (k=10)</th><th>IVF OOD÷ID</th><th>top-128 mass</th>"
         "<th>distinct top-10</th><th>top-k attention err</th></tr>"
-        + "".join(crow(L, g) for L in (39, 43, 47) for g in range(N_HEADS))
+        + "".join(crow(L, g) for L, g in hardest)
         + "</table></div>"
     )
 
@@ -572,6 +590,18 @@ def render(summary: dict) -> str:
             f"{pct(v1_reach['ood'])} vs {pct(v1_reach['id'])} — superseded",
         ),
         (
+            "Layer 47: HNSW reach (k=10) and median IVF OOD÷ID",
+            f"{pct(layer_reach(47))}, {layer_ivf_ratio(47):.2f}×",
+        ),
+        (
+            "Three layers with lowest HNSW reach (k=10)",
+            ", ".join(f"L{L} {pct(layer_reach(L))}" for L in worst_reach),
+        ),
+        (
+            "Hardest 24 heads, count per layer",
+            ", ".join(f"L{L} {v}" for L, v in hardest_by_layer.items() if v),
+        ),
+        (
             "q/k reconstruction, worst over 12 layers × 4 docs",
             f"{100 * max(d['worst_rel_err'] for d in cap['docs']):.2f}% (control without scale ≥ {100 * min(d['control_min'] for d in cap['docs']):.1f}%)",
         ),
@@ -606,8 +636,11 @@ Sink-like heads remain even so: {sinky} corpora have ≤ 20 distinct keys across
 <li><b>Plain top-k is a poor attention estimate here; SoftmaxLift is much better, but only with exact search.</b>
 Median attention error is {median(err_t):.3f} (top-k) versus {median(err_l):.3f} (SoftmaxLift), lower for lift in
 {lift_wins} of {n} corpora. Through approximate indexes the lift estimate degrades sharply in the late layers (Figure 5).</li>
-<li><b>Candidate target heads are in layers 39, 43 and 47</b>, where the HNSW gap is largest and the heads are
-not sink-dominated. Layer 43 is the hardest.</li>
+<li><b>The hard heads are spread across the depth of the model, so the gate pools all {len(cells)} layer–head pairs.</b>
+The layers where real queries least often reach HNSW recall@10 ≥ 0.9 are {", ".join(f"L{L} ({pct(layer_reach(L))})" for L in worst_reach)};
+the 24 hardest heads come from {sum(1 for v in hardest_by_layer.values() if v)} of the 12 layers. Following Zharkov et al. 2026, who replace attention in every
+layer and head and report one pooled number, the gate is computed over all global layers and heads together, and the per-layer
+and per-head views here are diagnostics only.</li>
 </ol>
 </section>
 
@@ -618,6 +651,17 @@ not sink-dominated. Layer 43 is the hardest.</li>
 It built HNSW directly on inner products, which graph indexes handle badly, and it kept the attention sink in the index.
 With the Xbox MIPS→L2 reduction and the sink removed (as in Zharkov et al. 2026) the figure is
 <b>{pct(reach["plain_ood_k10"][1])}</b> versus {pct(reach["plain_id_k10"][1])}. The gap is real, but about a third as large as first reported.</p>
+</section>
+
+<section class="retract">
+<h2>Correction: candidate heads in layers 39, 43 and 47</h2>
+<p>An earlier version of this report said <b>the candidate target heads are in layers 39, 43 and 47, where the HNSW gap is largest.
+That claim is withdrawn.</b> Ranked by the share of corpora where real queries reach HNSW recall@10 ≥ 0.9 (lowest = hardest):
+{", ".join(f"L{L} {pct(layer_reach(L))}" for L in sorted(layers, key=layer_reach))}.
+L43 is among the hardest. L47 is fourth, but its median recall at efSearch=176 is {median(r["plain_ood_k10"]["hnsw_recall_op"] for r in v2 if r["layer"] == 47):.3f},
+its median IVF work ratio is {layer_ivf_ratio(47):.2f}× (real queries <i>easier</i> than key-side ones), and none of the 24 hardest heads is in it.
+L39 is in the middle of the ranking and has {hardest_by_layer[39]} of the 24 hardest heads; L15 and L35, which the claim left out, have
+{hardest_by_layer[15]} and {hardest_by_layer[35]}. No head subset is selected now; see finding 5.</p>
 </section>
 
 <section>
@@ -637,7 +681,9 @@ With the Xbox MIPS→L2 reduction and the sink removed (as in Zharkov et al. 202
 </section>
 
 <section>
-<h2>Candidate heads: layers 39, 43, 47</h2>
+<h2>Hardest 24 heads by real-query HNSW recall (diagnostic)</h2>
+<p class="note">Sorted by median recall@10 at efSearch=176 over 4 documents, hardest first. Count per layer:
+{", ".join(f"L{L} {v}" for L, v in hardest_by_layer.items() if v)}. Not a target list: the gate pools all heads.</p>
 {cand_table}
 </section>
 

@@ -1171,7 +1171,7 @@ Changes from the spike, and only these:
 4. `weights/layerXX.safetensors` gains `v_proj` (bf16, from the model) if it lacks it. Rewriting the file with all three tensors is allowed, because it is regenerable from the model.
 5. The tokenizer still reads row text, but the row loop uses `select_books` on the token counts.
 
-Everything else (the experts patch, the SDPA capture, the pre-hook, the loader check that aborts on missing keys, `verify`, the smoke passes and the 0.5% `REL_ERR_LIMIT`) is kept verbatim.
+Everything else (the experts patch, the SDPA capture, the pre-hook, the loader check that aborts on missing keys, `verify`, the smoke passes and the spike's `REL_ERR_LIMIT = 2e-2`) is kept verbatim. (Corrected during implementation: the plan said 0.5%, which is B2's separate acceptance check, not the abort threshold.)
 
 - [ ] **Step 1: Failing tests for the three helpers**
 
@@ -1353,6 +1353,7 @@ Each step prints its MEASURED timing. Long jobs run with `nohup`, write their PI
 ### B2: Capture books 4-19
 
 - [ ] `python scripts/kv/capture_scout.py --model-dir /workspace/models/scout --pg19-parquet <parquet> --out-dir /workspace/kv/capture --first-book 4 --n-books 16 --gpu-weights 24GiB`, in the background. ESTIMATE about 45 min.
+- [ ] If the capture crashes mid-run, the partly written `doc{b}` is left behind and the next run refuses it (`planned_dirs`). Inspect it, delete it, then re-run from that book.
 - [ ] Afterwards: 16 new `doc*/book.json`, each with `worst_rel_err < 0.005`; `df -h` above 8 GB free; `meta.json` sha256 unchanged (`f78f360b...`).
 - [ ] Copy every `book.json` off the box (tar plus sha256) and commit them under `docs/results/scout-kv/capture/`.
 
@@ -1366,15 +1367,18 @@ Each step prints its MEASURED timing. Long jobs run with `nohup`, write their PI
 ### B4: Train v0 on L03, timed
 
 - [ ] `python -m src.train.train_wgan_gp --config configs/scout_kv/v0/L03.yaml`, in the background. Measure wall time, peak GPU memory and steps/s.
+- [ ] After the run, prune: keep `best_generator.pt`, the final `checkpoint_step_30000.pt`, `run_config.yaml` and `run_metadata.json`; delete the other `checkpoint_step_*.pt` (about 663 MB each, ESTIMATE). Run `df -h /workspace` and record it.
 - [ ] **Stop and report to the human** with the measured time per layer and the projected total for 11 more, before queuing them.
 
 ### B5: Train the other 11 layers (after the human's go-ahead)
 
+- [ ] Prune each layer's run dir as in B4 before starting the next.
 - [ ] Sequential by default. Two at once only if B4 measured GPU memory at under 35 GB and GPU utilisation at under 50%.
 
 ### B6: Gate v0
 
-- [ ] `measure-run` with all 12 `best_generator.pt`, seed 0, then again with the final checkpoints.
+- [ ] `measure-run --ema` with all 12 `best_generator.pt`, seed 0, then again with the final checkpoints (`--checkpoint-name checkpoint_step_30000.pt --ema`). `best_generator.pt` already holds EMA weights (its `generator_weights` field says `ema`), so `--ema` leaves it unchanged; the periodic `checkpoint_step_30000.pt` holds live weights, and without `--ema` the comparison would mix checkpoint selection with EMA.
+- [ ] Note in the report that the 8 synthetic KV heads of one layer are projected from one shared `h` sample, so their spread is not comparable with the real per-head spread.
 - [ ] `check` both. The verdict will be `unset`; the report holds the pooled values.
 - [ ] Write a self-contained HTML report under `docs/results/scout-kv/v0/` comparing v0 (both checkpoints) with the 5 reference draws, per statistic and per layer, with a claim table. Verify every figure renders by screenshot.
 - [ ] Diagnostics in the same report: the four intrinsic statistics (`src/eval/ann_difficulty.py::compute` at the canonical k 100, k_hub 10, nlist 256, metric l2) on 20,000 real `h` rows from books 12-19 and on 20,000 v0 samples, per layer; plus the per-layer and per-head values of every gate statistic.

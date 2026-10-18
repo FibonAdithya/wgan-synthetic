@@ -488,6 +488,9 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
         seed=seed,
         synthetic_if_missing=bool(data_cfg["synthetic_if_missing"]),
         synthetic_num_vectors=int(data_cfg["synthetic_num_vectors"]),
+        kv_layer=data_cfg.get("kv_layer"),
+        kv_books=data_cfg.get("kv_books"),
+        kv_n_sink=int(data_cfg.get("kv_n_sink", 1)),
     )
 
     model_cfg = config["model"]

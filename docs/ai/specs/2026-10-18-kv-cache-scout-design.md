@@ -62,15 +62,18 @@ All measured on the box 2026-10-16 to 10-18, unless marked ESTIMATE.
 
 ## Data
 
-**Capture 16 more books.** PG-19 test rows 4-19, first 32,768 tokens each,
-with the existing capture script and its reconstruction check. That gives
+**Capture 16 more books.** The capture script takes books in PG-19 test row
+order, skipping any row shorter than 32,768 tokens; books 0-3 are rows 0-3.
+Books 4-19 are the next 16 qualifying rows, first 32,768 tokens each, with
+the existing reconstruction check. Each book's row and title are recorded
+beside its capture, and the existing `meta.json` is not rewritten. That gives
 20 books. At about 4 GB per book this uses 64 GB of the 77 GB free, which
 leaves 13 GB. The model stays on disk so a recapture remains possible.
 
 **Split by book, not by token.** Tokens within a book are not independent,
 so a token-level holdout would leak.
 
-| split | PG-19 test rows | use |
+| split | books (capture order) | use |
 |---|---|---|
 | train | 0-11 (12 books) | generator training |
 | reference | 12-19 (8 books) | the gate's real reference and its noise floor |
@@ -87,6 +90,13 @@ copy of all 12 layers would need 96 GB and the disk has 13 GB.
 Norms carry meaning for inner-product search, so per-vector normalisation is
 not allowed. Centering is inverted at sample time through the existing
 `invert_preprocess`.
+
+**Generator output normalisation.** Found while planning: the trainer
+L2-normalises generator output unconditionally, at both training sites and
+in `sample_generator` (`src/train/train_wgan_gp.py`, `normalize_l2`),
+whatever `preprocess.l2_normalize` says. A new model key
+`output_normalize` (default `true`, so every existing config is unchanged)
+turns that off; `scout_kv` configs set it to `false`.
 
 ## Synthetic corpus
 
@@ -189,7 +199,7 @@ the model; a critic that also sees `W_k h` and `W_q h`.
 | recall, work at target, IVF / HNSW sweeps | `src/kv/search_profile.py` | pytest with planted answers (a corpus whose exact neighbours are known) |
 | mixed corpora, real and synthetic | `src/kv/corpus.py` | pytest: counts, book balance, no sink, no tail keys, seed reproducibility |
 | gate statistics and band check | `src/eval/kv_gate.py`, `gates/scout_kv.yaml` | pytest: unset bands exit 2; real reference rows pass once bands are set; a deliberately broken corpus (keys used as queries) fails `hnsw_reach_k10` |
-| capture loader | `format: kv_capture` in `src/data/dataset.py` | pytest on a tiny safetensors fixture |
+| capture loader | `format: kv_capture` in `src/data/dataset.py`, no `safetensors` dependency | pytest on a tiny fixture written on the box by the real `safetensors` library |
 | configs | `configs/scout_kv/v0/L03.yaml` ... `L47.yaml` | config-load test |
 | family page | `docs/datasets/scout_kv.md` | existing docs contract tests |
 
@@ -199,9 +209,11 @@ committed under `docs/results/kv-cache-profile/mixed-book/`.
 
 ## Needs a human before implementation
 
-1. **New pinned dependencies.** `faiss-cpu==1.15.1` and
-   `safetensors` (the version on the box) are not in `requirements.txt`.
-   Adding a pin is a human decision under `AGENTS.md`.
+1. **New pinned dependency.** `faiss-cpu==1.15.1` is not in
+   `requirements.txt`. Adding a pin is a human decision under `AGENTS.md`.
+   (`safetensors` is not needed: the capture files are a fixed layout, an
+   8-byte header length, a JSON header and raw bf16, which the loader reads
+   directly.)
 2. **The doc change for invariant 1**, worded as above.
 3. **Bands**, after the noise floor is measured. Nothing ships with a band set.
 

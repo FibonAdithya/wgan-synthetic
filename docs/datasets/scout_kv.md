@@ -92,9 +92,11 @@ the 4 single-book profiles. All numbers are MEASURED, from
 | median IVF scan ratio, k=128 | 1.051 to 1.146 | 1.120 | inside |
 | median IVF recall@128 at nprobe 24, real-style | 0.795 to 0.843 | 0.817 | inside |
 
-- Mixed corpora are about 2 points easier for HNSW than the easiest single book; IVF is unchanged. The decision rule fixed before the run (mixed inside the single-book range) failed for HNSW. The owner chose mixed corpora as the gate reference anyway.
-- Own-book preference is absent: median share of a query's exact top-10 from its own book is 0.253, where 0.25 means no preference (same file, "own-book share" line).
+- Mixed corpora are easier for HNSW than the easiest single book on reach@10: 0.573 against 0.552 (about 2 points). Median recall@10 at ef176 differs by 0.2 points (0.806 against 0.804). IVF is unchanged. The mixed-book check used 31,740 keys (4 books), not the gate's 31,736 (8 books). MEASURED, source `docs/results/kv-cache-profile/mixed-book/comparison.txt`. The decision rule fixed before the run (mixed inside the single-book range) failed for HNSW. The owner chose mixed corpora as the gate reference anyway.
+- Own-book preference over all heads is none: the median share of a query's exact top-10 from its own book is 0.253, where 0.25 means no preference. By layer it is not uniform: the median is 0.34 for L27 and 0.33 for L31 and L35, and 0.21 to 0.28 for the other layers. MEASURED, source `docs/results/kv-cache-profile/mixed-book/comparison.txt` ("own-book share" lines).
 - Run cost for 96 mixed corpora was 18.7 min (README above). The 8-book reference and the 5-draw noise floor have not been measured; the spec's estimate of 1.6 h for 5 draws is ESTIMATE (unverified).
+
+`data.metric: l2` only governs the in-training selector on `h`; the gate searches by inner product.
 
 ## Not yet done
 

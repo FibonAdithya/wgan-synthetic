@@ -99,7 +99,8 @@ def test_ood_queries_cost_more_hnsw_work_than_id(one_thread):
     Gaussian failed against the spike's own functions (ood recall 0.9997 vs id
     0.9625 at ef=176); a retuned shifted Gaussian (N(-1.5, 0.5)) held on only 5 of
     8 other data seeds. The structured cloud here held on 30 of 30 data seeds with
-    ood ndis >= 1.3x id ndis (see the task 5 report for the seed table).
+    ood ndis >= 1.3x id ndis. MEASURED 2026-10-18: held on 30 of 30 data seeds;
+    minimum ood/id ndis ratio 2.2, minimum recall margin 0.03.
     """
     keys, q_ood, q_id = _planted(2)
     p = _profile(keys, q_ood, q_id)

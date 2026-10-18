@@ -95,6 +95,16 @@ def conditions(nlist, hnsw_m, ef_construction, target):
 def profile_corpus(
     keys, q_ood, q_id, *, nlist=256, hnsw_m=48, ef_construction=500, seed=0, target=0.9
 ):
+    """Sweep IVF nprobe and HNSW efSearch for real-style (``q_ood``) and key-side (``q_id``) queries.
+
+    ``keys`` is the (n, d) corpus; queries are (m, d). Ground truth is exact inner-product
+    top-k for k in KS. Returns ``plain_{ood,id}_k{k}`` dicts: work to reach ``target`` recall
+    (IVF scanned fraction, HNSW distance computations per query, interpolated; None if
+    unreached), recall at the operating points OP_NPROBE / OP_EF, and both full curves.
+
+    ``seed`` seeds the IVF k-means only. The HNSW build is deterministic only when faiss runs
+    single-threaded (``faiss.omp_set_num_threads(1)``); the seed does not control it.
+    """
     keys = np.ascontiguousarray(keys, np.float32)
     ivf, hnsw = build(keys, nlist, hnsw_m, ef_construction, seed)
     out = {}

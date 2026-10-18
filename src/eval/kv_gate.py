@@ -259,6 +259,71 @@ def measure_real(
             print(layer, g, rec["seconds"], "s", flush=True)
 
 
+def synthetic_h(
+    run_dir,
+    layer,
+    *,
+    seed,
+    n_keys,
+    n_tail,
+    checkpoint_name="best_generator.pt",
+    ema=False,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, str]:
+    """Sample h from a trained run, in original coordinates, split into
+    (h_keys, h_query, h_id, generator_weights).
+
+    `generator_weights` is "live" or "ema": what was actually measured. ema=True
+    on a checkpoint that already holds EMA weights (best_generator.pt) uses it
+    as is; on a live one it swaps in the stored EMA shadow with the training
+    run's decay and step.
+    """
+    import contextlib
+
+    from src.eval.compare_variants import (
+        _inversion_blocker,
+        invert_samples,
+        load_preprocess_state,
+    )
+    from src.eval.evaluate_distribution import load_generator
+    from src.train.train_wgan_gp import ema_weights, output_normalize, sample_generator
+
+    run_dir = Path(run_dir)
+    blocker = _inversion_blocker(run_dir / "run_config.yaml", run_dir)
+    if blocker is not None:
+        raise ValueError(blocker)
+    cfg = yaml.safe_load((run_dir / "run_config.yaml").read_text(encoding="utf-8"))
+    dev = _device()
+    ckpt_path = run_dir / checkpoint_name
+    gen = load_generator(cfg, ckpt_path, dev)
+    ckpt = torch.load(ckpt_path, map_location=dev, weights_only=False)
+    weights = ckpt.get("generator_weights", "live")
+    ctx = contextlib.nullcontext()
+    if ema and weights != "ema":
+        ema_params = ckpt.get("ema_params") or {}
+        if not ema_params:
+            raise ValueError(f"{ckpt_path} has no ema_params; cannot apply EMA")
+        ctx = ema_weights(
+            gen,
+            {k: v.to(dev) for k, v in ema_params.items()},
+            decay=float(cfg["training"].get("ema_decay", 0.0)),
+            ema_step=int(ckpt.get("ema_step", 0)),
+        )
+        weights = "ema"
+    torch.manual_seed(7919 * seed + layer)
+    with ctx:
+        x = sample_generator(
+            gen,
+            n_keys + 2 * n_tail,
+            int(cfg["model"]["latent_dim"]),
+            int(cfg["training"]["batch_size"]),
+            dev,
+            normalize=output_normalize(cfg["model"]),
+        )
+    x = invert_samples(x, load_preprocess_state(run_dir))
+    h = torch.from_numpy(np.ascontiguousarray(x, np.float32)).to(dev)
+    return h[:n_keys], h[n_keys : n_keys + n_tail], h[n_keys + n_tail :], weights
+
+
 def measure_run_layer(
     run_dir,
     capture_dir,
@@ -271,31 +336,19 @@ def measure_run_layer(
     hnsw_m,
     ef_construction,
     checkpoint_name="best_generator.pt",
+    ema=False,
 ) -> list[dict]:
     """Profile one layer of a trained run: one record per KV head."""
-    from src.eval.compare_variants import invert_samples, load_preprocess_state
-    from src.eval.evaluate_distribution import load_generator
-    from src.train.train_wgan_gp import output_normalize, sample_generator
-
     run_dir = Path(run_dir)
-    cfg = yaml.safe_load((run_dir / "run_config.yaml").read_text(encoding="utf-8"))
     dev = _device()
-    gen = load_generator(cfg, run_dir / checkpoint_name, dev)
-    torch.manual_seed(7919 * seed + layer)
-    x = sample_generator(
-        gen,
-        n_keys + 2 * n_tail,
-        int(cfg["model"]["latent_dim"]),
-        int(cfg["training"]["batch_size"]),
-        dev,
-        normalize=output_normalize(cfg["model"]),
-    )
-    x = invert_samples(x, load_preprocess_state(run_dir))
-    h = torch.from_numpy(np.ascontiguousarray(x, np.float32)).to(dev)
-    h_keys, h_query, h_id = (
-        h[:n_keys],
-        h[n_keys : n_keys + n_tail],
-        h[n_keys + n_tail :],
+    h_keys, h_query, h_id, weights = synthetic_h(
+        run_dir,
+        layer,
+        seed=seed,
+        n_keys=n_keys,
+        n_tail=n_tail,
+        checkpoint_name=checkpoint_name,
+        ema=ema,
     )
     w = load_layer_weights(capture_dir, layer)
     wk, wq = w["k_proj"].to(dev).float(), w["q_proj"].to(dev).float()
@@ -325,8 +378,12 @@ def measure_run_layer(
                 "n_keys": len(c.keys),
                 "n_q_ood": len(c.q_ood),
                 "n_q_id": len(c.q_id),
-                "n_sink": 0,
+                # Synthetic corpora have no sink; n_sink records the reference
+                # condition they are compared under, not a property of h.
+                "n_sink": 1,
                 "n_tail": n_tail,
+                "checkpoint": checkpoint_name,
+                "generator_weights": weights,
                 "conditions": conditions(nlist, hnsw_m, ef_construction, TARGET),
                 **prof,
                 "seconds": round(time.time() - t0, 1),
@@ -348,6 +405,7 @@ def measure_run(
     ef_construction=500,
     threads=15,
     checkpoint_name="best_generator.pt",
+    ema=False,
 ) -> None:
     import faiss
 
@@ -372,10 +430,8 @@ def measure_run(
             hnsw_m=hnsw_m,
             ef_construction=ef_construction,
             checkpoint_name=checkpoint_name,
+            ema=ema,
         ):
-            # Synthetic corpora have no sink; the gate compares n_sink to the
-            # canonical value, so record the real-corpus convention.
-            rec["n_sink"] = 1
             _append(out, rec)
             print(layer, rec["kv_head"], rec["seconds"], "s", flush=True)
 
@@ -416,6 +472,11 @@ def main(argv: list[str] | None = None) -> int:
     pn.add_argument("--capture-dir", type=Path, required=True)
     pn.add_argument("--run-dir", action="append", required=True, metavar="LAYER=PATH")
     pn.add_argument("--checkpoint-name", default="best_generator.pt")
+    pn.add_argument(
+        "--ema",
+        action="store_true",
+        help="measure the checkpoint under its stored EMA weights",
+    )
     pn.add_argument("--n-keys", type=int, default=31736)
     pn.add_argument("--out", type=Path, required=True)
     _add_index_args(pn)
@@ -453,6 +514,7 @@ def main(argv: list[str] | None = None) -> int:
             ef_construction=a.ef_construction,
             threads=a.threads,
             checkpoint_name=a.checkpoint_name,
+            ema=a.ema,
         )
         return 0
     try:

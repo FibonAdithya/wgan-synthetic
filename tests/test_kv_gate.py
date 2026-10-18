@@ -263,3 +263,139 @@ def test_measure_run_layer_on_a_tiny_trained_run(tmp_path):
         assert r["n_keys"] == 200 and r["n_q_ood"] == 16 * 5 and r["n_q_id"] == 16
         assert r["conditions"]["nlist"] == 4 and r["conditions"]["hnsw_m"] == 8
         assert "plain_ood_k128" in r and "plain_id_k10" in r
+    assert all(r["n_sink"] == 1 for r in recs)
+    assert all(
+        r["checkpoint"] == "best_generator.pt" and r["generator_weights"] == "ema"
+        for r in recs
+    )
+
+
+def _tiny_run(tmp_path):
+    from tests.test_train_smoke import make_config
+
+    from src.train.train_wgan_gp import train
+
+    cfg = make_config(tmp_path, "mlp")
+    cfg["data"]["preprocess"] = {"center": True, "whiten": False, "l2_normalize": False}
+    cfg["model"]["output_normalize"] = False
+    cfg["training"]["num_gen_steps"] = 4
+    ckpt, _ = train(cfg)
+    run_dir = ckpt.parent
+    cap = tmp_path / "capture"
+    (cap / "weights").mkdir(parents=True)
+    rng = np.random.default_rng(0)
+    wk = rng.normal(size=(2 * 128, 16)).astype(np.float32)
+    _write_multi(
+        cap / "weights" / "layer03.safetensors",
+        {
+            "k_proj": wk,
+            "q_proj": rng.normal(size=(2 * 5 * 128, 16)).astype(np.float32),
+        },
+    )
+    return run_dir, cap, wk
+
+
+_TINY = dict(seed=0, n_keys=200, n_tail=16, nlist=4, hnsw_m=8, ef_construction=16)
+
+
+def _spy_keys(monkeypatch):
+    seen = []
+    real = kv_gate.profile_corpus
+
+    def spy(keys, *a, **k):
+        seen.append(np.array(keys))
+        return real(keys, *a, **k)
+
+    monkeypatch.setattr(kv_gate, "profile_corpus", spy)
+    return seen
+
+
+def test_measure_run_layer_refuses_a_centered_run_without_metadata(tmp_path):
+    """Catches un-centering silently becoming an identity when
+    run_metadata.json is missing."""
+    run_dir, cap, _ = _tiny_run(tmp_path)
+    (run_dir / "run_metadata.json").unlink()
+    with pytest.raises(ValueError, match="run_metadata.json"):
+        kv_gate.measure_run_layer(run_dir, cap, 3, **_TINY)
+
+
+def test_measure_run_layer_keys_are_in_original_coordinates(tmp_path, monkeypatch):
+    """Catches a deleted invert_samples call: keys must equal W_k[0] @ h for
+    h = generator samples plus the training mean, recomputed independently."""
+    import torch
+    import yaml
+
+    from src.eval.compare_variants import invert_samples, load_preprocess_state
+    from src.eval.evaluate_distribution import load_generator
+    from src.train.train_wgan_gp import sample_generator
+
+    run_dir, cap, wk = _tiny_run(tmp_path)
+    seen = _spy_keys(monkeypatch)
+    kv_gate.measure_run_layer(run_dir, cap, 3, **_TINY)
+
+    cfg = yaml.safe_load((run_dir / "run_config.yaml").read_text())
+    gen = load_generator(cfg, run_dir / "best_generator.pt", torch.device("cpu"))
+    torch.manual_seed(7919 * 0 + 3)
+    x = sample_generator(
+        gen,
+        200 + 2 * 16,
+        int(cfg["model"]["latent_dim"]),
+        int(cfg["training"]["batch_size"]),
+        torch.device("cpu"),
+        normalize=False,
+    )
+    state = load_preprocess_state(run_dir)
+    assert state.mean is not None and np.abs(state.mean).max() > 1e-3
+    h = np.asarray(invert_samples(x, state), np.float32)
+    expected = h[:200] @ wk[:128].T
+    np.testing.assert_allclose(seen[0], expected, rtol=1e-4, atol=1e-4)
+
+
+def test_synthetic_h_splits_are_distinct_rows(tmp_path):
+    """Catches h_id aliasing h_query (or h_keys): the three splits must be
+    disjoint slices of one sample."""
+    run_dir, _, _ = _tiny_run(tmp_path)
+    hk, hq, hi, _ = kv_gate.synthetic_h(run_dir, 3, seed=0, n_keys=200, n_tail=16)
+    assert (len(hk), len(hq), len(hi)) == (200, 16, 16)
+    assert not np.allclose(hq.cpu().numpy(), hi.cpu().numpy())
+    assert not np.allclose(hk[:16].cpu().numpy(), hq.cpu().numpy())
+
+
+def test_measure_run_layer_ema_changes_the_keys(tmp_path, monkeypatch):
+    """Catches the ema flag being ignored: on a live checkpoint, EMA weights
+    give different keys, and the record says which weights were measured."""
+    run_dir, cap, _ = _tiny_run(tmp_path)
+    live = "checkpoint_step_4.pt"
+    seen = _spy_keys(monkeypatch)
+    r0 = kv_gate.measure_run_layer(run_dir, cap, 3, checkpoint_name=live, **_TINY)
+    r1 = kv_gate.measure_run_layer(
+        run_dir, cap, 3, checkpoint_name=live, ema=True, **_TINY
+    )
+    assert not np.allclose(seen[0], seen[2])
+    assert {r["generator_weights"] for r in r0} == {"live"}
+    assert {r["generator_weights"] for r in r1} == {"ema"}
+    assert all(r["checkpoint"] == live for r in r1)
+
+
+def test_measure_run_layer_ema_on_an_ema_checkpoint_is_a_no_op(tmp_path, monkeypatch):
+    """best_generator.pt already holds EMA weights; ema=True must not apply
+    the average a second time."""
+    run_dir, cap, _ = _tiny_run(tmp_path)
+    seen = _spy_keys(monkeypatch)
+    kv_gate.measure_run_layer(run_dir, cap, 3, **_TINY)
+    kv_gate.measure_run_layer(run_dir, cap, 3, ema=True, **_TINY)
+    np.testing.assert_array_equal(seen[0], seen[2])
+
+
+def test_measure_run_layer_ema_without_ema_params_raises(tmp_path):
+    import torch
+
+    run_dir, cap, _ = _tiny_run(tmp_path)
+    p = run_dir / "checkpoint_step_4.pt"
+    ck = torch.load(p, map_location="cpu", weights_only=False)
+    ck["ema_params"] = {}
+    torch.save(ck, p)
+    with pytest.raises(ValueError, match="ema_params"):
+        kv_gate.measure_run_layer(
+            run_dir, cap, 3, checkpoint_name=p.name, ema=True, **_TINY
+        )

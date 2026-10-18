@@ -334,14 +334,17 @@ def test_measure_run_layer_keys_are_in_original_coordinates(tmp_path, monkeypatc
     kv_gate.measure_run_layer(run_dir, cap, 3, **_TINY)
 
     cfg = yaml.safe_load((run_dir / "run_config.yaml").read_text())
-    gen = load_generator(cfg, run_dir / "best_generator.pt", torch.device("cpu"))
+    # Draw on the device the gate uses: torch.randn streams differ between CPU
+    # and CUDA for the same seed, so a CPU draw cannot match a CUDA measurement.
+    dev = kv_gate._device()
+    gen = load_generator(cfg, run_dir / "best_generator.pt", dev)
     torch.manual_seed(7919 * 0 + 3)
     x = sample_generator(
         gen,
         200 + 2 * 16,
         int(cfg["model"]["latent_dim"]),
         int(cfg["training"]["batch_size"]),
-        torch.device("cpu"),
+        dev,
         normalize=False,
     )
     state = load_preprocess_state(run_dir)

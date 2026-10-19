@@ -3,7 +3,8 @@
 For every (layer, kv_head), ``ood.own_book_share`` in neighbours.jsonl must be within
 TOL of ``own_book_share_top10`` in docs/results/scout-kv/reference/seed0.jsonl. One
 flipped top-10 slot moves the share by 1/51,200; TOL allows for float32 ties flipping
-when the projection runs on a different GPU. Exits 1 on any mismatch or missing corpus.
+when the projection runs on a different GPU. Also compares seed, books, n_sink, n_tail and n_keys. Exits 1 on any missing,
+mismatched or meta-mismatched corpus.
 """
 
 import argparse
@@ -12,13 +13,14 @@ import sys
 from pathlib import Path
 
 TOL = 1e-3
+META = ("seed", "books", "n_sink", "n_tail", "n_keys")
 REPO = Path(__file__).resolve().parents[4]
 
 
 def _load(path):
     return {
         (r["layer"], r["kv_head"]): r
-        for r in map(json.loads, Path(path).read_text().splitlines())
+        for r in map(json.loads, filter(str.strip, Path(path).read_text().splitlines()))
     }
 
 
@@ -32,18 +34,29 @@ def main(argv=None) -> int:
     )
     a = p.parse_args(argv)
     nb, ref = _load(a.neighbours), _load(a.reference)
-    bad = sorted(set(ref) ^ set(nb))
-    worst = 0.0
-    for key in sorted(set(ref) & set(nb)):
-        d = abs(nb[key]["ood"]["own_book_share"] - ref[key]["own_book_share_top10"])
-        worst = max(worst, d)
-        if d > TOL:
-            bad.append(key)
+    missing = sorted(set(ref) ^ set(nb))
+    both = sorted(set(ref) & set(nb))
+    diffs = {
+        k: abs(nb[k]["ood"]["own_book_share"] - ref[k]["own_book_share_top10"])
+        for k in both
+    }
+    mismatched = [k for k in both if diffs[k] > TOL]
+    meta_mismatch = [
+        k for k in both if any(nb[k].get(m) != ref[k].get(m) for m in META)
+    ]
     print(
         json.dumps(
-            {"n_compared": len(set(ref) & set(nb)), "max_abs_diff": worst, "bad": bad}
+            {
+                "n_compared": len(both),
+                "n_exact": sum(d == 0.0 for d in diffs.values()),
+                "max_abs_diff": max(diffs.values(), default=0.0),
+                "missing": missing,
+                "mismatched": mismatched,
+                "meta_mismatch": meta_mismatch,
+            }
         )
     )
+    bad = missing or mismatched or meta_mismatch
     return 1 if bad else 0
 
 

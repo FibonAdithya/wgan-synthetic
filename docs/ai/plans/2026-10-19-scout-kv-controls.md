@@ -110,13 +110,13 @@ So the real reference asks: how hard is it to find, among a book's earlier token
 
 - [ ] **Step 1: Write the tests first.** Comparing `measure_run_layer` with `measure_h_layer` would be tautological once one calls the other. So pin the behaviour against independent facts instead.
   - **Fixture.** Use `_tiny_run` and `_TINY` (2 KV heads, D=16). Build fixed tensors `(h_keys, h_query, h_id)` from a seeded `torch.Generator`.
-  - **Spy.** Extend the `_spy_keys` pattern into a spy that records `(keys, seed)` for every `profile_corpus` call.
-  1. `measure_h_layer(h_keys, h_query, h_id, cap, 3, source="pooled_real", seed=2, nlist=..., hnsw_m=..., ef_construction=..., extra={"control": "x"})` must:
+  - **Spy.** Extend the `_spy_keys` pattern into a spy that records `(keys, q_ood, q_id, seed)` for every `profile_corpus` call. `seed` arrives as a keyword argument.
+  1. `measure_h_layer(h_keys, h_query, h_id, cap, 3, source="pooled_real", seed=2, nlist=..., hnsw_m=..., ef_construction=..., extra={"control": "x", "books": [12, 13]})` must:
      - call `profile_corpus` once per head, in head order;
      - pass seeds `[1009 * 3 + g + 7919 * 2 for g in (0, 1)]`;
-     - pass keys equal to `head_keys(h_keys, wk, g)`;
-     - return records whose `source` is `"pooled_real"`, whose `control` is `"x"`, and whose `n_tail` equals `len(h_query)`.
-     Catches: a changed seed formula, a changed head order, keys built from the wrong tensor, and `source` or `extra` being ignored.
+     - pass keys equal to `head_keys(h_keys, wk, g)`, `q_ood` equal to `head_queries(h_query, wq, g, 5)` and `q_id` equal to `head_keys(h_id, wk, g)` (all to `rtol` 1e-6);
+     - return records whose `source` is `"pooled_real"`, whose `control` is `"x"`, whose `books` is `[12, 13]` (so `extra` is merged after the fixed fields), and whose `n_tail` equals `len(h_query)`.
+     Catches: a changed seed formula, a changed head order, keys or queries built from the wrong tensor (including `h_query` and `h_id` swapped, which the equal lengths allow), `source` or `extra` being ignored, and `extra` merged before the fixed fields.
   2. Records from `measure_run_layer` on `_tiny_run` must have exactly the key set of the first record in the committed `docs/results/scout-kv/v0/best.jsonl`. Catches a field dropped or renamed by the refactor, which would make new v0 measurements incomparable with the committed ones.
   3. `measure_h_layer` with `len(h_id) != len(h_query)` raises `ValueError`.
 - [ ] **Step 2:** run the tests. Tests 1 and 3 must fail, because `measure_h_layer` does not exist yet. Test 2 passes before the refactor: it is the guard that the refactor keeps it passing.
@@ -138,12 +138,12 @@ So the real reference asks: how hard is it to find, among a book's earlier token
 - Modify: `docs/datasets/scout_kv.md` (the Commands section)
 
 - [ ] **Step 1: Write the tests first.**
-  1. `measure_run(..., layers=[3])` on the tiny-run fixture writes records for layer 3 only, one per KV head. Catches ignoring `layers` and measuring every run dir supplied.
+  1. `measure_run(..., layers=[3])` on the tiny-run fixture, with run dirs supplied for both 3 and 7 (the same tiny run dir; the capture has weights for layer 3 only), writes records for layer 3 only, one per KV head. Catches ignoring `layers` and measuring every run dir supplied.
   2. `measure_run(..., layers=[3, 7])` with a run dir only for 3 raises `ValueError` naming layer 7, and the `out` file does not exist afterwards. Catches a missing run dir being silently skipped, and validation that runs after layer 3 has already been written.
-  3. `measure_run(..., layers=[4])` raises `ValueError`, because 4 is not a global layer.
+  3. `measure_run(..., layers=[4])`, with run dirs supplied for 3 and 4, raises `ValueError` whose message says 4 is not a global layer. Supplying a run dir for 4 matters: without it, the missing-run-dir check would raise anyway and the test would catch nothing.
   4. `measure_run(...)` without `layers` and with a run dir missing still raises the existing "needs a run dir for every global layer" error. Catches the default changing to "whatever was supplied".
   5. `kv_gate.evaluate` on the 24 committed `v0/best.jsonl` records for layers 11, 19 and 43 gives verdict `fail`, with a reason that names the missing corpora. Catches a subset passing `check`.
-  6. `compare_layers(records, references)` on the committed `v0/best.jsonl` (layers 11, 19, 43), against the five committed `reference/seed{0..4}.jsonl`, gives the following statuses (values from the table in "Where things stand"). Catches swapped `above`/`below` and wrong per-layer pooling.
+  6. `compare_layers(records, references)` on the committed `v0/best.jsonl` (layers 11, 19, 43), against the five committed `reference/seed{0..4}.jsonl`, gives the following statuses (values from the table in "Where things stand"). Catches swapped `above`/`below` and wrong per-layer pooling. Only the two `ivf_recall_k128_np24` rows catch the pooling error: pooled over all layers, v0 is `inside` on that statistic, while every other row below gives the same status either way (checked against the committed records on 2026-10-19).
 
      | layer | statistic | status |
      |---|---|---|
@@ -152,9 +152,11 @@ So the real reference asks: how hard is it to find, among a book's earlier token
      | 19 | `hnsw_recall_k10_ef176_id` | `below` |
      | 43 | `ivf_ratio_k128` | `below` |
      | 43 | `hnsw_recall_k10_ef176` | `above` |
+     | 11 | `ivf_recall_k128_np24` | `above` |
+     | 19 | `ivf_recall_k128_np24` | `below` |
 
-  7. A value equal to a reference bound is `inside`. Use `_full()` fixtures in which the reference sets put `hnsw_recall_op` at 0.8 and 0.9 and the candidate puts it at exactly 0.9. Catches exclusive bounds.
-  8. CLI: `python -m src.eval.kv_gate compare-layers --records docs/results/scout-kv/v0/best.jsonl` exits 0 and prints JSON with one entry per layer present. Its default references are the five committed seed files.
+  7. A value equal to a reference bound is `inside`. Use `_full()` fixtures in which the reference sets put `hnsw_recall_op` at 0.8 and 0.9 and the candidate puts it at exactly 0.9, then at exactly 0.8: both are `inside`. A candidate whose IVF scan fractions are all `None` gets `ivf_ratio_k128` status `none`. Catches exclusive bounds on either side, and a `None` compared as a number.
+  8. CLI: `python -m src.eval.kv_gate compare-layers --records docs/results/scout-kv/v0/best.jsonl` exits 0 and prints JSON with one entry per layer present, with `n_reference_sets` 5. Run it with `cwd=tmp_path` and an absolute `--records` path, so that default references resolved against the working directory instead of the repo root fail.
 - [ ] **Step 2:** run the tests. Tests 4 and 5 pass already: they are regression guards on behaviour that must not change. Every other test must fail.
 - [ ] **Step 3: Implement.**
   - **`measure_run(..., layers=None)`.**
@@ -176,7 +178,7 @@ So the real reference asks: how hard is it to find, among a book's earlier token
 
 **Files:**
 - Create: `src/kv/controls.py`, holding the pure functions. It lives in `src/` because `docs/results/scout-kv/` contains a hyphen, so it is not importable. `make check` also lints only `src` and `tests`.
-- Create: `docs/results/scout-kv/controls/controls.py`, a thin script (`main()` only) that imports from `src.kv.controls`, following `docs/results/scout-kv/v0/intrinsic.py`.
+- Create: `docs/results/scout-kv/controls/controls.py`, a thin argparse script that calls `src.kv.controls.measure_controls`, following `docs/results/scout-kv/v0/intrinsic.py`. All logic lives in `src/kv/controls.py` so that it is tested.
 - Test: `tests/test_scout_kv_controls.py`
 
 The three controls. Each yields `(h_keys, h_query, h_id)` with sizes `(31736, 1024, 1024)` per layer, measured through `measure_h_layer`:
@@ -191,7 +193,7 @@ A fourth control needs no code: **`train_books_real`**, the standard real path o
 
 - [ ] **Step 1: Write the tests first.** Use small synthetic arrays, not the capture.
   1. `pooled_split(books, n_keys, n_tail, seed, n_sink=1)`. `books` is a list of full-length per-book arrays with position 0 included. It returns `(h_keys, h_query, h_id, idx_keys, idx_query, idx_id)`, where the indices are into the concatenation of the books after the first `n_sink` rows of each are dropped.
-     - The returned rows come from the pooled rows with position 0 of each book excluded. Give position 0 a sentinel value and assert it never appears.
+     - The returned rows come from the pooled rows with position 0 of each book excluded. Give position 0 a sentinel value and assert it never appears. Also build the pool independently in the test as `np.concatenate([b[n_sink:] for b in books])` and assert `h_keys == pool[idx_keys]`, `h_query == pool[idx_query]` and `h_id == pool[idx_id]`. The sentinel alone catches only a sink that is not dropped; this also catches one row too many dropped.
      - Key, query and key-side rows are disjoint. Assert this on row indices, which the function returns alongside the tensors.
      - The sizes are exact.
      - The same seed gives identical output, and a different seed gives different output.
@@ -200,19 +202,26 @@ A fourth control needs no code: **`train_books_real`**, the standard real path o
   2. `equalise_norms(h_keys, h_query, h_id)`:
      - Every output row's norm equals the mean input row norm, computed over all three tensors together, to 1e-5 relative.
      - The cosine between each output row and its input row is above 1 - 1e-6.
+     - Fixture: the three tensors are drawn at different scales (for example `h_query` x 3 and `h_id` x 0.5), so that per-tensor normalisation gives a visibly different result.
      - Catches: normalising each tensor separately, and normalising to 1.
   3. `fit_gaussian(arrays)` followed by `sample_gaussian(fit, n, seed)`, on a 6-dimensional fixture of rank 4. Dimensions 0-3 are independent with variances 0.25, 1, 4 and 9, chosen away from 1 so that using eigenvalues where square roots belong changes the result. Dimensions 4 and 5 are exact linear combinations of 0-3.
-     - The sample mean and covariance from 200,000 draws match the fit to 2% relative on the diagonal.
+     - The sample mean and covariance from 200,000 draws match the fit: the diagonal to 2% relative, and every entry of the full covariance to 2% of the largest diagonal entry, absolute. The full check catches a wrong rotation (`V.T` in place of `V`), which the diagonal alone may not.
      - The result has no NaN.
-     - Fixed seed: identical draws.
+     - Fixed seed: identical draws. A different seed: different draws.
      - Catches: eigenvalues used where their square roots belong, a Cholesky that fails on a singular matrix, and an unseeded generator.
      - Implementation hint: `eigh`, negative eigenvalues clamped to 0, `x = mu + z @ (V * sqrt(lam)).T`.
   4. `fit_gaussian` accumulates the sums in chunks, in float64, so 12 books of 32,767 × 5,120 never need to be resident at once. The test feeds the fixture in two chunks and compares the result with a single-pass fit, to 1e-10. Catches the sums being reset per chunk.
+  5. **`measure_controls` end to end on a tiny capture.** Build 20 books of `T` = 64, D = 16 for layer 3, plus layer-3 weights with 2 KV heads, using the same writers as `test_measure_real_end_to_end_on_a_tiny_capture` (`write_bf16_safetensor`, and a local copy of `_write_multi`; do not edit `tests/test_kv_gate.py`). Run `measure_controls(cap, layers=[3], controls=["pooled_real", "norm_equalised", "gaussian"], seed=0, out_dir=tmp, threads=1, train_books=range(12), ref_books=range(12, 20), n_keys=200, n_tail=16, nlist=4, hnsw_m=8, ef_construction=16)`. Expect:
+     - exactly the files `pooled_real.jsonl`, `norm_equalised.jsonl` and `gaussian.jsonl`, each holding 2 records (one per KV head);
+     - in every record, `source` and `control` equal to the file's name, `n_keys` 200, `n_q_id` 16, and `n_q_ood` 80;
+     - `books` equal to `[12, ..., 19]` for `pooled_real` and `norm_equalised`, and `[0, ..., 11]` for `gaussian`;
+     - a second call with the same `out_dir` raises `FileExistsError` before writing anything (file modification times unchanged).
+     Catches: a control written under the wrong name, the reference and training books swapped, sizes not passed through, and an overwrite.
 - [ ] **Step 2:** run the tests and see them fail.
 - [ ] **Step 3: Implement.**
-  - **Functions:** `pooled_split`, `equalise_norms`, `fit_gaussian` and `sample_gaussian` as pure functions.
-  - **`main()`:**
-    - **Arguments:** `--capture-dir`, `--layers` (default `11,19,43`), `--controls` (default all three), `--seed` (default 0), `--out-dir`, `--threads` (default 15). Call `faiss.omp_set_num_threads(threads)` once, before any profile.
+  - **Functions:** `pooled_split`, `equalise_norms`, `fit_gaussian` and `sample_gaussian` as pure functions, plus `measure_controls(capture_dir, layers, controls, seed, out_dir, *, threads=15, train_books=range(12), ref_books=range(12, 20), n_keys=31736, n_tail=1024, nlist=256, hnsw_m=48, ef_construction=500)`. The size and index defaults are the locked conditions; the box run never overrides them.
+  - **`measure_controls` and the script:**
+    - **Script arguments:** `--capture-dir`, `--layers` (default `11,19,43`), `--controls` (default all three), `--seed` (default 0), `--out-dir`, `--threads` (default 15). `measure_controls` checks every output file for existence before any work, then calls `faiss.omp_set_num_threads(threads)` once, before any profile.
     - **Output:** one JSONL per control, `<out-dir>/<source>.jsonl`. Refuse to overwrite an existing file.
     - **Layer loop:** per layer, load the books with `src/data/kv_capture.py::read_safetensor` (via `h_path`) one book at a time for the Gaussian fit. Then call `measure_h_layer(..., source=<name>, seed=seed, extra={"control": <name>, "books": [...]})`.
     - **Gaussian sampling:** run it on the GPU when one is present; the box has the L40.

@@ -74,19 +74,23 @@ def _rank4(n, seed):
 def test_gaussian_fit_and_sample_match_moments():
     x = _rank4(5000, 0) + 2.0
     fit = fit_gaussian([x])
-    s = np.asarray(sample_gaussian(fit, 200_000, seed=1), dtype=np.float64)
+    s = np.asarray(
+        sample_gaussian(fit, 200_000, seed=1, device="cpu"), dtype=np.float64
+    )
     assert not np.isnan(s).any()
     mu, cov = x.mean(0), np.cov(x.T, bias=True)
     cs = np.cov(s.T)
     assert np.allclose(np.diag(cs), np.diag(cov), rtol=0.02)
     assert np.abs(cs - cov).max() < 0.02 * np.diag(cov).max()
     assert np.allclose(s.mean(0), mu, atol=0.02 * np.sqrt(np.diag(cov).max()))
-    again = sample_gaussian(fit, 50, seed=1)
+    again = sample_gaussian(fit, 50, seed=1, device="cpu")
     assert np.array_equal(
-        np.asarray(again), np.asarray(sample_gaussian(fit, 50, seed=1))
+        np.asarray(again),
+        np.asarray(sample_gaussian(fit, 50, seed=1, device="cpu")),
     )
     assert not np.array_equal(
-        np.asarray(again), np.asarray(sample_gaussian(fit, 50, seed=2))
+        np.asarray(again),
+        np.asarray(sample_gaussian(fit, 50, seed=2, device="cpu")),
     )
 
 

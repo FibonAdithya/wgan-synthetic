@@ -225,7 +225,7 @@ repo-wide constant:
 
 No sigmoid on critic output.
 
-`model.output_normalize` (default `true`): generator output is L2-normalised before the critic, in in-training samples and in every sampler. `scout_kv` sets it `false`, because inner-product search reads norms.
+`model.output_normalize` (default `true`): generator output is L2-normalised before the critic, in in-training samples and in every sampler. `scout_kv` sets it `false`, because inner-product search reads norms. Samplers read it from the run's `run_config.yaml`, not from the checkpoint, so a `scout_kv` checkpoint sampled without its config would be normalised and lose the norms the gate measures.
 
 ---
 
@@ -479,7 +479,8 @@ query survives on either side.
 The holdout is smaller than a family's canonical N, so `gate_*` values rank
 checkpoints within one run and are not the family's profile. Checkpoints
 record `select_on` and `best_score`; a resume under a different selector is
-refused.
+refused. They also record `model.output_normalize`, and a resume that flips it
+is refused too. Checkpoints written before that record existed are not checked.
 
 Both sides are measured with exact-zero rows dropped (`zero_rows` in the
 logged statistics is the count) -- a zero row sits at the origin rather than

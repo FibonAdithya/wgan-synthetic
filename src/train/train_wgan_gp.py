@@ -370,6 +370,7 @@ def save_checkpoint(
     best_cov: float = float("inf"),
     select_on: str = "cov_fro",
     best_score: float = float("inf"),
+    output_normalize: bool = True,
 ) -> None:
     """Write a checkpoint.
 
@@ -389,7 +390,8 @@ def save_checkpoint(
     the fact (see `src/train/selection.py`). `select_on` and `best_score`
     record which selector chose `best_generator.pt` and its running best, so
     a resume under a different selector is refused rather than silently
-    mixing two scores.
+    mixing two scores. `output_normalize` is recorded for the same reason:
+    flipping it on resume would change what the critic sees mid-run.
     """
     if generator_weights not in ("live", "ema"):
         raise ValueError(
@@ -407,6 +409,7 @@ def save_checkpoint(
         "best_cov": float(best_cov),
         "select_on": select_on,
         "best_score": float(best_score),
+        "output_normalize": bool(output_normalize),
     }
     out_dir.mkdir(parents=True, exist_ok=True)
     torch.save(ckpt, out_dir / f"checkpoint_step_{step}.pt")
@@ -593,6 +596,14 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
             raise ValueError(
                 f"{resume} was selected under select_on={ckpt_select_on!r} but the "
                 f"config says {select_on!r}; a resume cannot mix two selection scores"
+            )
+        # Checkpoints written before the flag was recorded are not checked: the
+        # scout_kv v0 runs trained with it off, so no default would be safe.
+        ckpt_norm_out = ckpt.get("output_normalize")
+        if ckpt_norm_out is not None and bool(ckpt_norm_out) != norm_out:
+            raise ValueError(
+                f"{resume} was trained with model.output_normalize={ckpt_norm_out} but "
+                f"the config says {norm_out}; a resume cannot change what the critic sees"
             )
         if use_ema:
             saved = ckpt.get("ema_params") or {}
@@ -895,6 +906,7 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
                         best_cov=best_cov,
                         select_on=select_on,
                         best_score=best_score,
+                        output_normalize=norm_out,
                     )
                     best_checkpoint_written = True
 
@@ -914,6 +926,7 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
                 best_cov=best_cov,
                 select_on=select_on,
                 best_score=best_score,
+                output_normalize=norm_out,
             )
 
     with (out_dir / "run_metadata.json").open("w", encoding="utf-8") as f:

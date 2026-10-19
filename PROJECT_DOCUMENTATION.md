@@ -4,13 +4,14 @@
 
 Train Wasserstein GANs with gradient penalty (WGAN-GP) to produce synthetic
 corpora that reproduce the *nearest-neighbour search difficulty* of six
-benchmark families, so ANN algorithms can be developed and stressed without
-the real corpora. A synthetic set succeeds when an index finds it as hard,
+benchmark families, plus the `scout_kv` attention-input family, so ANN
+algorithms can be developed and stressed without the real corpora. A synthetic set succeeds when an index finds it as hard,
 and hard in the same way, as the real set. It does not succeed by having
 matching marginals.
 
 The gate is ANN-difficulty parity on four statistics, measured per dataset at
-that dataset's canonical N and k: LID (local intrinsic dimensionality),
+that dataset's canonical N and k (the exception is `scout_kv`, gated on IVF and
+HNSW search difficulty instead; see "ANN difficulty — the gate" below): LID (local intrinsic dimensionality),
 relative contrast, hubness skew (k-occurrence), and IVF cell-balance Gini.
 The distributional metrics below — `mmd_rbf`, `cov_fro`, `pairwise_hist_l1`
 and the per-dimension marginals — are diagnostics. They explain why a gate
@@ -165,7 +166,9 @@ inverted — it discards each vector's norm, so the information needed to undo
 it is gone, and the families this matters to are compared angularly anyway.
 
 One combination is refused rather than supported: `center` together with
-`l2_normalize`. Sampling L2-normalizes before inversion, and the subtracted
+`l2_normalize`. Sampling L2-normalizes before inversion (unless
+`model.output_normalize: false`, which `scout_kv` sets, and which goes with
+`l2_normalize: false`), and the subtracted
 mean's relative contribution then differs per row, so re-normalizing
 downstream yields systematically wrong directions with nothing to flag them.
 `compare_variants.invert_samples` raises on that state.

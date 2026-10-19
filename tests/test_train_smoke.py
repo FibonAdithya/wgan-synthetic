@@ -342,3 +342,44 @@ def test_resume_refuses_a_checkpoint_selected_under_a_different_selector(tmp_pat
     cfg2["training"]["num_gen_steps"] = 8
     with pytest.raises(ValueError, match="select_on"):
         train(cfg2, resume=str(live_ckpt))
+
+
+def test_resume_refuses_a_checkpoint_trained_under_a_different_output_normalize(
+    tmp_path,
+):
+    """Trains with the flag off, so a checkpoint that failed to record it would
+    read as the default (on) and the mismatch would go unnoticed."""
+    cfg = make_config(tmp_path, "mlp")
+    cfg["model"]["output_normalize"] = False
+    cfg["training"]["save_every"] = 2
+    train(cfg)
+    live_ckpt = tmp_path / "mlp" / "checkpoint_step_2.pt"
+    assert live_ckpt.exists()
+    cfg2 = make_config(tmp_path, "mlp")
+    cfg2["training"]["num_gen_steps"] = 8
+    with pytest.raises(ValueError, match="output_normalize"):
+        train(cfg2, resume=str(live_ckpt))
+    # The same flag resumes cleanly, so the refusal is about the flag alone.
+    cfg3 = make_config(tmp_path, "mlp")
+    cfg3["model"]["output_normalize"] = False
+    cfg3["training"]["num_gen_steps"] = 4
+    train(cfg3, resume=str(live_ckpt))
+
+
+def test_resume_accepts_a_checkpoint_that_predates_the_output_normalize_record(
+    tmp_path,
+):
+    """The scout_kv v0 checkpoints trained with output_normalize off but do not
+    record it; a default of True would refuse every resume of them."""
+    cfg = make_config(tmp_path, "mlp")
+    cfg["model"]["output_normalize"] = False
+    cfg["training"]["save_every"] = 2
+    train(cfg)
+    live_ckpt = tmp_path / "mlp" / "checkpoint_step_2.pt"
+    ckpt = torch.load(live_ckpt, weights_only=False)
+    del ckpt["output_normalize"]
+    torch.save(ckpt, live_ckpt)
+    cfg2 = make_config(tmp_path, "mlp")
+    cfg2["model"]["output_normalize"] = False
+    cfg2["training"]["num_gen_steps"] = 4
+    train(cfg2, resume=str(live_ckpt))

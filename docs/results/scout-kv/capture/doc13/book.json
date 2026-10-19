@@ -1,0 +1,83 @@
+{
+ "row": 18,
+ "title": "Jennie Gerhardt by Theodore Dreiser",
+ "n_tokens_full": 173309,
+ "n_tokens": 32768,
+ "forward_seconds": 77.1,
+ "peak_gpu_gib": 45.9,
+ "verify": {
+  "3": {
+   "k_rel_err": 0.0016919819390989023,
+   "q_rel_err": 0.0022096080165835107,
+   "q_rel_err_late_with_scale": 0.002340138871431413,
+   "q_rel_err_late_without_scale": 0.09883123021467749
+  },
+  "7": {
+   "k_rel_err": 0.0016595822596803045,
+   "q_rel_err": 0.002236768662803502,
+   "q_rel_err_late_with_scale": 0.00231820285339034,
+   "q_rel_err_late_without_scale": 0.10112736970092455
+  },
+  "11": {
+   "k_rel_err": 0.0016473023985790927,
+   "q_rel_err": 0.0022470950633722586,
+   "q_rel_err_late_with_scale": 0.0023323000323734328,
+   "q_rel_err_late_without_scale": 0.10075394052292926
+  },
+  "15": {
+   "k_rel_err": 0.0016621233517158847,
+   "q_rel_err": 0.0022732205210523986,
+   "q_rel_err_late_with_scale": 0.002348986098232802,
+   "q_rel_err_late_without_scale": 0.10255813951212364
+  },
+  "19": {
+   "k_rel_err": 0.0016561555101550563,
+   "q_rel_err": 0.0022715332085020048,
+   "q_rel_err_late_with_scale": 0.0023660125720358503,
+   "q_rel_err_late_without_scale": 0.09988174986883795
+  },
+  "23": {
+   "k_rel_err": 0.0016560774414056542,
+   "q_rel_err": 0.00223052483175009,
+   "q_rel_err_late_with_scale": 0.0023415410000331856,
+   "q_rel_err_late_without_scale": 0.09630696624976799
+  },
+  "27": {
+   "k_rel_err": 0.0016633755476204554,
+   "q_rel_err": 0.002190870590303946,
+   "q_rel_err_late_with_scale": 0.002327673465127664,
+   "q_rel_err_late_without_scale": 0.09682280988645771
+  },
+  "31": {
+   "k_rel_err": 0.0016646866352764773,
+   "q_rel_err": 0.0022110442050642136,
+   "q_rel_err_late_with_scale": 0.002332261736287499,
+   "q_rel_err_late_without_scale": 0.09662654486384784
+  },
+  "35": {
+   "k_rel_err": 0.0016670861552674728,
+   "q_rel_err": 0.002237331081224395,
+   "q_rel_err_late_with_scale": 0.002337275554821917,
+   "q_rel_err_late_without_scale": 0.09931149070502489
+  },
+  "39": {
+   "k_rel_err": 0.001661092348867053,
+   "q_rel_err": 0.002239574465578607,
+   "q_rel_err_late_with_scale": 0.0023277250829935037,
+   "q_rel_err_late_without_scale": 0.10146821843040943
+  },
+  "43": {
+   "k_rel_err": 0.0016513592836539567,
+   "q_rel_err": 0.002282670323352308,
+   "q_rel_err_late_with_scale": 0.0023534045023123765,
+   "q_rel_err_late_without_scale": 0.10433595312947577
+  },
+  "47": {
+   "k_rel_err": 0.0016588220481869365,
+   "q_rel_err": 0.002264912745204745,
+   "q_rel_err_late_with_scale": 0.002331193394847776,
+   "q_rel_err_late_without_scale": 0.10705143627290799
+  }
+ },
+ "worst_rel_err": 0.002282670323352308
+}

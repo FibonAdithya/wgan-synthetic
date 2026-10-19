@@ -1,0 +1,83 @@
+{
+ "row": 10,
+ "title": "On the Portraits of English Authors on Gardening by Samuel Felton",
+ "n_tokens_full": 122452,
+ "n_tokens": 32768,
+ "forward_seconds": 77.5,
+ "peak_gpu_gib": 45.9,
+ "verify": {
+  "3": {
+   "k_rel_err": 0.0016863625900438324,
+   "q_rel_err": 0.002197152576859078,
+   "q_rel_err_late_with_scale": 0.002327488838241696,
+   "q_rel_err_late_without_scale": 0.09855409718662105
+  },
+  "7": {
+   "k_rel_err": 0.0016598904395016087,
+   "q_rel_err": 0.002237539759756656,
+   "q_rel_err_late_with_scale": 0.0023183675523662617,
+   "q_rel_err_late_without_scale": 0.10079102680318584
+  },
+  "11": {
+   "k_rel_err": 0.0016502712269351846,
+   "q_rel_err": 0.0022477977367248605,
+   "q_rel_err_late_with_scale": 0.0023313155953010012,
+   "q_rel_err_late_without_scale": 0.10092370154106688
+  },
+  "15": {
+   "k_rel_err": 0.0016580534417485321,
+   "q_rel_err": 0.002273095273074226,
+   "q_rel_err_late_with_scale": 0.0023481595356572705,
+   "q_rel_err_late_without_scale": 0.10261798485879366
+  },
+  "19": {
+   "k_rel_err": 0.0016582516794601614,
+   "q_rel_err": 0.0022688455862722025,
+   "q_rel_err_late_with_scale": 0.0023609099883578444,
+   "q_rel_err_late_without_scale": 0.10091838364275868
+  },
+  "23": {
+   "k_rel_err": 0.0016586591949196824,
+   "q_rel_err": 0.00222727928989403,
+   "q_rel_err_late_with_scale": 0.002350015912463582,
+   "q_rel_err_late_without_scale": 0.0951111808430466
+  },
+  "27": {
+   "k_rel_err": 0.0016649344676184794,
+   "q_rel_err": 0.0021928320535899493,
+   "q_rel_err_late_with_scale": 0.0023269055217842423,
+   "q_rel_err_late_without_scale": 0.09555364621189204
+  },
+  "31": {
+   "k_rel_err": 0.0016625023860857642,
+   "q_rel_err": 0.002206827015769615,
+   "q_rel_err_late_with_scale": 0.0023312051380673733,
+   "q_rel_err_late_without_scale": 0.09627202711046523
+  },
+  "35": {
+   "k_rel_err": 0.0016718850651763384,
+   "q_rel_err": 0.0022298650518155164,
+   "q_rel_err_late_with_scale": 0.0023290721569720393,
+   "q_rel_err_late_without_scale": 0.1000530639344046
+  },
+  "39": {
+   "k_rel_err": 0.0016580118465985135,
+   "q_rel_err": 0.0022393265535709354,
+   "q_rel_err_late_with_scale": 0.002327496124718431,
+   "q_rel_err_late_without_scale": 0.10204258106220364
+  },
+  "43": {
+   "k_rel_err": 0.0016606231202182732,
+   "q_rel_err": 0.002278812710347848,
+   "q_rel_err_late_with_scale": 0.002348178770409865,
+   "q_rel_err_late_without_scale": 0.10481469753284582
+  },
+  "47": {
+   "k_rel_err": 0.0016523239290479723,
+   "q_rel_err": 0.002271194972094853,
+   "q_rel_err_late_with_scale": 0.0023330542577072984,
+   "q_rel_err_late_without_scale": 0.10675532500859145
+  }
+ },
+ "worst_rel_err": 0.002278812710347848
+}

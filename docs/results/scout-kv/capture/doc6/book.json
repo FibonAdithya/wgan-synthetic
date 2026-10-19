@@ -1,0 +1,83 @@
+{
+ "row": 8,
+ "title": "From Sand Hill to Pine by Bret Harte",
+ "n_tokens_full": 85285,
+ "n_tokens": 32768,
+ "forward_seconds": 78.5,
+ "peak_gpu_gib": 45.9,
+ "verify": {
+  "3": {
+   "k_rel_err": 0.0016893329802779458,
+   "q_rel_err": 0.0022054006724396076,
+   "q_rel_err_late_with_scale": 0.002332130607132114,
+   "q_rel_err_late_without_scale": 0.09928054013739468
+  },
+  "7": {
+   "k_rel_err": 0.0016606734512884822,
+   "q_rel_err": 0.002238731214466176,
+   "q_rel_err_late_with_scale": 0.0023184795903192852,
+   "q_rel_err_late_without_scale": 0.1009484409790588
+  },
+  "11": {
+   "k_rel_err": 0.0016469396916177137,
+   "q_rel_err": 0.0022458888617369896,
+   "q_rel_err_late_with_scale": 0.0023312060479392456,
+   "q_rel_err_late_without_scale": 0.10060506732636613
+  },
+  "15": {
+   "k_rel_err": 0.0016589605088306962,
+   "q_rel_err": 0.002276460032611526,
+   "q_rel_err_late_with_scale": 0.0023513355773161953,
+   "q_rel_err_late_without_scale": 0.10206218224388944
+  },
+  "19": {
+   "k_rel_err": 0.0016529686561366093,
+   "q_rel_err": 0.002276628601702022,
+   "q_rel_err_late_with_scale": 0.002366277400163082,
+   "q_rel_err_late_without_scale": 0.09883007673438901
+  },
+  "23": {
+   "k_rel_err": 0.0016569567551419078,
+   "q_rel_err": 0.0022310759552931613,
+   "q_rel_err_late_with_scale": 0.002344904481922708,
+   "q_rel_err_late_without_scale": 0.09444576336032066
+  },
+  "27": {
+   "k_rel_err": 0.001665059254311894,
+   "q_rel_err": 0.0021892645480601314,
+   "q_rel_err_late_with_scale": 0.002326947007456584,
+   "q_rel_err_late_without_scale": 0.09631335965556223
+  },
+  "31": {
+   "k_rel_err": 0.0016601267224559979,
+   "q_rel_err": 0.0022047974757436898,
+   "q_rel_err_late_with_scale": 0.0023328698160768103,
+   "q_rel_err_late_without_scale": 0.09629825560088473
+  },
+  "35": {
+   "k_rel_err": 0.001670258172364733,
+   "q_rel_err": 0.002227419115378563,
+   "q_rel_err_late_with_scale": 0.0023281416644278254,
+   "q_rel_err_late_without_scale": 0.09915122702389756
+  },
+  "39": {
+   "k_rel_err": 0.0016625703804037035,
+   "q_rel_err": 0.002239662834420364,
+   "q_rel_err_late_with_scale": 0.0023262195615175256,
+   "q_rel_err_late_without_scale": 0.10075724592675869
+  },
+  "43": {
+   "k_rel_err": 0.0016558297357236575,
+   "q_rel_err": 0.0022864950378162175,
+   "q_rel_err_late_with_scale": 0.002349308273497965,
+   "q_rel_err_late_without_scale": 0.10270741153140901
+  },
+  "47": {
+   "k_rel_err": 0.0016451724124923175,
+   "q_rel_err": 0.0022801241153702343,
+   "q_rel_err_late_with_scale": 0.0023314699072276525,
+   "q_rel_err_late_without_scale": 0.10475662116582068
+  }
+ },
+ "worst_rel_err": 0.0022864950378162175
+}

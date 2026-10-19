@@ -1,0 +1,83 @@
+{
+ "row": 6,
+ "title": "Frank Merriwell Down South by Burt L. Standish",
+ "n_tokens_full": 109849,
+ "n_tokens": 32768,
+ "forward_seconds": 94.2,
+ "peak_gpu_gib": 45.9,
+ "verify": {
+  "3": {
+   "k_rel_err": 0.0016899850998054178,
+   "q_rel_err": 0.0021996470684823416,
+   "q_rel_err_late_with_scale": 0.0023291391727982363,
+   "q_rel_err_late_without_scale": 0.09883850727378224
+  },
+  "7": {
+   "k_rel_err": 0.0016605230222824874,
+   "q_rel_err": 0.0022377556961968837,
+   "q_rel_err_late_with_scale": 0.002318375476429573,
+   "q_rel_err_late_without_scale": 0.1010410776709771
+  },
+  "11": {
+   "k_rel_err": 0.0016469095660034828,
+   "q_rel_err": 0.0022473212427822765,
+   "q_rel_err_late_with_scale": 0.0023326987899599627,
+   "q_rel_err_late_without_scale": 0.10080522828284855
+  },
+  "15": {
+   "k_rel_err": 0.001659032199915737,
+   "q_rel_err": 0.002275452783249483,
+   "q_rel_err_late_with_scale": 0.0023503320661088928,
+   "q_rel_err_late_without_scale": 0.10252283631205834
+  },
+  "19": {
+   "k_rel_err": 0.0016561770609520336,
+   "q_rel_err": 0.0022742157828005974,
+   "q_rel_err_late_with_scale": 0.0023659412842204548,
+   "q_rel_err_late_without_scale": 0.09954688795063055
+  },
+  "23": {
+   "k_rel_err": 0.0016576722062522833,
+   "q_rel_err": 0.002222033682250581,
+   "q_rel_err_late_with_scale": 0.002341655197236781,
+   "q_rel_err_late_without_scale": 0.0954655871155503
+  },
+  "27": {
+   "k_rel_err": 0.0016655457430606998,
+   "q_rel_err": 0.002189898308672344,
+   "q_rel_err_late_with_scale": 0.002325943523336182,
+   "q_rel_err_late_without_scale": 0.09613755959886576
+  },
+  "31": {
+   "k_rel_err": 0.0016625020985231147,
+   "q_rel_err": 0.002205270327903479,
+   "q_rel_err_late_with_scale": 0.0023331589138903606,
+   "q_rel_err_late_without_scale": 0.09643553985399954
+  },
+  "35": {
+   "k_rel_err": 0.0016716577709133677,
+   "q_rel_err": 0.002224779327316599,
+   "q_rel_err_late_with_scale": 0.0023267859755857503,
+   "q_rel_err_late_without_scale": 0.09893412591528629
+  },
+  "39": {
+   "k_rel_err": 0.0016597728384269593,
+   "q_rel_err": 0.0022386053929666252,
+   "q_rel_err_late_with_scale": 0.002325165407279552,
+   "q_rel_err_late_without_scale": 0.10097018685445307
+  },
+  "43": {
+   "k_rel_err": 0.0016541672718330064,
+   "q_rel_err": 0.002284746935871508,
+   "q_rel_err_late_with_scale": 0.0023529193920931346,
+   "q_rel_err_late_without_scale": 0.10358405710724254
+  },
+  "47": {
+   "k_rel_err": 0.0016569699322194085,
+   "q_rel_err": 0.0022694063200878575,
+   "q_rel_err_late_with_scale": 0.002330371810167187,
+   "q_rel_err_late_without_scale": 0.10619721372364536
+  }
+ },
+ "worst_rel_err": 0.002284746935871508
+}

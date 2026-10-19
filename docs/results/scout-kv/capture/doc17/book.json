@@ -1,0 +1,83 @@
+{
+ "row": 23,
+ "title": "The Stones of Venice Volume I (of 3) by John Ruskin",
+ "n_tokens_full": 214343,
+ "n_tokens": 32768,
+ "forward_seconds": 77.4,
+ "peak_gpu_gib": 45.9,
+ "verify": {
+  "3": {
+   "k_rel_err": 0.0016890713292124747,
+   "q_rel_err": 0.0022092689893662945,
+   "q_rel_err_late_with_scale": 0.0023369013081892365,
+   "q_rel_err_late_without_scale": 0.09834832684821825
+  },
+  "7": {
+   "k_rel_err": 0.0016597157147261459,
+   "q_rel_err": 0.002236827367587973,
+   "q_rel_err_late_with_scale": 0.0023182658060092176,
+   "q_rel_err_late_without_scale": 0.10091051569154183
+  },
+  "11": {
+   "k_rel_err": 0.0016491865533676646,
+   "q_rel_err": 0.0022466687634840913,
+   "q_rel_err_late_with_scale": 0.0023311293935538717,
+   "q_rel_err_late_without_scale": 0.10064131558591607
+  },
+  "15": {
+   "k_rel_err": 0.0016628791745120928,
+   "q_rel_err": 0.0022744664195357787,
+   "q_rel_err_late_with_scale": 0.0023479352528202346,
+   "q_rel_err_late_without_scale": 0.10255814719717583
+  },
+  "19": {
+   "k_rel_err": 0.0016562914840996957,
+   "q_rel_err": 0.0022696551809448847,
+   "q_rel_err_late_with_scale": 0.002361784388987073,
+   "q_rel_err_late_without_scale": 0.10064245012179737
+  },
+  "23": {
+   "k_rel_err": 0.001657750947219492,
+   "q_rel_err": 0.0022209203784679067,
+   "q_rel_err_late_with_scale": 0.0023372787599130387,
+   "q_rel_err_late_without_scale": 0.09599825692323384
+  },
+  "27": {
+   "k_rel_err": 0.0016599254896980712,
+   "q_rel_err": 0.0021960238335816925,
+   "q_rel_err_late_with_scale": 0.002327821588459497,
+   "q_rel_err_late_without_scale": 0.09593613968329617
+  },
+  "31": {
+   "k_rel_err": 0.001665231612265524,
+   "q_rel_err": 0.002211753697516461,
+   "q_rel_err_late_with_scale": 0.0023304315739716384,
+   "q_rel_err_late_without_scale": 0.09658260909200654
+  },
+  "35": {
+   "k_rel_err": 0.001666496870093106,
+   "q_rel_err": 0.0022296911831938384,
+   "q_rel_err_late_with_scale": 0.0023301905183767276,
+   "q_rel_err_late_without_scale": 0.09936527316740604
+  },
+  "39": {
+   "k_rel_err": 0.0016580367467638538,
+   "q_rel_err": 0.0022416896213587165,
+   "q_rel_err_late_with_scale": 0.002329379565420976,
+   "q_rel_err_late_without_scale": 0.1018698511835999
+  },
+  "43": {
+   "k_rel_err": 0.0016506810953856896,
+   "q_rel_err": 0.0022798586412033418,
+   "q_rel_err_late_with_scale": 0.002350485665179127,
+   "q_rel_err_late_without_scale": 0.10497976592429098
+  },
+  "47": {
+   "k_rel_err": 0.0016551205585450164,
+   "q_rel_err": 0.002268069499197488,
+   "q_rel_err_late_with_scale": 0.0023334784813639547,
+   "q_rel_err_late_without_scale": 0.10727462019605191
+  }
+ },
+ "worst_rel_err": 0.0022798586412033418
+}

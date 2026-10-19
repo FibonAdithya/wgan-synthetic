@@ -1,0 +1,83 @@
+{
+ "row": 25,
+ "title": "The Real Latin Quarter by F. Berkeley Smith",
+ "n_tokens_full": 37355,
+ "n_tokens": 32768,
+ "forward_seconds": 77.5,
+ "peak_gpu_gib": 45.9,
+ "verify": {
+  "3": {
+   "k_rel_err": 0.0016879760983270168,
+   "q_rel_err": 0.002199527601482058,
+   "q_rel_err_late_with_scale": 0.002329777907653067,
+   "q_rel_err_late_without_scale": 0.09892501128130203
+  },
+  "7": {
+   "k_rel_err": 0.0016594985158705194,
+   "q_rel_err": 0.0022338482223456697,
+   "q_rel_err_late_with_scale": 0.002317810771188739,
+   "q_rel_err_late_without_scale": 0.10061997885137815
+  },
+  "11": {
+   "k_rel_err": 0.0016489403973148548,
+   "q_rel_err": 0.0022459603811727123,
+   "q_rel_err_late_with_scale": 0.0023321998756329143,
+   "q_rel_err_late_without_scale": 0.10064369165366396
+  },
+  "15": {
+   "k_rel_err": 0.0016601539356921804,
+   "q_rel_err": 0.002274434373018678,
+   "q_rel_err_late_with_scale": 0.002350691425760071,
+   "q_rel_err_late_without_scale": 0.102419676676865
+  },
+  "19": {
+   "k_rel_err": 0.001656167560954893,
+   "q_rel_err": 0.002271169371446344,
+   "q_rel_err_late_with_scale": 0.0023658331820487284,
+   "q_rel_err_late_without_scale": 0.1000691084912429
+  },
+  "23": {
+   "k_rel_err": 0.0016574719084833298,
+   "q_rel_err": 0.0022269366274821996,
+   "q_rel_err_late_with_scale": 0.002346996947294343,
+   "q_rel_err_late_without_scale": 0.09481527925385305
+  },
+  "27": {
+   "k_rel_err": 0.0016653163166119793,
+   "q_rel_err": 0.002180569338906025,
+   "q_rel_err_late_with_scale": 0.002325648816581883,
+   "q_rel_err_late_without_scale": 0.09519520277665282
+  },
+  "31": {
+   "k_rel_err": 0.0016632965634131725,
+   "q_rel_err": 0.002200973770650497,
+   "q_rel_err_late_with_scale": 0.00233303060162159,
+   "q_rel_err_late_without_scale": 0.09525450658546435
+  },
+  "35": {
+   "k_rel_err": 0.0016708726820939118,
+   "q_rel_err": 0.0022246269926484486,
+   "q_rel_err_late_with_scale": 0.0023306404507358472,
+   "q_rel_err_late_without_scale": 0.09880278371064001
+  },
+  "39": {
+   "k_rel_err": 0.0016591318078534832,
+   "q_rel_err": 0.002238787785123844,
+   "q_rel_err_late_with_scale": 0.0023290527812616386,
+   "q_rel_err_late_without_scale": 0.10127857277806063
+  },
+  "43": {
+   "k_rel_err": 0.0016552190325217983,
+   "q_rel_err": 0.0022837300142010877,
+   "q_rel_err_late_with_scale": 0.002354201126945363,
+   "q_rel_err_late_without_scale": 0.10409606522529384
+  },
+  "47": {
+   "k_rel_err": 0.001656777048560466,
+   "q_rel_err": 0.0022692727607173733,
+   "q_rel_err_late_with_scale": 0.0023325832737314876,
+   "q_rel_err_late_without_scale": 0.10669465915293674
+  }
+ },
+ "worst_rel_err": 0.0022837300142010877
+}

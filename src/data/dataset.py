@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import numpy as np
 import torch
 from torch.utils.data import Dataset
+
+from src.data.kv_capture import load_kv_capture
 
 
 def _load_fvecs(path: Path) -> np.ndarray:
@@ -250,6 +253,9 @@ def build_training_data(
     seed: int,
     synthetic_if_missing: bool = False,
     synthetic_num_vectors: int = 100000,
+    kv_layer: int | None = None,
+    kv_books: Sequence[int] | None = None,
+    kv_n_sink: int = 1,
 ) -> tuple[np.ndarray, np.ndarray, PreprocessState]:
     if descriptor_path is None:
         if not synthetic_if_missing:
@@ -258,6 +264,10 @@ def build_training_data(
             )
         rng = np.random.default_rng(seed)
         x = rng.normal(size=(synthetic_num_vectors, descriptor_dim)).astype(np.float32)
+    elif file_format == "kv_capture":
+        if kv_layer is None or kv_books is None:
+            raise ValueError("format kv_capture needs data.kv_layer and data.kv_books")
+        x = load_kv_capture(Path(descriptor_path), kv_layer, kv_books, kv_n_sink)
     else:
         x = load_descriptors(Path(descriptor_path), file_format=file_format)
 

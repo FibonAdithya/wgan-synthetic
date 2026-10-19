@@ -4,13 +4,14 @@
 
 Train Wasserstein GANs with gradient penalty (WGAN-GP) to produce synthetic
 corpora that reproduce the *nearest-neighbour search difficulty* of six
-benchmark families, so ANN algorithms can be developed and stressed without
-the real corpora. A synthetic set succeeds when an index finds it as hard,
+benchmark families, plus the `scout_kv` attention-input family, so ANN
+algorithms can be developed and stressed without the real corpora. A synthetic set succeeds when an index finds it as hard,
 and hard in the same way, as the real set. It does not succeed by having
 matching marginals.
 
 The gate is ANN-difficulty parity on four statistics, measured per dataset at
-that dataset's canonical N and k: LID (local intrinsic dimensionality),
+that dataset's canonical N and k (the exception is `scout_kv`, gated on IVF and
+HNSW search difficulty instead; see "ANN difficulty — the gate" below): LID (local intrinsic dimensionality),
 relative contrast, hubness skew (k-occurrence), and IVF cell-balance Gini.
 The distributional metrics below — `mmd_rbf`, `cov_fro`, `pairwise_hist_l1`
 and the per-dimension marginals — are diagnostics. They explain why a gate
@@ -44,7 +45,7 @@ Primary deliverable:
 
 ## Datasets
 
-Six benchmark families. Each has its own page under `docs/datasets/`,
+Six benchmark families, plus `scout_kv` below. Each has its own page under `docs/datasets/`,
 carrying its structure, canonical N and k, measured profile, ladder and gate
 bands; the pages are the source of truth for anything family-specific.
 
@@ -56,6 +57,7 @@ bands; the pages are the source of truth for anything family-specific.
 | `glove` | 100 | `angular` | dense signed word vectors, strong density gradient | `mlp` today, `spherical` not yet adopted | `docs/datasets/glove.md` |
 | `nytimes` | 256 | `angular` | dense signed document embeddings, strong topic clusters | `mlp` at v0, `linear_skip` from v1 (v1, v2, v2b and v2c trained, none meeting the bar), `spherical` from v3 (trained; meets the bar since the 2026-09-17 gate bands, set as a tolerance around real to admit it; continued to 100k without a better selection) | `docs/datasets/nytimes.md` |
 | `openai` | 1536 | `angular` | unit-norm text embeddings, very high ambient dim, low intrinsic dim | `mlp` today, `spherical` not yet adopted | `docs/datasets/openai.md` |
+| `scout_kv` | 5120 | `l2` (in-training selector on h); inner product (gate) | Llama-4-Scout attention inputs, one generator per global layer; gated on IVF/HNSW search difficulty | `mlp` at v0 (trained for all 12 layers; fails the gate on four of five statistics) | `docs/datasets/scout_kv.md` |
 
 ### Fetching
 
@@ -141,6 +143,8 @@ Accepted input formats:
 
 - `.fvecs` (Faiss style vectors)
 - `.npy` with shape `[N, D]`, where `D` is the family's dimension
+- `data.format: kv_capture` (`scout_kv` only): a capture directory of per-book
+  safetensors files rather than one file; see `data/README.md`
 
 Implemented in:
 
@@ -162,7 +166,9 @@ inverted — it discards each vector's norm, so the information needed to undo
 it is gone, and the families this matters to are compared angularly anyway.
 
 One combination is refused rather than supported: `center` together with
-`l2_normalize`. Sampling L2-normalizes before inversion, and the subtracted
+`l2_normalize`. Sampling L2-normalizes before inversion (unless
+`model.output_normalize: false`, which `scout_kv` sets, and which goes with
+`l2_normalize: false`), and the subtracted
 mean's relative contribution then differs per row, so re-normalizing
 downstream yields systematically wrong directions with nothing to flag them.
 `compare_variants.invert_samples` raises on that state.
@@ -218,6 +224,8 @@ repo-wide constant:
 - Output descriptor dimension: `128`
 
 No sigmoid on critic output.
+
+`model.output_normalize` (default `true`): generator output is L2-normalised before the critic, in in-training samples and in every sampler. `scout_kv` sets it `false`, because inner-product search reads norms. Samplers read it from the run's `run_config.yaml`, not from the checkpoint, so a `scout_kv` checkpoint sampled without its config would be normalised and lose the norms the gate measures.
 
 ---
 
@@ -407,6 +415,9 @@ batch-dependent critic (its docstring says so).
 | `model.critic_edge_dim` | `128` | Width of the edge MLP. |
 | `model.critic_edge_pool` | `max` | max or mean over the k edges. |
 | `data.preprocess.drop_zero_rows` | `false` | Drop exact-zero rows at load, before the train/holdout split; count in `run_metadata.json` under `data.dropped_zero_rows`. Duplicates are never dropped. |
+| `data.kv_layer` | required with `data.format: kv_capture` | The Llama 4 Scout global layer whose `h` is read (3, 7, ..., 47). See `data/README.md`. |
+| `data.kv_books` | required with `data.format: kv_capture` | Book indices to read, concatenated in the order given. `scout_kv` trains on books 0-11. |
+| `data.kv_n_sink` | `1` | Leading positions dropped from each book (the attention sink). |
 
 Checkpoints do not record `critic_type` either; like the generator, the
 critic is rebuilt from `run_config.yaml`, and the per-vector, neighbourhood
@@ -468,7 +479,8 @@ query survives on either side.
 The holdout is smaller than a family's canonical N, so `gate_*` values rank
 checkpoints within one run and are not the family's profile. Checkpoints
 record `select_on` and `best_score`; a resume under a different selector is
-refused.
+refused. They also record `model.output_normalize`, and a resume that flips it
+is refused too. Checkpoints written before that record existed are not checked.
 
 Both sides are measured with exact-zero rows dropped (`zero_rows` in the
 logged statistics is the count) -- a zero row sits at the origin rather than
@@ -581,6 +593,13 @@ which `compare_variants` does for every family.
 The knobs (`--ann-k`, `--ann-hub-k`, `--ann-max-rows`, `--ivf-nlist`,
 `--metric`) are documented under "Visualization tools" with the EDA report
 that exposes them.
+
+The `scout_kv` family is the exception. It gates on IVF and HNSW search
+difficulty, pooled over 96 (layer, KV head) corpora, measured by
+`src/eval/kv_gate.py`; for it the four statistics above are diagnostics
+measured on the generator's `h` output. Its bands were set on 2026-10-19 as a
+tolerance around the real reference, and no generator meets them yet. See
+`docs/datasets/scout_kv.md`.
 
 ## Checkpoint-based eval
 

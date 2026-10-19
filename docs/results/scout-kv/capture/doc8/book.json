@@ -1,0 +1,83 @@
+{
+ "row": 12,
+ "title": "Laurence Sterne in Germany by Harvey Waterman Thayer",
+ "n_tokens_full": 118171,
+ "n_tokens": 32768,
+ "forward_seconds": 77.8,
+ "peak_gpu_gib": 45.9,
+ "verify": {
+  "3": {
+   "k_rel_err": 0.0016762329761751498,
+   "q_rel_err": 0.002200095064428096,
+   "q_rel_err_late_with_scale": 0.0023247812430767893,
+   "q_rel_err_late_without_scale": 0.09913320550712827
+  },
+  "7": {
+   "k_rel_err": 0.0016589899018576808,
+   "q_rel_err": 0.0022338024729207386,
+   "q_rel_err_late_with_scale": 0.0023188880587369613,
+   "q_rel_err_late_without_scale": 0.10063407506174407
+  },
+  "11": {
+   "k_rel_err": 0.0016499682192372932,
+   "q_rel_err": 0.0022424286427348596,
+   "q_rel_err_late_with_scale": 0.0023322715824552944,
+   "q_rel_err_late_without_scale": 0.1003683024500756
+  },
+  "15": {
+   "k_rel_err": 0.0016626282646910683,
+   "q_rel_err": 0.002271897196180734,
+   "q_rel_err_late_with_scale": 0.0023496475542690385,
+   "q_rel_err_late_without_scale": 0.10228196898524687
+  },
+  "19": {
+   "k_rel_err": 0.0016573052433772912,
+   "q_rel_err": 0.002267958117354111,
+   "q_rel_err_late_with_scale": 0.0023619562296742966,
+   "q_rel_err_late_without_scale": 0.10058095013544745
+  },
+  "23": {
+   "k_rel_err": 0.0016565642567867855,
+   "q_rel_err": 0.002221137835060181,
+   "q_rel_err_late_with_scale": 0.002341282755709682,
+   "q_rel_err_late_without_scale": 0.09533761729215752
+  },
+  "27": {
+   "k_rel_err": 0.0016597298122794431,
+   "q_rel_err": 0.002186206502966477,
+   "q_rel_err_late_with_scale": 0.0023262492273817765,
+   "q_rel_err_late_without_scale": 0.09523470029733322
+  },
+  "31": {
+   "k_rel_err": 0.0016660645129898946,
+   "q_rel_err": 0.0022023984918791762,
+   "q_rel_err_late_with_scale": 0.0023322009805478885,
+   "q_rel_err_late_without_scale": 0.09584117225170974
+  },
+  "35": {
+   "k_rel_err": 0.00166536720798007,
+   "q_rel_err": 0.0022320665005607122,
+   "q_rel_err_late_with_scale": 0.002334332265343078,
+   "q_rel_err_late_without_scale": 0.09961539035392677
+  },
+  "39": {
+   "k_rel_err": 0.0016569923811077798,
+   "q_rel_err": 0.002242495502564002,
+   "q_rel_err_late_with_scale": 0.002330345765085094,
+   "q_rel_err_late_without_scale": 0.10178497910979985
+  },
+  "43": {
+   "k_rel_err": 0.001652169826415187,
+   "q_rel_err": 0.002280933064589052,
+   "q_rel_err_late_with_scale": 0.0023517191356064856,
+   "q_rel_err_late_without_scale": 0.10466931331760826
+  },
+  "47": {
+   "k_rel_err": 0.0016553739840898208,
+   "q_rel_err": 0.002268124576437413,
+   "q_rel_err_late_with_scale": 0.002333043458463195,
+   "q_rel_err_late_without_scale": 0.10711391020116151
+  }
+ },
+ "worst_rel_err": 0.002280933064589052
+}

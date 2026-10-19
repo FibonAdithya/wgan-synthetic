@@ -45,11 +45,11 @@ def test_authoritative_docs_has_the_expected_count():
     """Guard against the docs/datasets/*.md glob silently yielding nothing.
 
     If docs/datasets were renamed, the glob above would match zero files,
-    six dataset pages would drop out of every check in this module, and the
+    seven dataset pages would drop out of every check in this module, and the
     suite would stay green throughout. Pin the count -- 5 named root docs
-    plus 6 dataset pages -- so that failure mode is loud instead of silent.
+    plus 7 dataset pages -- so that failure mode is loud instead of silent.
     """
-    assert len(AUTHORITATIVE_DOCS) == 11
+    assert len(AUTHORITATIVE_DOCS) == 12
 
 
 # A backticked reference, optionally suffixed by an anchor, a symbol, or a

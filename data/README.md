@@ -4,9 +4,12 @@ This project expects descriptors in one of these formats:
 
 - `.npy` file with shape `[N, D]`, dtype float32 preferred.
 - `.fvecs` file (Faiss format): each vector stored as `[int32 dim][float32 * dim]`.
+- A `kv_capture` directory (`data.format: kv_capture`, `scout_kv` only): see
+  the `kv_capture` section below.
 
 `D` is whatever the dataset family is — 128 for `sift`, 960 for `gist`, 96
-for `deep`, 100 for `glove`, 256 for `nytimes`, 1536 for `openai`. It is
+for `deep`, 100 for `glove`, 256 for `nytimes`, 1536 for `openai`, 5120 for
+`scout_kv`. It is
 declared per config as `data.descriptor_dim` and checked on load; nothing in
 the pipeline assumes a particular width.
 
@@ -112,3 +115,22 @@ care about are the only ones off the training box.
 
 Samples are written to `<output-dir>/samples/<variant>.npy` and reused as the
 report's input, so they can be inspected independently.
+
+## kv_capture
+
+`data.format: kv_capture` trains on Llama 4 Scout attention inputs `h`
+captured on the GPU box as bf16 safetensors. `data.real_path` is the capture
+directory, laid out as `<real_path>/doc<book>/h_L<layer:02d>.safetensors`,
+each file holding one tensor `h` of shape `(tokens, 5120)`. The files are read
+by `src/data/kv_capture.py` directly, without the safetensors package; BF16,
+F16 and F32 are accepted and the result is always float32.
+
+Three keys select what is loaded:
+
+- `data.kv_layer`: the layer to read. Must be one of the global layers
+  (3, 7, ..., 47). Required.
+- `data.kv_books`: the list of book indices to read, concatenated in the
+  order given. Required.
+- `data.kv_n_sink`: leading positions dropped from each book (default 1,
+  the attention sink). It is dropped per book, so the result has
+  `sum(tokens_b - kv_n_sink)` rows.

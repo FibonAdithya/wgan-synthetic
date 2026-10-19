@@ -47,7 +47,7 @@ from src.eval.ann_difficulty import METRICS
 from src.eval.eda import config as eda_config
 from src.eval.eda import pipeline
 from src.eval.evaluate_distribution import load_generator
-from src.train.train_wgan_gp import sample_generator
+from src.train.train_wgan_gp import output_normalize, sample_generator
 
 
 @dataclass(frozen=True)
@@ -425,6 +425,7 @@ def generate_samples(
         latent_dim=int(config["model"]["latent_dim"]),
         batch_size=batch_size,
         device=device,
+        normalize=output_normalize(config["model"]),
     )
     x = invert_samples(x, load_preprocess_state(run_dir))
     out_path = out_dir / f"{variant.name}.npy"

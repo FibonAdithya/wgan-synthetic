@@ -74,6 +74,38 @@ class GateError(Exception):
     """
 
 
+def validate_band(name: str, band: Any, path: Path) -> None:
+    """Raise GateError unless `band` is null or a well-formed {min, max} mapping."""
+    if band is None:
+        return
+    if not isinstance(band, dict):
+        raise GateError(f"band for {name} in {path} is not a mapping or null")
+    stray = sorted(set(band) - {"min", "max"})
+    if stray:
+        raise GateError(
+            f"band for {name} in {path} has unknown keys: {', '.join(stray)}"
+        )
+    for bound in ("min", "max"):
+        value = band.get(bound)
+        if value is None or isinstance(value, bool):
+            if isinstance(value, bool):
+                raise GateError(
+                    f"band {bound} for {name} in {path} is a boolean, not a number"
+                )
+            continue
+        if not isinstance(value, (int, float)):
+            raise GateError(
+                f"band {bound} for {name} in {path} is not a number: {value!r}"
+            )
+    # An inverted band can never be satisfied, so it would read as a
+    # statistic that is permanently broken rather than as the typo it is.
+    low, high = band.get("min"), band.get("max")
+    if low is not None and high is not None and float(low) > float(high):
+        raise GateError(
+            f"band for {name} in {path} is inverted: min {low!r} > max {high!r}"
+        )
+
+
 def load_gate(path: Path) -> dict[str, Any]:
     """Parse and validate a gates/<dataset>.yaml file.
 
@@ -111,35 +143,7 @@ def load_gate(path: Path) -> dict[str, Any]:
             f"gate file {path} has bands for unknown statistics: {', '.join(unknown)}"
         )
     for name in GATE_STATISTICS:
-        band = statistics[name]
-        if band is None:
-            continue
-        if not isinstance(band, dict):
-            raise GateError(f"band for {name} in {path} is not a mapping or null")
-        stray = sorted(set(band) - {"min", "max"})
-        if stray:
-            raise GateError(
-                f"band for {name} in {path} has unknown keys: {', '.join(stray)}"
-            )
-        for bound in ("min", "max"):
-            value = band.get(bound)
-            if value is None or isinstance(value, bool):
-                if isinstance(value, bool):
-                    raise GateError(
-                        f"band {bound} for {name} in {path} is a boolean, not a number"
-                    )
-                continue
-            if not isinstance(value, (int, float)):
-                raise GateError(
-                    f"band {bound} for {name} in {path} is not a number: {value!r}"
-                )
-        # An inverted band can never be satisfied, so it would read as a
-        # statistic that is permanently broken rather than as the typo it is.
-        low, high = band.get("min"), band.get("max")
-        if low is not None and high is not None and float(low) > float(high):
-            raise GateError(
-                f"band for {name} in {path} is inverted: min {low!r} > max {high!r}"
-            )
+        validate_band(name, statistics[name], path)
     return gate
 
 

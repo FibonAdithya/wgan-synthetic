@@ -1,0 +1,83 @@
+{
+ "row": 13,
+ "title": "The Forester's Daughter by Hamlin Garland",
+ "n_tokens_full": 86357,
+ "n_tokens": 32768,
+ "forward_seconds": 76.8,
+ "peak_gpu_gib": 45.9,
+ "verify": {
+  "3": {
+   "k_rel_err": 0.0016894568583954287,
+   "q_rel_err": 0.0022005719457848256,
+   "q_rel_err_late_with_scale": 0.0023337937860450184,
+   "q_rel_err_late_without_scale": 0.09874319504739801
+  },
+  "7": {
+   "k_rel_err": 0.001659993564546042,
+   "q_rel_err": 0.002236399572529281,
+   "q_rel_err_late_with_scale": 0.002317782723030388,
+   "q_rel_err_late_without_scale": 0.10087872048732822
+  },
+  "11": {
+   "k_rel_err": 0.0016470995805256013,
+   "q_rel_err": 0.0022457847997105138,
+   "q_rel_err_late_with_scale": 0.0023314098379504074,
+   "q_rel_err_late_without_scale": 0.10070505122862325
+  },
+  "15": {
+   "k_rel_err": 0.0016606655602409072,
+   "q_rel_err": 0.002275369145765375,
+   "q_rel_err_late_with_scale": 0.0023510825397554036,
+   "q_rel_err_late_without_scale": 0.10221352309605787
+  },
+  "19": {
+   "k_rel_err": 0.0016558508219569076,
+   "q_rel_err": 0.002273190324464633,
+   "q_rel_err_late_with_scale": 0.002367957058188707,
+   "q_rel_err_late_without_scale": 0.09992840335881206
+  },
+  "23": {
+   "k_rel_err": 0.0016558028439481664,
+   "q_rel_err": 0.002225136628592813,
+   "q_rel_err_late_with_scale": 0.002341922944942533,
+   "q_rel_err_late_without_scale": 0.0955913745441889
+  },
+  "27": {
+   "k_rel_err": 0.001664191112684604,
+   "q_rel_err": 0.0021884216643394253,
+   "q_rel_err_late_with_scale": 0.0023260119816737915,
+   "q_rel_err_late_without_scale": 0.09661801740995804
+  },
+  "31": {
+   "k_rel_err": 0.0016665486576870666,
+   "q_rel_err": 0.002205905777934369,
+   "q_rel_err_late_with_scale": 0.0023338227637777057,
+   "q_rel_err_late_without_scale": 0.0960586371790943
+  },
+  "35": {
+   "k_rel_err": 0.001670209672848012,
+   "q_rel_err": 0.002232371958371446,
+   "q_rel_err_late_with_scale": 0.0023324046354056957,
+   "q_rel_err_late_without_scale": 0.09933286837395407
+  },
+  "39": {
+   "k_rel_err": 0.001660055374028497,
+   "q_rel_err": 0.0022424034433347543,
+   "q_rel_err_late_with_scale": 0.0023283589547198197,
+   "q_rel_err_late_without_scale": 0.10103851304193964
+  },
+  "43": {
+   "k_rel_err": 0.00165466240071762,
+   "q_rel_err": 0.002285826848767963,
+   "q_rel_err_late_with_scale": 0.0023531260406428286,
+   "q_rel_err_late_without_scale": 0.10365786613269387
+  },
+  "47": {
+   "k_rel_err": 0.001654269583566826,
+   "q_rel_err": 0.0022720941148118715,
+   "q_rel_err_late_with_scale": 0.0023321370512842266,
+   "q_rel_err_late_without_scale": 0.10668955589769603
+  }
+ },
+ "worst_rel_err": 0.002285826848767963
+}

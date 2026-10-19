@@ -1,0 +1,83 @@
+{
+ "row": 24,
+ "title": "The Church: Her Books and Her Sacraments by E. E. Holmes",
+ "n_tokens_full": 47874,
+ "n_tokens": 32768,
+ "forward_seconds": 77.4,
+ "peak_gpu_gib": 45.9,
+ "verify": {
+  "3": {
+   "k_rel_err": 0.0016770914263257192,
+   "q_rel_err": 0.0022068555864453365,
+   "q_rel_err_late_with_scale": 0.002332989411581374,
+   "q_rel_err_late_without_scale": 0.0990220000781705
+  },
+  "7": {
+   "k_rel_err": 0.0016602212015624763,
+   "q_rel_err": 0.0022355369393693356,
+   "q_rel_err_late_with_scale": 0.0023176090387594835,
+   "q_rel_err_late_without_scale": 0.10084545408867454
+  },
+  "11": {
+   "k_rel_err": 0.001649674539627551,
+   "q_rel_err": 0.002243203667136981,
+   "q_rel_err_late_with_scale": 0.0023318425553415186,
+   "q_rel_err_late_without_scale": 0.10068778913222502
+  },
+  "15": {
+   "k_rel_err": 0.001662872367113052,
+   "q_rel_err": 0.0022704973292268582,
+   "q_rel_err_late_with_scale": 0.0023476826772294585,
+   "q_rel_err_late_without_scale": 0.10248781925578097
+  },
+  "19": {
+   "k_rel_err": 0.001654565370251011,
+   "q_rel_err": 0.002264146361925162,
+   "q_rel_err_late_with_scale": 0.0023588830670981937,
+   "q_rel_err_late_without_scale": 0.10061056252505123
+  },
+  "23": {
+   "k_rel_err": 0.0016566651002570738,
+   "q_rel_err": 0.002222120707812853,
+   "q_rel_err_late_with_scale": 0.002340384296654573,
+   "q_rel_err_late_without_scale": 0.09603534453194308
+  },
+  "27": {
+   "k_rel_err": 0.0016599579148665708,
+   "q_rel_err": 0.0021979758887864893,
+   "q_rel_err_late_with_scale": 0.0023306276185359833,
+   "q_rel_err_late_without_scale": 0.09538115536821581
+  },
+  "31": {
+   "k_rel_err": 0.001662188047378088,
+   "q_rel_err": 0.002215006876516954,
+   "q_rel_err_late_with_scale": 0.0023343424663030635,
+   "q_rel_err_late_without_scale": 0.09686639726811215
+  },
+  "35": {
+   "k_rel_err": 0.0016676260054949176,
+   "q_rel_err": 0.002233241184112343,
+   "q_rel_err_late_with_scale": 0.002333168726778462,
+   "q_rel_err_late_without_scale": 0.09896796600731289
+  },
+  "39": {
+   "k_rel_err": 0.0016578212890307352,
+   "q_rel_err": 0.0022405064488321374,
+   "q_rel_err_late_with_scale": 0.0023293003581523566,
+   "q_rel_err_late_without_scale": 0.10140695410308834
+  },
+  "43": {
+   "k_rel_err": 0.00165157536807109,
+   "q_rel_err": 0.00228114086407117,
+   "q_rel_err_late_with_scale": 0.0023532416314731687,
+   "q_rel_err_late_without_scale": 0.10443878366176852
+  },
+  "47": {
+   "k_rel_err": 0.001658957950450983,
+   "q_rel_err": 0.0022644339171874564,
+   "q_rel_err_late_with_scale": 0.002332192574754753,
+   "q_rel_err_late_without_scale": 0.10668438691727443
+  }
+ },
+ "worst_rel_err": 0.00228114086407117
+}

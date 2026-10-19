@@ -2,7 +2,9 @@
 
 Train WGAN-GP models that reproduce the nearest-neighbour search difficulty of
 six benchmark vector families, so ANN algorithms can be developed and stressed
-against synthetic corpora instead of the real ones. The target is not a
+against synthetic corpora instead of the real ones. A seventh family, `scout_kv`,
+holds Llama 4 Scout attention inputs and is gated on IVF and HNSW search
+difficulty instead. The target is not a
 matching distribution. A synthetic set succeeds when an index finds it as
 hard, and hard in the same way, as the real set; matching marginals is
 evidence about why a gate failed, not the gate itself.
@@ -39,6 +41,7 @@ config and a documented profile waiting to be measured.
 | `glove` | 100 | `angular` | `v0`–`v1` trained (5 seeds each) | `docs/datasets/glove.md` |
 | `nytimes` | 256 | `angular` | `v0`–`v3` trained, `v3` meeting the bar | `docs/datasets/nytimes.md` |
 | `openai` | 1536 | `angular` | `v0` defined, not trained | `docs/datasets/openai.md` |
+| `scout_kv` | 5120 | `l2` (in-training selector on h); inner product (gate) | `v0` trained for 12 layers, does not meet the gate | `docs/datasets/scout_kv.md` |
 
 Variant numbers are per dataset and are comparable only within one family.
 The SIFT and DEEP ladders live in `configs/sift/` and `configs/deep/`; every

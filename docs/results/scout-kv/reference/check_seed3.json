@@ -1,0 +1,61 @@
+{
+  "verdict": "unset",
+  "exit_code": 2,
+  "dataset": "scout_kv",
+  "n_records": 96,
+  "statistics": [
+    {
+      "statistic": "hnsw_reach_k10",
+      "value": 0.625,
+      "band": {
+        "min": null,
+        "max": null
+      },
+      "status": "unset",
+      "reason": "no band is set for this statistic yet"
+    },
+    {
+      "statistic": "hnsw_recall_k10_ef176",
+      "value": 0.85259765625,
+      "band": {
+        "min": null,
+        "max": null
+      },
+      "status": "unset",
+      "reason": "no band is set for this statistic yet"
+    },
+    {
+      "statistic": "ivf_ratio_k128",
+      "value": 1.0760560552562126,
+      "band": {
+        "min": null,
+        "max": null
+      },
+      "status": "unset",
+      "reason": "no band is set for this statistic yet"
+    },
+    {
+      "statistic": "ivf_recall_k128_np24",
+      "value": 0.8307655334472657,
+      "band": {
+        "min": null,
+        "max": null
+      },
+      "status": "unset",
+      "reason": "no band is set for this statistic yet"
+    },
+    {
+      "statistic": "hnsw_recall_k10_ef176_id",
+      "value": 1.0,
+      "band": {
+        "min": null,
+        "max": null
+      },
+      "status": "unset",
+      "reason": "no band is set for this statistic yet"
+    }
+  ],
+  "reasons": [
+    "no band set for: hnsw_reach_k10, hnsw_recall_k10_ef176, ivf_ratio_k128, ivf_recall_k128_np24, hnsw_recall_k10_ef176_id"
+  ]
+}

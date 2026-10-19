@@ -5,9 +5,10 @@ import contextlib
 import json
 import math
 import random
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from functools import partial
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import torch
@@ -369,6 +370,7 @@ def save_checkpoint(
     best_cov: float = float("inf"),
     select_on: str = "cov_fro",
     best_score: float = float("inf"),
+    output_normalize: bool = True,
 ) -> None:
     """Write a checkpoint.
 
@@ -388,7 +390,8 @@ def save_checkpoint(
     the fact (see `src/train/selection.py`). `select_on` and `best_score`
     record which selector chose `best_generator.pt` and its running best, so
     a resume under a different selector is refused rather than silently
-    mixing two scores.
+    mixing two scores. `output_normalize` is recorded for the same reason:
+    flipping it on resume would change what the critic sees mid-run.
     """
     if generator_weights not in ("live", "ema"):
         raise ValueError(
@@ -406,11 +409,22 @@ def save_checkpoint(
         "best_cov": float(best_cov),
         "select_on": select_on,
         "best_score": float(best_score),
+        "output_normalize": bool(output_normalize),
     }
     out_dir.mkdir(parents=True, exist_ok=True)
     torch.save(ckpt, out_dir / f"checkpoint_step_{step}.pt")
     if best:
         torch.save(ckpt, out_dir / "best_generator.pt")
+
+
+def output_normalize(model_cfg: Mapping[str, Any]) -> bool:
+    """Whether generator output is L2-normalised before the critic and in samples.
+
+    True for every family built so far, which all search on the unit sphere.
+    scout_kv sets it False: inner-product search reads vector norms, so a
+    unit-norm h would erase part of what the gate measures.
+    """
+    return bool(model_cfg.get("output_normalize", True))
 
 
 def sample_generator(
@@ -419,6 +433,7 @@ def sample_generator(
     latent_dim: int,
     batch_size: int,
     device: torch.device,
+    normalize: bool = True,
 ) -> np.ndarray:
     # Restore the mode we found rather than forcing train(): callers outside
     # the training loop (evaluate_distribution, compare_variants) hand us an
@@ -434,7 +449,9 @@ def sample_generator(
             if cur <= 0:
                 break
             z = torch.randn(cur, latent_dim, device=device)
-            x = normalize_l2(generator(z)).detach().cpu().numpy()
+            x = generator(z)
+            x = normalize_l2(x) if normalize else x
+            x = x.detach().cpu().numpy()
             out.append(x)
             generated += cur
     generator.train(was_training)
@@ -474,9 +491,13 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
         seed=seed,
         synthetic_if_missing=bool(data_cfg["synthetic_if_missing"]),
         synthetic_num_vectors=int(data_cfg["synthetic_num_vectors"]),
+        kv_layer=data_cfg.get("kv_layer"),
+        kv_books=data_cfg.get("kv_books"),
+        kv_n_sink=int(data_cfg.get("kv_n_sink", 1)),
     )
 
     model_cfg = config["model"]
+    norm_out = output_normalize(model_cfg)
     train_cfg = config["training"]
     latent_dim = int(model_cfg["latent_dim"])
     descriptor_dim = int(data_cfg["descriptor_dim"])
@@ -576,6 +597,14 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
                 f"{resume} was selected under select_on={ckpt_select_on!r} but the "
                 f"config says {select_on!r}; a resume cannot mix two selection scores"
             )
+        # Checkpoints written before the flag was recorded are not checked: the
+        # scout_kv v0 runs trained with it off, so no default would be safe.
+        ckpt_norm_out = ckpt.get("output_normalize")
+        if ckpt_norm_out is not None and bool(ckpt_norm_out) != norm_out:
+            raise ValueError(
+                f"{resume} was trained with model.output_normalize={ckpt_norm_out} but "
+                f"the config says {norm_out}; a resume cannot change what the critic sees"
+            )
         if use_ema:
             saved = ckpt.get("ema_params") or {}
             # An EMA-enabled resume from a checkpoint written without a shadow
@@ -672,7 +701,9 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
 
             optim_d.zero_grad(set_to_none=True)
             with autocast("cuda", enabled=amp):
-                fake = normalize_l2(generator(z).detach())
+                fake = generator(z).detach()
+                if norm_out:
+                    fake = normalize_l2(fake)
                 d_real = score_population(critic, real, "real", row_ids=real_ids)
                 d_fake = score_population(critic, fake, "fake")
                 gp = gradient_penalty(critic, real, fake, device=device)
@@ -701,7 +732,9 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
         optim_g.zero_grad(set_to_none=True)
         with autocast("cuda", enabled=amp):
             z = torch.randn(batch_size, latent_dim, device=device)
-            fake = normalize_l2(generator(z))
+            fake = generator(z)
+            if norm_out:
+                fake = normalize_l2(fake)
             adv_loss = -score_population(critic, fake, "fake").mean()
             g_loss = adv_loss
             # Transferred once and shared: the regularizers all want the same
@@ -799,6 +832,7 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
                     latent_dim=latent_dim,
                     batch_size=int(train_cfg["batch_size"]),
                     device=device,
+                    normalize=norm_out,
                 )
                 stats = tensor_stats(x_holdout, fake_holdout)
                 stats.update(collapse_stats(fake_holdout))
@@ -872,6 +906,7 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
                         best_cov=best_cov,
                         select_on=select_on,
                         best_score=best_score,
+                        output_normalize=norm_out,
                     )
                     best_checkpoint_written = True
 
@@ -891,6 +926,7 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
                 best_cov=best_cov,
                 select_on=select_on,
                 best_score=best_score,
+                output_normalize=norm_out,
             )
 
     with (out_dir / "run_metadata.json").open("w", encoding="utf-8") as f:

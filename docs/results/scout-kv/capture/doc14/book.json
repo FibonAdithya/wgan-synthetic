@@ -1,0 +1,83 @@
+{
+ "row": 20,
+ "title": "The 'Patriotes' of '37 by Alfred D. Decelles",
+ "n_tokens_full": 40630,
+ "n_tokens": 32768,
+ "forward_seconds": 79.7,
+ "peak_gpu_gib": 45.9,
+ "verify": {
+  "3": {
+   "k_rel_err": 0.0016843507690331072,
+   "q_rel_err": 0.0022068853556384857,
+   "q_rel_err_late_with_scale": 0.0023329200326935007,
+   "q_rel_err_late_without_scale": 0.09884089358521085
+  },
+  "7": {
+   "k_rel_err": 0.0016590561991946641,
+   "q_rel_err": 0.0022364401641019813,
+   "q_rel_err_late_with_scale": 0.002318139095975059,
+   "q_rel_err_late_without_scale": 0.10097769084680695
+  },
+  "11": {
+   "k_rel_err": 0.0016509093471118374,
+   "q_rel_err": 0.0022449330433753937,
+   "q_rel_err_late_with_scale": 0.002332824191310369,
+   "q_rel_err_late_without_scale": 0.10077369362523873
+  },
+  "15": {
+   "k_rel_err": 0.0016647826129221723,
+   "q_rel_err": 0.0022681175925938074,
+   "q_rel_err_late_with_scale": 0.0023460967940049696,
+   "q_rel_err_late_without_scale": 0.10254334014581362
+  },
+  "19": {
+   "k_rel_err": 0.0016558302459812578,
+   "q_rel_err": 0.002267850103209647,
+   "q_rel_err_late_with_scale": 0.0023602166471752626,
+   "q_rel_err_late_without_scale": 0.10062423806853504
+  },
+  "23": {
+   "k_rel_err": 0.0016595253190772893,
+   "q_rel_err": 0.002230043545119378,
+   "q_rel_err_late_with_scale": 0.00234314252950329,
+   "q_rel_err_late_without_scale": 0.09669375198666962
+  },
+  "27": {
+   "k_rel_err": 0.0016602197690571369,
+   "q_rel_err": 0.002198222064791815,
+   "q_rel_err_late_with_scale": 0.0023307990535977523,
+   "q_rel_err_late_without_scale": 0.09549943984367013
+  },
+  "31": {
+   "k_rel_err": 0.001661318522186076,
+   "q_rel_err": 0.0022169310776065303,
+   "q_rel_err_late_with_scale": 0.0023333028787671036,
+   "q_rel_err_late_without_scale": 0.09730639048143326
+  },
+  "35": {
+   "k_rel_err": 0.00166286315474681,
+   "q_rel_err": 0.0022432495830714662,
+   "q_rel_err_late_with_scale": 0.002339576745269482,
+   "q_rel_err_late_without_scale": 0.0996105319463184
+  },
+  "39": {
+   "k_rel_err": 0.0016584303101434051,
+   "q_rel_err": 0.002242127451420296,
+   "q_rel_err_late_with_scale": 0.002328870234441416,
+   "q_rel_err_late_without_scale": 0.1018104137075691
+  },
+  "43": {
+   "k_rel_err": 0.0016530442176765716,
+   "q_rel_err": 0.0022783326339474554,
+   "q_rel_err_late_with_scale": 0.0023495476099688424,
+   "q_rel_err_late_without_scale": 0.10472821232710057
+  },
+  "47": {
+   "k_rel_err": 0.0016594269127811565,
+   "q_rel_err": 0.002264405685998413,
+   "q_rel_err_late_with_scale": 0.0023326636472969795,
+   "q_rel_err_late_without_scale": 0.10725485841343309
+  }
+ },
+ "worst_rel_err": 0.0022783326339474554
+}

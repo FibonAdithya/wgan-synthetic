@@ -31,6 +31,36 @@ generator never sees keys or queries.
 - One generator is trained per layer, so there are 12 `v0` configs, `configs/scout_kv/v0/L03.yaml` through `configs/scout_kv/v0/L47.yaml`. They differ only in `data.kv_layer` and `output_dir` (pinned by `tests/test_scout_kv_configs.py`).
 - Position 0 (the attention sink) and the last 1,024 positions of a 32,768-token book are never indexed in a corpus. Training rows use positions 1 to 32,767, so 12 books give 393,204 rows per layer.
 
+## Commands
+
+All three `kv_gate` subcommands run on the GPU box, where the capture lives, except
+`check`, which needs only a records file.
+
+```
+python -m src.eval.kv_gate measure-real --capture-dir D --out real.jsonl [--books 12-19] [--layers 3,7,...] [--n-sink 1]
+python -m src.eval.kv_gate measure-run  --capture-dir D --run-dir 3=runs/scout_kv/v0/L03 ... --out run.jsonl \
+    [--checkpoint-name best_generator.pt] [--ema] [--n-keys 31736]
+python -m src.eval.kv_gate check --records run.jsonl [--gate-file gates/scout_kv.yaml]
+```
+
+- `measure-real` profiles the real reference. `--books` takes a range (`12-19`) or a
+  list (`12,13`). One draw over the 96 corpora took 1763 to 2443 s on a 15.36-core quota
+  (MEASURED, `docs/results/scout-kv/reference/README.md`).
+- `measure-run` needs one `--run-dir LAYER=PATH` for every one of the 12 global layers
+  and refuses to start otherwise. `--ema` measures the checkpoint under its stored EMA
+  weights; `best_generator.pt` already holds them, so the flag changes nothing there.
+- Both measuring commands also take `--n-tail` (1024), `--nlist` (256), `--hnsw-m` (48),
+  `--ef-construction` (500), `--threads` (15) and `--seed` (0). The first four defaults
+  are locked conditions, and `check` fails records measured under other values.
+  `--seed` picks the draw.
+- `check` prints a JSON report and exits 0 (pass), 1 (fail) or 2 (a band is null).
+
+The capture itself is made by `scripts/kv/capture_scout.py --model-dir M --pg19-parquet P
+--out-dir D [--first-book 0] [--n-books 4] [--ctx 32768]`. Before the long run it checks
+that the projections reproduce the model's own q and k, on a `--smoke-ctx` (2048) prefix
+and on one past the temperature floor, and exits non-zero if they do not.
+`--gpu-weights` (30GiB) caps the weights held on the GPU.
+
 ## Book split
 
 Books are numbered in capture order (`scripts/kv/capture_scout.py`) and split by
@@ -75,6 +105,10 @@ score. The `_id` statistic is a check, not a gap.
 
 Diagnostics, not gated: the four intrinsic statistics on `h`; per-layer and per-head
 versions of each gate statistic; HNSW work at recall 0.9.
+
+The in-training selector (`training.select_on: gate`) is not this gate. It picks
+`best_generator.pt` from LID and contrast gaps on `h`. The gate is run afterwards,
+with `kv_gate measure-run`.
 
 ## Gate bands
 

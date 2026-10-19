@@ -56,7 +56,7 @@ bands; the pages are the source of truth for anything family-specific.
 | `glove` | 100 | `angular` | dense signed word vectors, strong density gradient | `mlp` today, `spherical` not yet adopted | `docs/datasets/glove.md` |
 | `nytimes` | 256 | `angular` | dense signed document embeddings, strong topic clusters | `mlp` at v0, `linear_skip` from v1 (v1, v2, v2b and v2c trained, none meeting the bar), `spherical` from v3 (trained; meets the bar since the 2026-09-17 gate bands, set as a tolerance around real to admit it; continued to 100k without a better selection) | `docs/datasets/nytimes.md` |
 | `openai` | 1536 | `angular` | unit-norm text embeddings, very high ambient dim, low intrinsic dim | `mlp` today, `spherical` not yet adopted | `docs/datasets/openai.md` |
-| `scout_kv` | 5120 | `l2` (in-training selector on h); inner product (gate) | Llama-4-Scout attention inputs, one generator per global layer; gated on IVF/HNSW search difficulty | `mlp` at v0 (configs defined, not trained) | `docs/datasets/scout_kv.md` |
+| `scout_kv` | 5120 | `l2` (in-training selector on h); inner product (gate) | Llama-4-Scout attention inputs, one generator per global layer; gated on IVF/HNSW search difficulty | `mlp` at v0 (trained for all 12 layers; fails the gate on four of five statistics) | `docs/datasets/scout_kv.md` |
 
 ### Fetching
 
@@ -410,6 +410,9 @@ batch-dependent critic (its docstring says so).
 | `model.critic_edge_dim` | `128` | Width of the edge MLP. |
 | `model.critic_edge_pool` | `max` | max or mean over the k edges. |
 | `data.preprocess.drop_zero_rows` | `false` | Drop exact-zero rows at load, before the train/holdout split; count in `run_metadata.json` under `data.dropped_zero_rows`. Duplicates are never dropped. |
+| `data.kv_layer` | required with `data.format: kv_capture` | The Llama 4 Scout global layer whose `h` is read (3, 7, ..., 47). See `data/README.md`. |
+| `data.kv_books` | required with `data.format: kv_capture` | Book indices to read, concatenated in the order given. `scout_kv` trains on books 0-11. |
+| `data.kv_n_sink` | `1` | Leading positions dropped from each book (the attention sink). |
 
 Checkpoints do not record `critic_type` either; like the generator, the
 critic is rebuilt from `run_config.yaml`, and the per-vector, neighbourhood
@@ -588,8 +591,9 @@ that exposes them.
 The `scout_kv` family is the exception. It gates on IVF and HNSW search
 difficulty, pooled over 96 (layer, KV head) corpora, measured by
 `src/eval/kv_gate.py`; for it the four statistics above are diagnostics
-measured on the generator's `h` output. Its bands are unset until a person
-sets them. See `docs/datasets/scout_kv.md`.
+measured on the generator's `h` output. Its bands were set on 2026-10-19 as a
+tolerance around the real reference, and no generator meets them yet. See
+`docs/datasets/scout_kv.md`.
 
 ## Checkpoint-based eval
 

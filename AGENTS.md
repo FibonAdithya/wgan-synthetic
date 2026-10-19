@@ -13,7 +13,8 @@ synthetic corpora instead of the real ones. The target is not a matching
 distribution: a synthetic set succeeds when an index finds it as hard, and
 hard in the same way, as the real set. SIFT, DEEP, GloVe and NYTimes have
 trained ladders; the other two families have a `v0` config and a documented
-profile.
+profile. A seventh family, `scout_kv` (Llama 4 Scout attention inputs), has a
+trained `v0` that does not yet meet its gate.
 
 ## Source of truth, in order
 

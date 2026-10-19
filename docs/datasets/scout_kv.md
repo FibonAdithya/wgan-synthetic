@@ -15,9 +15,9 @@ difficulty (`src/eval/kv_gate.py::evaluate`). The four intrinsic statistics of
 
 | | |
 |---|---|
-| Ladder | `v0` configs defined for all 12 global layers, none trained |
-| Gate bands | **unset**. Every band in `gates/scout_kv.yaml` is `null`. Setting them is a human decision, made from the reference noise floor; until then `python -m src.eval.kv_gate check` exits 2 with verdict `unset` |
-| Capture | lives only on `tig-gpu`, at `/workspace/kv/capture`. It is not in the repo and not fetchable with `src/data/fetch.py` |
+| Ladder | `v0` trained for all 12 global layers (`docs/results/scout-kv/training/`); fails the gate on four of five statistics (`docs/results/scout-kv/v0/report.html`) |
+| Gate bands | **set** 2026-10-19 by the owner, as a tolerance around the five-draw real reference; see `## Gate bands` |
+| Capture | lives only on the GPU box (`tig-gpu-alt` since 2026-10-19), at `/workspace/kv/capture`. It is not in the repo and not fetchable with `src/data/fetch.py` |
 
 ## What a sample is
 
@@ -76,6 +76,27 @@ score. The `_id` statistic is a check, not a gap.
 Diagnostics, not gated: the four intrinsic statistics on `h`; per-layer and per-head
 versions of each gate statistic; HNSW work at recall 0.9.
 
+## Gate bands
+
+Set 2026-10-19 by the owner, after the v0 gate run. Each band holds all five real draws
+over books 12-19 (`docs/results/scout-kv/reference/`) with room on both sides, because
+five draws understate the range. Bounds are inclusive. The comments in
+`gates/scout_kv.yaml` give the reasoning per band. Real and v0 values are MEASURED, from
+the committed `check_*.json` files.
+
+| statistic | band | real, 5 draws | v0 best | v0 under the band |
+|---|---|---|---|---|
+| `hnsw_reach_k10` | 0.52 to 0.69 | 0.5625 to 0.6250 | 0.8750 | fail |
+| `hnsw_recall_k10_ef176` | 0.78 to 0.88 | 0.7982 to 0.8526 | 0.9274 | fail |
+| `ivf_ratio_k128` | 0.90 to 1.15 | 0.9403 to 1.0761 | 0.6841 | fail |
+| `ivf_recall_k128_np24` | 0.80 to 0.865 | 0.8185 to 0.8432 | 0.8246 | pass |
+| `hnsw_recall_k10_ef176_id` | >= 0.99 | 1.0000 in all five | 0.9757 | fail |
+
+Unlike the sift, glove and nytimes gates, no generator was admitted when the bands were
+set: they say what the next rung must reach. `tests/test_kv_gate.py` pins that every real
+draw passes and that v0's best and final checkpoints fail on exactly the four statistics
+above.
+
 ## Mixed-book reference: measured
 
 A generator trained on several books emits independent `h`, so its corpus resembles a
@@ -94,12 +115,11 @@ the 4 single-book profiles. All numbers are MEASURED, from
 
 - Mixed corpora are easier for HNSW than the easiest single book on reach@10: 0.573 against 0.552 (about 2 points). Median recall@10 at ef176 differs by 0.2 points (0.806 against 0.804). IVF is unchanged. The mixed-book check used 31,740 keys (4 books), not the gate's 31,736 (8 books). MEASURED, source `docs/results/kv-cache-profile/mixed-book/comparison.txt`. The decision rule fixed before the run (mixed inside the single-book range) failed for HNSW. The owner chose mixed corpora as the gate reference anyway.
 - Own-book preference over all heads is none: the median share of a query's exact top-10 from its own book is 0.253, where 0.25 means no preference. By layer it is not uniform: the median is 0.34 for L27 and 0.33 for L31 and L35, and 0.21 to 0.28 for the other layers. MEASURED, source `docs/results/kv-cache-profile/mixed-book/comparison.txt` ("own-book share" lines).
-- Run cost for 96 mixed corpora was 18.7 min (README above). The 8-book reference and the 5-draw noise floor have not been measured; the spec's estimate of 1.6 h for 5 draws is ESTIMATE (unverified).
+- Run cost for 96 mixed corpora was 18.7 min (README above). The 5-draw 8-book noise floor took about 3.4 h in all on tig-gpu, MEASURED (`docs/results/scout-kv/reference/README.md`), against the spec's estimate of 1.6 h.
 
 `data.metric: l2` only governs the in-training selector on `h`; the gate searches by inner product.
 
 ## Not yet done
 
-- Bands: unset (see Status).
-- Training: no `v0` run has been made. Training time per layer is unknown.
-- Whether the in-training selector (`select_on: gate`, LID and contrast on `h`, holdout 2% = 7,864 rows) picks good checkpoints under the search-difficulty gate is untested. The gate is run afterwards on `best_generator.pt` and the final checkpoint.
+- A generator that passes the gate. v0 fails it (see `## Gate bands`).
+- Whether the in-training selector (`select_on: gate`, LID and contrast on `h`, holdout 2% = 7,864 rows) picks good checkpoints under the search-difficulty gate. In v0 the best and final checkpoints differ only at layers 7 and 11, and both fail the gate on the same four statistics, so v0 does not settle it.

@@ -10,7 +10,7 @@ queries the model would really issue. See docs/datasets/scout_kv.md.
     python -m src.eval.kv_gate check --records run.jsonl
 
 `check` prints the JSON report on stdout and exits 0 (pass), 1 (fail) or
-2 (unset: at least one band is null, which is how the gate ships).
+2 (unset: at least one band is null).
 """
 
 from __future__ import annotations

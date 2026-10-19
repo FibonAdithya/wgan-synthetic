@@ -61,4 +61,10 @@ and 1641 s for the four-book draw, about 3.4 h in total. The plan estimated abou
 draw. The box's CPU quota is 15.36 cores (`cpu.max` 1536000/100000), and the HNSW builds
 are CPU-bound.
 
-Bands stay null. Setting them from this table is a human decision.
+## Bands
+
+The owner set the bands in `gates/scout_kv.yaml` from this table on 2026-10-19. Every band
+holds all five 8-book draws, and `hnsw_recall_k10_ef176_id` carries a one-sided `min: 0.99`.
+The `check_seed*.json` files above were made before that and still read `unset`; under the
+set bands all five draws pass (`tests/test_kv_gate.py::test_shipped_gate_passes_every_real_draw`).
+The four-book draw still fails, on its key count alone.

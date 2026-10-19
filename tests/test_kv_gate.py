@@ -1,4 +1,5 @@
 import json
+import re
 import subprocess
 import sys
 
@@ -6,9 +7,10 @@ import numpy as np
 import pytest
 
 from src.eval import kv_gate
-from src.eval.check_gate import EXIT_UNSET
+from src.eval.check_gate import EXIT_FAIL, EXIT_PASS, EXIT_UNSET
 
 GATE = kv_gate.GATES_FILE  # gates/scout_kv.yaml
+RESULTS = GATE.parents[1] / "docs/results/scout-kv"
 
 
 def _rec(L, g, reached=True, rec10=0.8, ivf_o=0.2, ivf_i=0.1, n_keys=31736):
@@ -68,18 +70,43 @@ def test_ratio_skips_unreached_and_is_none_when_all_unreached():
     assert kv_gate.pooled_statistics(R)["ivf_ratio_k128"] == 0.0
 
 
-def test_shipped_gate_is_unset():
-    """Catches a band being set in the shipped file (a human decision)."""
-    gate = kv_gate.load_kv_gate(GATE)
-    assert all(v is None for v in gate["statistics"].values())
-    assert kv_gate.evaluate(_full(), gate)["verdict"] == "unset"
-
-
 def _gate_with(**bands):
     gate = kv_gate.load_kv_gate(GATE)
     for k, v in bands.items():
         gate["statistics"][k] = v
     return gate
+
+
+def test_one_null_band_makes_the_verdict_unset():
+    """Catches a null band being skipped instead of holding the verdict at unset."""
+    gate = _gate_with(**{n: {"min": -1e9, "max": 1e9} for n in kv_gate.STATISTICS})
+    gate["statistics"]["ivf_ratio_k128"] = None
+    rep = kv_gate.evaluate(_full(), gate)
+    assert rep["verdict"] == "unset" and rep["exit_code"] == EXIT_UNSET
+
+
+def _committed(name):
+    path = RESULTS / f"{name}.jsonl"
+    return [json.loads(line) for line in path.read_text().splitlines() if line]
+
+
+@pytest.mark.parametrize("seed", range(5))
+def test_shipped_gate_passes_every_real_draw(seed):
+    """Catches a shipped band too narrow for the real reference's own spread."""
+    rep = kv_gate.evaluate(
+        _committed(f"reference/seed{seed}"), kv_gate.load_kv_gate(GATE)
+    )
+    assert rep["verdict"] == "pass", rep["reasons"]
+
+
+@pytest.mark.parametrize("checkpoint", ["best", "final"])
+def test_shipped_gate_fails_v0_on_four_statistics(checkpoint):
+    """Catches a shipped band loose enough to admit v0, or one wide enough to stop
+    rejecting it on a statistic it misses (only ivf_recall_k128_np24 should pass)."""
+    rep = kv_gate.evaluate(_committed(f"v0/{checkpoint}"), kv_gate.load_kv_gate(GATE))
+    failed = {s["statistic"] for s in rep["statistics"] if s["status"] == "fail"}
+    assert rep["verdict"] == "fail"
+    assert failed == set(kv_gate.STATISTICS) - {"ivf_recall_k128_np24"}
 
 
 def test_set_band_passes_inside_and_fails_outside():
@@ -113,15 +140,26 @@ def test_condition_mismatch_fails(mutate):
     assert rep["verdict"] == "fail" and rep["reasons"]
 
 
-def test_cli_check_exit_codes(tmp_path):
-    """Catches the CLI exiting 0 on an unset gate."""
-    p = tmp_path / "r.jsonl"
-    p.write_text("\n".join(json.dumps(r) for r in _full()))
-    out = subprocess.run(
-        [sys.executable, "-m", "src.eval.kv_gate", "check", "--records", str(p)],
+def _cli_check(records, *extra):
+    return subprocess.run(
+        [sys.executable, "-m", "src.eval.kv_gate", "check", "--records", str(records)]
+        + list(extra),
         capture_output=True,
         text=True,
     )
+
+
+def test_cli_check_exit_codes(tmp_path):
+    """Catches the CLI exiting 0 on a fail or an unset gate."""
+    out = _cli_check(RESULTS / "reference/seed0.jsonl")
+    assert out.returncode == EXIT_PASS, out.stderr
+    out = _cli_check(RESULTS / "v0/best.jsonl")
+    assert out.returncode == EXIT_FAIL, out.stderr
+    unset = tmp_path / "unset.yaml"
+    unset.write_text(
+        re.sub(r"(?m)^(  \w+):\n(    \w+: .*\n)+", r"\1: null\n", GATE.read_text())
+    )
+    out = _cli_check(RESULTS / "reference/seed0.jsonl", "--gate-file", str(unset))
     assert out.returncode == EXIT_UNSET, out.stderr
     assert json.loads(out.stdout)["verdict"] == "unset"
 

@@ -7,9 +7,26 @@
 # docs/ai/specs/2026-10-18-kv-cache-scout-design.md. Each is pooled over all
 # 96 (global layer, KV head) corpora.
 #
-# ALL BANDS ARE UNSET. Setting them is a human decision, made from the
-# reference noise floor (5 draws over books 12-19). Until then the checker
-# exits 2 with verdict "unset".
+# ALL FIVE BANDS ARE SET, set 2026-10-19 by the owner after the v0 gate run
+# (docs/results/scout-kv/v0/).
+#
+# Like gates/sift.yaml, these are a TOLERANCE AROUND REAL. The reference is
+# five independent draws over books 12-19 (docs/results/scout-kv/reference/,
+# seed0..seed4). Each band contains all five draws with room on both sides,
+# because five draws understate the range: the diagnostic draw over books
+# 12-15 already put ivf_ratio_k128 at 1.1358, above every 8-book draw.
+#
+# Unlike sift, glove and nytimes, these bands do not admit any generator yet.
+# v0 (docs/results/scout-kv/v0/best.jsonl and final.jsonl) is too easy to
+# search and fails four of the five: it reaches recall 0.9 on far more corpora,
+# its HNSW recall at ef176 is higher, its IVF scan ratio is lower, and its
+# key-side recall is below real. The bands set what the next rung must hit.
+#
+# Checked by tests/test_kv_gate.py: all five committed real draws pass, and
+# v0 best and final fail on exactly the four statistics named above.
+#
+# Bounds are inclusive. A band with one bound counts as set. If a band is ever
+# set back to null, the checker exits 2 with verdict "unset".
 dataset: scout_kv
 canonical:
   n_corpora: 96
@@ -23,8 +40,36 @@ canonical:
   ef_construction: 500
   target: 0.9
 statistics:
-  hnsw_reach_k10: null
-  hnsw_recall_k10_ef176: null
-  ivf_ratio_k128: null
-  ivf_recall_k128_np24: null
-  hnsw_recall_k10_ef176_id: null
+  # Share of the 96 corpora whose real-style queries reach recall@10 >= 0.9
+  # within the efSearch sweep. Moves in steps of 1/96. Real draws 0.5625 to
+  # 0.6250 (mean 0.6042); the band is about 8 corpora either side of the mean.
+  # v0_best reads 0.8750 and fails.
+  hnsw_reach_k10:
+    min: 0.52
+    max: 0.69
+
+  # Median recall@10 at efSearch 176, real-style queries. Real draws 0.7982 to
+  # 0.8526 (mean 0.8312). v0_best reads 0.9274 and fails.
+  hnsw_recall_k10_ef176:
+    min: 0.78
+    max: 0.88
+
+  # Median of (IVF scan fraction at recall@128 = 0.9, real-style) / (same,
+  # key-side). Real draws 0.9403 to 1.0761 (mean 1.0165); the band also holds
+  # the 4-book draw's 1.1358. v0_best reads 0.6841 and fails.
+  ivf_ratio_k128:
+    min: 0.90
+    max: 1.15
+
+  # Median recall@128 at nprobe 24 of 256, real-style queries. Real draws
+  # 0.8185 to 0.8432 (mean 0.8329). v0_best reads 0.8246 and passes; this is
+  # the one statistic v0 already matches.
+  ivf_recall_k128_np24:
+    min: 0.80
+    max: 0.865
+
+  # The HNSW recall statistic for key-side queries. Real is 1.0000 in all five
+  # draws, so there is no measured spread to centre on. One-sided: real data
+  # never falls below it. v0_best reads 0.9757 and fails.
+  hnsw_recall_k10_ef176_id:
+    min: 0.99

@@ -64,6 +64,17 @@ def head_values(r):
 W, H, PADL, PADR, PADT, PADB = 440, 210, 52, 12, 26, 34
 
 
+def _band_text(band):
+    lo, hi = band
+    if lo is None and hi is None:
+        return "unset"
+    if hi is None:
+        return f">= {lo:g}"
+    if lo is None:
+        return f"<= {hi:g}"
+    return f"{lo:g} to {hi:g}"
+
+
 def _scale(vals, lo_hint=None, hi_hint=None):
     vals = [v for v in vals if v is not None]
     lo, hi = min(vals), max(vals)
@@ -136,8 +147,9 @@ def layer_chart(title, real_draws, v0_best, v0_final=None):
     return "".join(out)
 
 
-def strip_chart(title, real_vals, best, final):
-    lo, hi = _scale(real_vals + [best, final])
+def strip_chart(title, real_vals, best, final, band):
+    """`band` is the gate's (min, max) for this statistic; either may be None."""
+    lo, hi = _scale(real_vals + [best, final] + [v for v in band if v is not None])
     w, h, pl, pr = 440, 96, 70, 14
     pw = w - pl - pr
 
@@ -153,6 +165,12 @@ def strip_chart(title, real_vals, best, final):
         f'<svg viewBox="0 0 {w} {h}" width="100%" role="img" aria-label="{html.escape(title)}">'
     ]
     out.append(f'<text x="{pl}" y="12" class="dlabel">{html.escape(title)}</text>')
+    b_lo = lo if band[0] is None else band[0]
+    b_hi = hi if band[1] is None else band[1]
+    out.append(
+        f'<rect class="band" x="{x(b_lo):.1f}" y="20" width="{x(b_hi) - x(b_lo):.1f}" height="{h - 36}">'
+        f"<title>gate band: {_band_text(band)}</title></rect>"
+    )
     for t in range(5):
         v = lo + (hi - lo) * t / 4
         out.append(
@@ -195,10 +213,10 @@ section{background:var(--surface);border-radius:8px;padding:4px 18px 14px;margin
 .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
 svg text{font:11px system-ui,sans-serif;fill:var(--ink)} .axis{fill:var(--muted)}
 .grid{stroke:var(--grid);stroke-width:1} .dlabel{font-size:12px;font-weight:600}
-.s0{fill:var(--s0)} .s1{fill:var(--s1)} .s2{fill:var(--s2)}
+.s0{fill:var(--s0)} .s1{fill:var(--s1)} .s2{fill:var(--s2)} .band{fill:var(--grid);fill-opacity:.7}
 .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:.85rem;color:var(--ink2);margin:4px 0}
 .key i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:-1px}
-.key i.s0{background:var(--s0)} .key i.s1{background:var(--s1)} .key i.s2{background:var(--s2)}
+.key i.s0{background:var(--s0)} .key i.s1{background:var(--s1)} .key i.s2{background:var(--s2)} .key i.band{background:var(--grid);border-radius:2px}
 .note{color:var(--muted);font-size:.85rem}
 .scroll{overflow-x:auto;max-width:100%}
 table{border-collapse:collapse;font-size:.85rem;margin:8px 0}
@@ -257,6 +275,12 @@ def main():
         vals = [ref_pooled[s][st] for s in SEEDS]
         b, f = v0_pooled["best"][st], v0_pooled["final"][st]
         mean = sum(vals) / len(vals)
+        verdict = {
+            name: next(x for x in c["statistics"] if x["statistic"] == st)
+            for name, c in checks.items()
+        }
+        band = (verdict["best"]["band"]["min"], verdict["best"]["band"]["max"])
+        assert band == (verdict["final"]["band"]["min"], verdict["final"]["band"]["max"])
         pooled_rows.append(
             [
                 html.escape(LABEL[st]),
@@ -264,13 +288,16 @@ def main():
                 fmt(min(vals)),
                 fmt(max(vals)),
                 fmt(max(vals) - min(vals)),
+                html.escape(_band_text(band)),
                 fmt(b),
                 fmt(b - mean),
+                verdict["best"]["status"],
                 fmt(f),
                 fmt(f - mean),
+                verdict["final"]["status"],
             ]
         )
-        strips.append(strip_chart(LABEL[st], vals, b, f))
+        strips.append(strip_chart(LABEL[st], vals, b, f, band))
 
     layer_figs = []
     for st in STATISTICS:
@@ -449,8 +476,9 @@ def main():
 <p class="lede">One WGAN-GP generator per Llama 4 Scout global layer (12 layers) samples the attention
 input h. Keys and queries are projected through the real W_k and W_q of each KV head, giving 96 corpora,
 the same as the real reference. Each is searched with IVF and HNSW under the canonical conditions in
-<code>gates/scout_kv.yaml</code>. Every band in that file is null, so the verdict is <b>unset</b> for both checkpoints.
-This page puts the v0 values next to the noise floor of the real reference so that bands can be chosen.</p>
+<code>gates/scout_kv.yaml</code>. The owner set the bands in that file on 2026-10-19, after seeing this
+page with the bands still null. Each band holds all five real draws with room on both sides.
+Under them both checkpoints <b>fail</b>, on every statistic except IVF recall at nprobe 24.</p>
 
 <section>
 <h2>What the numbers show</h2>
@@ -468,9 +496,10 @@ queries, v0 is harder than real.</p>
 <h2>Pooled statistics</h2>
 <p>Real: five independent draws over books 12-19. v0: <code>best_generator.pt</code> (best) and
 <code>checkpoint_step_30000.pt</code> (final), both measured under their EMA weights, seed 0.
-"diff" is v0 minus the mean of the five real draws.</p>
-{table(["statistic", "real mean", "real min", "real max", "real spread", "v0 best", "best diff", "v0 final", "final diff"], pooled_rows)}
-<div class="legend"><span class="key"><i class="s0"></i>real, 5 draws</span><span class="key"><i class="s1"></i>v0 best</span><span class="key"><i class="s2"></i>v0 final</span></div>
+"diff" is v0 minus the mean of the five real draws. "band" is from <code>gates/scout_kv.yaml</code>;
+the "best" and "final" columns are each checkpoint's status under it. The shaded area in each chart is the band.</p>
+{table(["statistic", "real mean", "real min", "real max", "real spread", "band", "v0 best", "best diff", "best", "v0 final", "final diff", "final"], pooled_rows)}
+<div class="legend"><span class="key"><i class="s0"></i>real, 5 draws</span><span class="key"><i class="s1"></i>v0 best</span><span class="key"><i class="s2"></i>v0 final</span><span class="key"><i class="band"></i>gate band</span></div>
 <div class="grid2">{"".join(strips)}</div>
 </section>
 
@@ -515,7 +544,7 @@ values here come from one subsample, so they have no noise band.</p>
 <h2>Claims</h2>
 {table(["claim", "value", "MEASURED / ESTIMATE", "source", "when"], claims, num=False)}
 <p class="note">Generated by <code>docs/results/scout-kv/v0/make_report.py</code> from records committed next to it.
-Bands are not set here; that is a human decision.</p>
+The bands come from <code>check_best.json</code> and <code>check_final.json</code>, which copy them from <code>gates/scout_kv.yaml</code>.</p>
 </section>
 </main></body></html>
 """

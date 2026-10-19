@@ -29,7 +29,12 @@ import yaml
 from src.data.kv_capture import GLOBAL_LAYERS, h_path, read_safetensor
 from src.eval import check_gate
 from src.eval.check_gate import EXIT_FAIL, EXIT_PASS, EXIT_UNSET, GateError
-from src.kv.corpus import mixed_real_corpus, real_sizes, synthetic_corpus
+from src.kv.corpus import (
+    corpus_seed,
+    mixed_real_corpus,
+    real_sizes,
+    synthetic_corpus,
+)
 from src.kv.search_profile import conditions, profile_corpus
 from src.kv.transforms import HEAD_DIM, load_layer_weights
 
@@ -237,7 +242,7 @@ def measure_real(
         n_keys, n_q, n_id = real_sizes(h_books[0].shape[0], len(books), n_sink, n_tail)
         for g in range(wk.shape[0] // HEAD_DIM):
             t0 = time.time()
-            s = 1009 * layer + g + 7919 * seed
+            s = corpus_seed(layer, g, seed)
             c = mixed_real_corpus(
                 h_books, wk, wq, g, n_sink=n_sink, n_tail=n_tail, seed=s
             )
@@ -370,7 +375,7 @@ def measure_h_layer(
     recs = []
     for g in range(wk.shape[0] // HEAD_DIM):
         t0 = time.time()
-        s = 1009 * layer + g + 7919 * seed
+        s = corpus_seed(layer, g, seed)
         c = synthetic_corpus(h_keys, h_query, h_id, wk, wq, g)
         prof = profile_corpus(
             c.keys,

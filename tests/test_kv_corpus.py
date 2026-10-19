@@ -89,3 +89,60 @@ def test_synthetic_corpus_shapes():
         and c.q_id.shape == (8, 128)
     )
     np.testing.assert_array_equal(c.q_id[:, 1], np.arange(48, 56))
+
+
+def test_positions_reproduce_every_corpus_row():
+    """C1. Catches np.tile used for np.repeat, positions recorded off by the
+    sink or tail offset, and the wrong book."""
+    from src.kv.transforms import head_keys, head_queries
+
+    hs, wk, wq = _setup(2)
+    n_sink, n_tail = 1, 16
+    c = mixed_real_corpus(hs, wk, wq, 0, n_sink=n_sink, n_tail=n_tail, seed=0)
+    tol = {"rtol": 1e-5, "atol": 1e-6}
+    for i in range(len(c.keys)):
+        h = hs[c.key_book[i]][c.key_pos[i]][None]
+        np.testing.assert_allclose(c.keys[i], head_keys(h, wk, 0)[0].numpy(), **tol)
+    for i in range(len(c.q_ood)):
+        h = hs[c.q_book[i]][c.q_pos[i]][None]
+        q = head_queries(h, wq, 0, 5)[i % 5].numpy()
+        np.testing.assert_allclose(c.q_ood[i], q, **tol)
+    for i in range(len(c.q_id)):
+        h = hs[c.q_id_book[i]][c.q_id_pos[i]][None]
+        np.testing.assert_allclose(c.q_id[i], head_keys(h, wk, 0)[0].numpy(), **tol)
+    assert c.key_pos.min() >= n_sink and c.key_pos.max() < T - n_tail
+    for pos in (c.q_pos, c.q_id_pos):
+        assert pos.min() >= T - n_tail and pos.max() < T
+
+
+def test_recorded_positions_are_the_unchanged_draws():
+    """C2. Replicates the two draws per book in their current order. Catches a
+    draw added, removed or reordered, which would silently change every
+    committed reference corpus."""
+    hs, wk, wq = _setup(2)
+    n_sink, n_tail, seed = 1, 16, 5
+    c = mixed_real_corpus(hs, wk, wq, 0, n_sink=n_sink, n_tail=n_tail, seed=seed)
+    Tk = T - n_tail
+    per, tail_per = (Tk - n_sink) // 2, n_tail // 2
+    rng = np.random.default_rng(seed)
+    kpos, tpos = [], []
+    for _ in range(2):
+        kpos.append(np.sort(rng.choice(np.arange(n_sink, Tk), per, replace=False)))
+        tpos.append(np.sort(rng.choice(np.arange(Tk, T), tail_per, replace=False)))
+    np.testing.assert_array_equal(c.key_pos, np.concatenate(kpos))
+    np.testing.assert_array_equal(c.q_id_pos, np.concatenate(tpos))
+    np.testing.assert_array_equal(c.q_id_book, np.repeat([0, 1], tail_per))
+
+
+def test_synthetic_corpus_has_no_positions():
+    """C3. Catches a synthetic corpus that claims positions or books."""
+    hs, wk, wq = _setup(1)
+    h = hs[0]
+    c = synthetic_corpus(h[:40], h[40:48], h[48:56], wk, wq, 0)
+    for arr, n in (
+        (c.key_pos, len(c.keys)),
+        (c.q_pos, len(c.q_ood)),
+        (c.q_id_pos, len(c.q_id)),
+        (c.q_id_book, len(c.q_id)),
+    ):
+        assert arr.shape == (n,) and (arr == -1).all()

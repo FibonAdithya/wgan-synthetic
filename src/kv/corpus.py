@@ -18,6 +18,17 @@ class Corpus:
     q_id: np.ndarray
     key_book: np.ndarray
     q_book: np.ndarray
+    # Positions in the book of each key / OOD query / key-side query, and the
+    # key-side queries' book. -1 throughout for a synthetic corpus.
+    key_pos: np.ndarray
+    q_pos: np.ndarray
+    q_id_pos: np.ndarray
+    q_id_book: np.ndarray
+
+
+def corpus_seed(layer: int, g: int, seed: int) -> int:
+    """Per-(layer, KV head) seed of the real-reference corpus and its profile."""
+    return 1009 * layer + g + 7919 * seed
 
 
 def real_sizes(T: int, n_books: int, n_sink: int, n_tail: int) -> tuple[int, int, int]:
@@ -42,6 +53,7 @@ def mixed_real_corpus(
     r = n_rep(wq, wk)
     rng = np.random.default_rng(seed)
     ks, qs, ids, kb, qb = [], [], [], [], []
+    kp, qp, idp, idb = [], [], [], []
     for b, h in enumerate(h_books):
         kpos = torch.as_tensor(
             np.sort(rng.choice(np.arange(n_sink, Tk), per, replace=False))
@@ -55,12 +67,20 @@ def mixed_real_corpus(
         ids.append(_np(head_keys(ht, wk, g)))
         kb.append(np.full(per, b))
         qb.append(np.full(tail_per * r, b))
+        kp.append(kpos.numpy())
+        qp.append(np.repeat(tpos.numpy(), r))
+        idp.append(tpos.numpy())
+        idb.append(np.full(tail_per, b))
     return Corpus(
         np.vstack(ks),
         np.vstack(qs),
         np.vstack(ids),
         np.concatenate(kb),
         np.concatenate(qb),
+        np.concatenate(kp),
+        np.concatenate(qp),
+        np.concatenate(idp),
+        np.concatenate(idb),
     )
 
 
@@ -72,4 +92,8 @@ def synthetic_corpus(h_keys, h_query, h_id, wk, wq, g) -> Corpus:
         _np(head_keys(h_id, wk, g)),
         np.full(len(h_keys), -1),
         np.full(len(h_query) * r, -1),
+        np.full(len(h_keys), -1),
+        np.full(len(h_query) * r, -1),
+        np.full(len(h_id), -1),
+        np.full(len(h_id), -1),
     )

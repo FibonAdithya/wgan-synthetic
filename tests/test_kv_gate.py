@@ -70,6 +70,36 @@ def test_ratio_skips_unreached_and_is_none_when_all_unreached():
     assert kv_gate.pooled_statistics(R)["ivf_ratio_k128"] == 0.0
 
 
+@pytest.mark.parametrize(
+    "part, field, statistic",
+    [
+        ("plain_ood_k10", "hnsw_recall_op", "hnsw_recall_k10_ef176"),
+        ("plain_ood_k128", "ivf_recall_op", "ivf_recall_k128_np24"),
+        ("plain_id_k10", "hnsw_recall_op", "hnsw_recall_k10_ef176_id"),
+    ],
+)
+def test_null_recall_fails_its_statistic_instead_of_crashing(part, field, statistic):
+    """Catches pystats.median raising TypeError on a None, which would crash
+    `check` with a traceback instead of returning a fail verdict."""
+    R = _full()
+    R[0][part][field] = None
+    rep = kv_gate.evaluate(R, kv_gate.load_kv_gate(GATE))
+    by_name = {s["statistic"]: s for s in rep["statistics"]}
+    assert rep["verdict"] == "fail"
+    assert by_name[statistic]["status"] == "fail"
+    assert by_name[statistic]["value"] is None
+
+
+def test_report_counts_the_corpora_the_ivf_ratio_pools():
+    """Catches the ratio silently pooling fewer than 96 corpora."""
+    R = _full()
+    for r in R[:10]:
+        r["plain_ood_k128"]["ivf_scan_frac"] = None
+    R[10]["plain_id_k128"]["ivf_scan_frac"] = 0.0
+    rep = kv_gate.evaluate(R, kv_gate.load_kv_gate(GATE))
+    assert rep["ivf_ratio_k128_corpora"] == 85
+
+
 def _gate_with(**bands):
     gate = kv_gate.load_kv_gate(GATE)
     for k, v in bands.items():

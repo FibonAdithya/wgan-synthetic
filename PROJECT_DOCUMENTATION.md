@@ -142,6 +142,8 @@ Accepted input formats:
 
 - `.fvecs` (Faiss style vectors)
 - `.npy` with shape `[N, D]`, where `D` is the family's dimension
+- `data.format: kv_capture` (`scout_kv` only): a capture directory of per-book
+  safetensors files rather than one file; see `data/README.md`
 
 Implemented in:
 

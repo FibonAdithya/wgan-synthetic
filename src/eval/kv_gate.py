@@ -61,7 +61,8 @@ def _device() -> torch.device:
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def pooled_statistics(records: list[dict]) -> dict[str, float | None]:
+def ivf_ratios(records: list[dict]) -> list[float]:
+    """Per-corpus IVF scan ratio (real-style / key-side), for the corpora that have one."""
     ratios = []
     for r in records:
         o = r["plain_ood_k128"]["ivf_scan_frac"]
@@ -70,19 +71,32 @@ def pooled_statistics(records: list[dict]) -> dict[str, float | None]:
         # zero denominator has no ratio, so that record does not qualify.
         if o is not None and i is not None and i != 0:
             ratios.append(o / i)
+    return ratios
+
+
+def _median(values) -> float | None:
+    """Median, or None if any value is None. check_statistic fails a None, so a
+    malformed record gives a fail verdict instead of a TypeError."""
+    values = list(values)
+    if not values or any(v is None for v in values):
+        return None
+    return float(pystats.median(values))
+
+
+def pooled_statistics(records: list[dict]) -> dict[str, float | None]:
     return {
         "hnsw_reach_k10": float(
             np.mean([bool(r["plain_ood_k10"]["hnsw_reached"]) for r in records])
         ),
-        "hnsw_recall_k10_ef176": float(
-            pystats.median(r["plain_ood_k10"]["hnsw_recall_op"] for r in records)
+        "hnsw_recall_k10_ef176": _median(
+            r["plain_ood_k10"]["hnsw_recall_op"] for r in records
         ),
-        "ivf_ratio_k128": float(pystats.median(ratios)) if ratios else None,
-        "ivf_recall_k128_np24": float(
-            pystats.median(r["plain_ood_k128"]["ivf_recall_op"] for r in records)
+        "ivf_ratio_k128": _median(ivf_ratios(records)),
+        "ivf_recall_k128_np24": _median(
+            r["plain_ood_k128"]["ivf_recall_op"] for r in records
         ),
-        "hnsw_recall_k10_ef176_id": float(
-            pystats.median(r["plain_id_k10"]["hnsw_recall_op"] for r in records)
+        "hnsw_recall_k10_ef176_id": _median(
+            r["plain_id_k10"]["hnsw_recall_op"] for r in records
         ),
     }
 
@@ -172,6 +186,9 @@ def evaluate(records: list[dict], gate: dict) -> dict:
         "exit_code": code,
         "dataset": gate.get("dataset"),
         "n_records": len(records),
+        # The ratio is a median over the corpora where both sides reached
+        # recall 0.9; this says how many that was.
+        "ivf_ratio_k128_corpora": len(ivf_ratios(records)),
         "statistics": results,
         "reasons": reasons,
     }

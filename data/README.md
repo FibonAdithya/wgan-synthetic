@@ -4,9 +4,12 @@ This project expects descriptors in one of these formats:
 
 - `.npy` file with shape `[N, D]`, dtype float32 preferred.
 - `.fvecs` file (Faiss format): each vector stored as `[int32 dim][float32 * dim]`.
+- A `kv_capture` directory (`data.format: kv_capture`, `scout_kv` only): see
+  the `kv_capture` section below.
 
 `D` is whatever the dataset family is — 128 for `sift`, 960 for `gist`, 96
-for `deep`, 100 for `glove`, 256 for `nytimes`, 1536 for `openai`. It is
+for `deep`, 100 for `glove`, 256 for `nytimes`, 1536 for `openai`, 5120 for
+`scout_kv`. It is
 declared per config as `data.descriptor_dim` and checked on load; nothing in
 the pipeline assumes a particular width.
 

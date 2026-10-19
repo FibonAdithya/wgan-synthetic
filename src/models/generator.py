@@ -173,7 +173,8 @@ class SphericalGenerator(nn.Module):
     docs/ai/specs/2026-09-15-spherical-generator-design.md.
 
     Output is unit-norm to float precision, so the trainer's `normalize_l2`
-    and the sampler's normalisation are no-ops on it.
+    and the sampler's normalisation are no-ops on it. Under
+    `model.output_normalize: false` they are skipped altogether.
     """
 
     def __init__(

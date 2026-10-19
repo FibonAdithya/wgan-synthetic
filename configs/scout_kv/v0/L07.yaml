@@ -1,7 +1,7 @@
 # scout_kv v0, global layer 7. One of 12 per-layer configs that differ only in
 # data.kv_layer and output_dir (pinned by tests/test_scout_kv_configs.py).
 # Design: docs/ai/specs/2026-10-18-kv-cache-scout-design.md.
-# real_path is box-specific: the capture lives only on tig-gpu.
+# real_path is box-specific: the capture lives only on the GPU box (docs/datasets/scout_kv.md).
 seed: 42
 device: cuda:0
 output_dir: runs/scout_kv/v0/L07

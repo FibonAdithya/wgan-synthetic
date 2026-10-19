@@ -3,6 +3,7 @@
   "exit_code": 1,
   "dataset": "scout_kv",
   "n_records": 96,
+  "ivf_ratio_k128_corpora": 96,
   "statistics": [
     {
       "statistic": "hnsw_reach_k10",

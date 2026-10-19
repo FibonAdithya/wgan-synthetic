@@ -39,7 +39,8 @@ All three `kv_gate` subcommands run on the GPU box, where the capture lives, exc
 ```
 python -m src.eval.kv_gate measure-real --capture-dir D --out real.jsonl [--books 12-19] [--layers 3,7,...] [--n-sink 1]
 python -m src.eval.kv_gate measure-run  --capture-dir D --run-dir 3=runs/scout_kv/v0/L03 ... --out run.jsonl \
-    [--checkpoint-name best_generator.pt] [--ema] [--n-keys 31736]
+    [--checkpoint-name best_generator.pt] [--ema] [--n-keys 31736] [--layers 11,19,43]
+python -m src.eval.kv_gate compare-layers --records run.jsonl [--reference ref.jsonl ...]
 python -m src.eval.kv_gate check --records run.jsonl [--gate-file gates/scout_kv.yaml]
 ```
 
@@ -49,6 +50,14 @@ python -m src.eval.kv_gate check --records run.jsonl [--gate-file gates/scout_kv
 - `measure-run` needs one `--run-dir LAYER=PATH` for every one of the 12 global layers
   and refuses to start otherwise. `--ema` measures the checkpoint under its stored EMA
   weights; `best_generator.pt` already holds them, so the flag changes nothing there.
+  With `--layers 11,19,43` it measures only those layers (each must be global and have a
+  run dir; all are checked before the first measurement). That is for control experiments:
+  `check` still fails such records, because the gate needs all 96 corpora.
+- `compare-layers` pools each layer's records separately and reports, per statistic, the
+  min, max and mean over the reference draws, the candidate's value, and whether it is
+  `inside` (bounds inclusive), `above`, `below` or `none`. `--reference` is repeatable and
+  defaults to `docs/results/scout-kv/reference/seed0.jsonl` to `seed4.jsonl` under the repo
+  root. It prints JSON and exits 0, or exits 1 on an unreadable input.
 - Both measuring commands also take `--n-tail` (1024), `--nlist` (256), `--hnsw-m` (48),
   `--ef-construction` (500), `--threads` (15) and `--seed` (0). The first four defaults
   are locked conditions, and `check` fails records measured under other values.

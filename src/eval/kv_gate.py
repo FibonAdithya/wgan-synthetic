@@ -487,19 +487,32 @@ def measure_run(
     threads=15,
     checkpoint_name="best_generator.pt",
     ema=False,
+    layers=None,
 ) -> None:
+    """Measure generator runs. `layers=None` needs and measures all 12 global
+    layers. A subset is for control experiments; `check` still refuses its records."""
     import faiss
 
     out = Path(out)
     if out.exists():
         raise FileExistsError(f"{out} exists; refusing to append duplicate records")
-    missing = [L for L in GLOBAL_LAYERS if L not in run_dirs]
-    if missing:
-        raise ValueError(
-            f"measure-run needs a run dir for every global layer; missing {missing}"
-        )
+    if layers is None:
+        todo = list(GLOBAL_LAYERS)
+        missing = [L for L in todo if L not in run_dirs]
+        if missing:
+            raise ValueError(
+                f"measure-run needs a run dir for every global layer; missing {missing}"
+            )
+    else:
+        todo = list(layers)
+        for L in todo:
+            if L not in GLOBAL_LAYERS:
+                raise ValueError(f"layer {L} is not a global layer {GLOBAL_LAYERS}")
+        missing = [L for L in todo if L not in run_dirs]
+        if missing:
+            raise ValueError(f"measure-run has no run dir for layers {missing}")
     faiss.omp_set_num_threads(threads)
-    for layer in GLOBAL_LAYERS:
+    for layer in todo:
         for rec in measure_run_layer(
             run_dirs[layer],
             capture_dir,
@@ -515,6 +528,51 @@ def measure_run(
         ):
             _append(out, rec)
             print(layer, rec["kv_head"], rec["seconds"], "s", flush=True)
+
+
+def compare_layers(records: list[dict], references: list[list[dict]]) -> dict:
+    """Per layer present in `records`, each pooled statistic against the range of
+    the same layer's pooled statistic over the reference sets. Bounds are inclusive."""
+
+    def by_layer(recs):
+        groups: dict[int, list[dict]] = {}
+        for r in recs:
+            groups.setdefault(r["layer"], []).append(r)
+        return groups
+
+    ref_groups = [by_layer(ref) for ref in references]
+    layers = {}
+    for layer, recs in sorted(by_layer(records).items()):
+        cand = pooled_statistics(recs)
+        ref_stats = [pooled_statistics(g[layer]) for g in ref_groups if layer in g]
+        stats = {}
+        for name in STATISTICS:
+            vals = [s[name] for s in ref_stats if s[name] is not None]
+            lo = min(vals) if vals else None
+            hi = max(vals) if vals else None
+            v = cand[name]
+            if v is None or lo is None:
+                status = "none"
+            elif v < lo:
+                status = "below"
+            elif v > hi:
+                status = "above"
+            else:
+                status = "inside"
+            stats[name] = {
+                "min": lo,
+                "max": hi,
+                "mean": float(np.mean(vals)) if vals else None,
+                "value": v,
+                "status": status,
+            }
+        layers[layer] = {"n_records": len(recs), "statistics": stats}
+    return {"n_reference_sets": len(references), "layers": layers}
+
+
+def _read_records(path: Path) -> list[dict]:
+    text = Path(path).read_text(encoding="utf-8")
+    return [json.loads(line) for line in text.splitlines() if line.strip()]
 
 
 def parse_books(text: str) -> list[int]:
@@ -552,6 +610,12 @@ def main(argv: list[str] | None = None) -> int:
     pn = sub.add_parser("measure-run")
     pn.add_argument("--capture-dir", type=Path, required=True)
     pn.add_argument("--run-dir", action="append", required=True, metavar="LAYER=PATH")
+    pn.add_argument(
+        "--layers",
+        type=lambda t: [int(x) for x in t.split(",")],
+        default=None,
+        help="measure only these global layers (default: all 12, each needing a run dir)",
+    )
     pn.add_argument("--checkpoint-name", default="best_generator.pt")
     pn.add_argument(
         "--ema",
@@ -564,6 +628,14 @@ def main(argv: list[str] | None = None) -> int:
     pc = sub.add_parser("check")
     pc.add_argument("--records", type=Path, required=True)
     pc.add_argument("--gate-file", type=Path, default=GATES_FILE)
+    pl = sub.add_parser("compare-layers")
+    pl.add_argument("--records", type=Path, required=True)
+    pl.add_argument(
+        "--reference",
+        type=Path,
+        action="append",
+        help="reference records file, repeatable (default: reference/seed0-4)",
+    )
     a = ap.parse_args(argv)
 
     if a.cmd == "measure-real":
@@ -596,7 +668,22 @@ def main(argv: list[str] | None = None) -> int:
             threads=a.threads,
             checkpoint_name=a.checkpoint_name,
             ema=a.ema,
+            layers=a.layers,
         )
+        return 0
+    if a.cmd == "compare-layers":
+        ref_paths = a.reference or [
+            GATES_FILE.parents[1] / f"docs/results/scout-kv/reference/seed{s}.jsonl"
+            for s in range(5)
+        ]
+        try:
+            records = _read_records(a.records)
+            references = [_read_records(p) for p in ref_paths]
+            report = compare_layers(records, references)
+        except (OSError, json.JSONDecodeError, KeyError) as exc:
+            print(f"kv_gate: {exc!r}", file=sys.stderr)
+            return EXIT_FAIL
+        print(json.dumps(report, indent=2))
         return 0
     try:
         gate = load_kv_gate(a.gate_file)

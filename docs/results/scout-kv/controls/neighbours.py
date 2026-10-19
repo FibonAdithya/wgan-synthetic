@@ -3,7 +3,7 @@ top-10 keys sit in its book (recency, early tokens, hubs), per (layer, KV head).
 
 Records pair one-to-one with `kv_gate measure-real` records of the same books,
 seed, n_sink and n_tail (same corpus seed). No faiss needed. Run from the repo root:
-    python docs/results/scout-kv/controls/neighbours.py --capture-dir /workspace/kv/capture \
+    PYTHONPATH=. python docs/results/scout-kv/controls/neighbours.py --capture-dir /workspace/kv/capture \
         --out /workspace/kv/controls/neighbours.jsonl
 """
 

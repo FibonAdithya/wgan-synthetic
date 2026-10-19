@@ -33,8 +33,8 @@ generator never sees keys or queries.
 
 ## Commands
 
-All three `kv_gate` subcommands run on the GPU box, where the capture lives, except
-`check`, which needs only a records file.
+The `measure-real` and `measure-run` subcommands run on the GPU box, where the capture lives.
+`check` and `compare-layers` need only a records file.
 
 ```
 python -m src.eval.kv_gate measure-real --capture-dir D --out real.jsonl [--books 12-19] [--layers 3,7,...] [--n-sink 1]

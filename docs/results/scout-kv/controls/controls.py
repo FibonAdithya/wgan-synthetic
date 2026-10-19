@@ -2,7 +2,7 @@
 
 Each control is profiled through the gate machinery under the locked conditions.
 Run on the box from the repo root:
-    python docs/results/scout-kv/controls/controls.py --capture-dir /workspace/kv/capture \
+    PYTHONPATH=. python docs/results/scout-kv/controls/controls.py --capture-dir /workspace/kv/capture \
         --out-dir /workspace/kv/controls
 """
 

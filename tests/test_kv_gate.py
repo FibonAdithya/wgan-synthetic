@@ -677,3 +677,26 @@ def test_cli_compare_layers_resolves_default_references_from_the_repo_root(tmp_p
     out = json.loads(p.stdout)
     assert out["n_reference_sets"] == 5
     assert sorted(out["layers"], key=int) == [str(L) for L in kv_gate.GLOBAL_LAYERS]
+
+
+def test_compare_layers_reports_condition_mismatches():
+    """Catches condition mismatches being silently ignored by compare-layers."""
+    canonical = kv_gate.load_kv_gate(kv_gate.GATES_FILE)["canonical"]
+    refs = [_full()]
+    ok = kv_gate.compare_layers(_full(), refs, canonical)
+    assert ok["condition_mismatches"] == []
+    R = _full()
+    R[4]["n_keys"] = 100
+    bad = kv_gate.compare_layers(R, refs, canonical)
+    assert bad["condition_mismatches"]
+    assert any("n_keys" in m for m in bad["condition_mismatches"])
+
+
+def test_compare_layers_counts_reference_sets_per_layer():
+    """Catches the per-layer count being copied from the global count."""
+    full = _full()
+    partial = [r for r in _full() if r["layer"] != 3]
+    rep = kv_gate.compare_layers(_full(), [full, partial])
+    assert rep["n_reference_sets"] == 2
+    assert rep["layers"][3]["n_reference_sets"] == 1
+    assert all(v["n_reference_sets"] == 2 for k, v in rep["layers"].items() if k != 3)

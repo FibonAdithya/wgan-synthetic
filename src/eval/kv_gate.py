@@ -152,6 +152,11 @@ def _condition_failures(records: list[dict], canonical: dict) -> list[str]:
             f"need {canonical['n_corpora']} records with distinct (layer, kv_head) covering "
             f"GLOBAL_LAYERS x 8; got {len(records)}, duplicates {dup}, missing {missing}"
         )
+    return reasons + _record_condition_failures(records, canonical)
+
+
+def _record_condition_failures(records: list[dict], canonical: dict) -> list[str]:
+    reasons = []
     for r in records:
         who = f"record (layer {r.get('layer')}, kv_head {r.get('kv_head')})"
         for key in ("n_keys", "n_q_ood", "n_q_id", "n_sink", "n_tail"):
@@ -535,9 +540,12 @@ def measure_run(
             print(layer, rec["kv_head"], rec["seconds"], "s", flush=True)
 
 
-def compare_layers(records: list[dict], references: list[list[dict]]) -> dict:
+def compare_layers(
+    records: list[dict], references: list[list[dict]], canonical: dict | None = None
+) -> dict:
     """Per layer present in `records`, each pooled statistic against the range of
-    the same layer's pooled statistic over the reference sets. Bounds are inclusive."""
+    the same layer's pooled statistic over the reference sets. Bounds are inclusive.
+    With `canonical`, also lists records whose conditions differ from it."""
 
     def by_layer(recs):
         groups: dict[int, list[dict]] = {}
@@ -571,8 +579,15 @@ def compare_layers(records: list[dict], references: list[list[dict]]) -> dict:
                 "value": v,
                 "status": status,
             }
-        layers[layer] = {"n_records": len(recs), "statistics": stats}
-    return {"n_reference_sets": len(references), "layers": layers}
+        layers[layer] = {
+            "n_records": len(recs),
+            "n_reference_sets": len(ref_stats),
+            "statistics": stats,
+        }
+    report = {"n_reference_sets": len(references), "layers": layers}
+    if canonical is not None:
+        report["condition_mismatches"] = _record_condition_failures(records, canonical)
+    return report
 
 
 def _read_records(path: Path) -> list[dict]:
@@ -684,8 +699,9 @@ def main(argv: list[str] | None = None) -> int:
         try:
             records = _read_records(a.records)
             references = [_read_records(p) for p in ref_paths]
-            report = compare_layers(records, references)
-        except (OSError, json.JSONDecodeError, KeyError) as exc:
+            canonical = load_kv_gate(GATES_FILE)["canonical"]
+            report = compare_layers(records, references, canonical)
+        except (GateError, OSError, json.JSONDecodeError, KeyError) as exc:
             print(f"kv_gate: {exc!r}", file=sys.stderr)
             return EXIT_FAIL
         print(json.dumps(report, indent=2))

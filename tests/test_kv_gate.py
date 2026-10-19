@@ -470,3 +470,96 @@ def test_measure_run_layer_ema_without_ema_params_raises(tmp_path):
         kv_gate.measure_run_layer(
             run_dir, cap, 3, checkpoint_name=p.name, ema=True, **_TINY
         )
+
+
+def _spy_profiles(monkeypatch):
+    """Record (keys, q_ood, q_id, seed) for every profile_corpus call."""
+    seen = []
+    real = kv_gate.profile_corpus
+
+    def spy(keys, q_ood, q_id, **k):
+        seen.append((np.array(keys), np.array(q_ood), np.array(q_id), k["seed"]))
+        return real(keys, q_ood, q_id, **k)
+
+    monkeypatch.setattr(kv_gate, "profile_corpus", spy)
+    return seen
+
+
+def _fixed_h(n_keys=200, n_tail=16):
+    import torch
+
+    g = torch.Generator().manual_seed(123)
+    return (
+        torch.randn(n_keys, 16, generator=g),
+        torch.randn(n_tail, 16, generator=g),
+        torch.randn(n_tail, 16, generator=g),
+    )
+
+
+def test_measure_h_layer_profiles_each_head_of_the_supplied_h(tmp_path, monkeypatch):
+    """Catches a changed seed formula or head order, keys/queries built from the
+    wrong tensor (h_query and h_id swapped), source or extra ignored, and extra
+    merged before the fixed fields."""
+    from src.kv.transforms import head_keys, head_queries, load_layer_weights
+
+    _, cap, _ = _tiny_run(tmp_path)
+    h_keys, h_query, h_id = _fixed_h()
+    seen = _spy_profiles(monkeypatch)
+    recs = kv_gate.measure_h_layer(
+        h_keys,
+        h_query,
+        h_id,
+        cap,
+        3,
+        source="pooled_real",
+        seed=2,
+        nlist=4,
+        hnsw_m=8,
+        ef_construction=16,
+        extra={"control": "x", "books": [12, 13]},
+    )
+    w = load_layer_weights(cap, 3)
+    wk, wq = w["k_proj"].float(), w["q_proj"].float()
+    assert len(seen) == 2
+    assert [s[3] for s in seen] == [1009 * 3 + g + 7919 * 2 for g in (0, 1)]
+    for g, (keys, q_ood, q_id, _) in enumerate(seen):
+        np.testing.assert_allclose(keys, head_keys(h_keys, wk, g).numpy(), rtol=1e-6)
+        np.testing.assert_allclose(
+            q_ood, head_queries(h_query, wq, g, 5).numpy(), rtol=1e-6
+        )
+        np.testing.assert_allclose(q_id, head_keys(h_id, wk, g).numpy(), rtol=1e-6)
+    assert [r["kv_head"] for r in recs] == [0, 1]
+    for r in recs:
+        assert r["source"] == "pooled_real" and r["control"] == "x"
+        assert r["books"] == [12, 13] and r["n_tail"] == len(h_query)
+
+
+def test_measure_run_layer_records_keep_the_committed_fields(tmp_path):
+    """Catches a field dropped, renamed or reordered by the refactor, which
+    would make new v0 measurements incomparable with the committed ones."""
+    from pathlib import Path
+
+    run_dir, cap, _ = _tiny_run(tmp_path)
+    first = Path(__file__).resolve().parents[1] / "docs/results/scout-kv/v0/best.jsonl"
+    committed = json.loads(first.read_text(encoding="utf-8").splitlines()[0])
+    recs = kv_gate.measure_run_layer(run_dir, cap, 3, **_TINY)
+    assert set(recs[0]) == set(committed)
+    assert list(recs[0]) == list(committed)
+
+
+def test_measure_h_layer_refuses_mismatched_query_counts(tmp_path):
+    _, cap, _ = _tiny_run(tmp_path)
+    h_keys, h_query, h_id = _fixed_h()
+    with pytest.raises(ValueError, match="h_id"):
+        kv_gate.measure_h_layer(
+            h_keys,
+            h_query,
+            h_id[:-1],
+            cap,
+            3,
+            source="pooled_real",
+            seed=0,
+            nlist=4,
+            hnsw_m=8,
+            ef_construction=16,
+        )

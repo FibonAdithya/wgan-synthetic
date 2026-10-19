@@ -341,32 +341,30 @@ def synthetic_h(
     return h[:n_keys], h[n_keys : n_keys + n_tail], h[n_keys + n_tail :], weights
 
 
-def measure_run_layer(
-    run_dir,
+def measure_h_layer(
+    h_keys,
+    h_query,
+    h_id,
     capture_dir,
     layer,
     *,
+    source,
     seed,
-    n_keys,
-    n_tail,
     nlist,
     hnsw_m,
     ef_construction,
-    checkpoint_name="best_generator.pt",
-    ema=False,
+    extra=None,
 ) -> list[dict]:
-    """Profile one layer of a trained run: one record per KV head."""
-    run_dir = Path(run_dir)
-    dev = _device()
-    h_keys, h_query, h_id, weights = synthetic_h(
-        run_dir,
-        layer,
-        seed=seed,
-        n_keys=n_keys,
-        n_tail=n_tail,
-        checkpoint_name=checkpoint_name,
-        ema=ema,
-    )
+    """Profile one layer of any supplied h: one record per KV head.
+
+    n_tail is len(h_query); h_id must have the same length. `extra` is merged
+    into each record after the fixed fields, so it can replace `books`. Callers
+    set the faiss thread count.
+    """
+    n_tail = len(h_query)
+    if len(h_id) != n_tail:
+        raise ValueError(f"h_id has {len(h_id)} rows but h_query has {n_tail}")
+    dev = h_keys.device
     w = load_layer_weights(capture_dir, layer)
     wk, wq = w["k_proj"].to(dev).float(), w["q_proj"].to(dev).float()
     recs = []
@@ -384,29 +382,95 @@ def measure_run_layer(
             seed=s,
             target=TARGET,
         )
-        recs.append(
-            {
-                "layer": layer,
-                "kv_head": g,
-                "source": "synthetic",
-                "seed": seed,
-                "books": [],
-                "run_dir": str(run_dir),
-                "n_keys": len(c.keys),
-                "n_q_ood": len(c.q_ood),
-                "n_q_id": len(c.q_id),
-                # Synthetic corpora have no sink; n_sink records the reference
-                # condition they are compared under, not a property of h.
-                "n_sink": 1,
-                "n_tail": n_tail,
-                "checkpoint": checkpoint_name,
-                "generator_weights": weights,
-                "conditions": conditions(nlist, hnsw_m, ef_construction, TARGET),
-                **prof,
-                "seconds": round(time.time() - t0, 1),
-            }
-        )
+        rec = {
+            "layer": layer,
+            "kv_head": g,
+            "source": source,
+            "seed": seed,
+            "books": [],
+            "n_keys": len(c.keys),
+            "n_q_ood": len(c.q_ood),
+            "n_q_id": len(c.q_id),
+            # Synthetic corpora have no sink; n_sink records the reference
+            # condition they are compared under, not a property of h.
+            "n_sink": 1,
+            "n_tail": n_tail,
+            "conditions": conditions(nlist, hnsw_m, ef_construction, TARGET),
+            **prof,
+            "seconds": round(time.time() - t0, 1),
+        }
+        rec.update(extra or {})
+        recs.append(rec)
     return recs
+
+
+# Field order of the committed v0 records; kept so new measurements diff cleanly.
+_RUN_RECORD_ORDER = (
+    "layer",
+    "kv_head",
+    "source",
+    "seed",
+    "books",
+    "run_dir",
+    "n_keys",
+    "n_q_ood",
+    "n_q_id",
+    "n_sink",
+    "n_tail",
+    "checkpoint",
+    "generator_weights",
+    "conditions",
+)
+
+
+def measure_run_layer(
+    run_dir,
+    capture_dir,
+    layer,
+    *,
+    seed,
+    n_keys,
+    n_tail,
+    nlist,
+    hnsw_m,
+    ef_construction,
+    checkpoint_name="best_generator.pt",
+    ema=False,
+) -> list[dict]:
+    """Profile one layer of a trained run: one record per KV head."""
+    h_keys, h_query, h_id, weights = synthetic_h(
+        run_dir,
+        layer,
+        seed=seed,
+        n_keys=n_keys,
+        n_tail=n_tail,
+        checkpoint_name=checkpoint_name,
+        ema=ema,
+    )
+    recs = measure_h_layer(
+        h_keys,
+        h_query,
+        h_id,
+        capture_dir,
+        layer,
+        source="synthetic",
+        seed=seed,
+        nlist=nlist,
+        hnsw_m=hnsw_m,
+        ef_construction=ef_construction,
+        extra={
+            "run_dir": str(Path(run_dir)),
+            "checkpoint": checkpoint_name,
+            "generator_weights": weights,
+        },
+    )
+    return [
+        {
+            **{k: r[k] for k in _RUN_RECORD_ORDER},
+            **{k: v for k, v in r.items() if k not in _RUN_RECORD_ORDER},
+        }
+        for r in recs
+    ]
 
 
 def measure_run(

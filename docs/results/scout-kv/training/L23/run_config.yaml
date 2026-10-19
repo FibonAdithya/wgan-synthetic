@@ -1,0 +1,60 @@
+seed: 42
+device: cuda:0
+output_dir: runs/scout_kv/v0/L23
+data:
+  real_path: /workspace/kv/capture
+  format: kv_capture
+  kv_layer: 23
+  kv_books:
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+  - 7
+  - 8
+  - 9
+  - 10
+  - 11
+  kv_n_sink: 1
+  descriptor_dim: 5120
+  holdout_fraction: 0.02
+  synthetic_if_missing: false
+  synthetic_num_vectors: 0
+  metric: l2
+  preprocess:
+    center: true
+    whiten: false
+    l2_normalize: false
+model:
+  latent_dim: 128
+  generator_hidden_dims:
+  - 1024
+  - 2048
+  - 4096
+  critic_hidden_dims:
+  - 2048
+  - 1024
+  - 512
+  negative_slope: 0.2
+  generator_type: mlp
+  output_normalize: false
+training:
+  batch_size: 512
+  num_gen_steps: 30000
+  n_critic: 3
+  lr_g: 0.0001
+  lr_d: 0.0001
+  betas:
+  - 0.0
+  - 0.9
+  lambda_gp: 5.0
+  ema_decay: 0.999
+  select_on: gate
+  num_workers: 0
+  amp: false
+  log_every: 250
+  eval_every: 5000
+  save_every: 5000

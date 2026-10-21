@@ -271,3 +271,104 @@ def measure_controls(
                 h = tuple(t.to(dev).float() for t in (hk, hq, hi))
                 run(h, layer, name, key_books, {"query_books": list(qb)})
             del rows
+
+
+HELD_OUT_CONTROLS = ("rebuild", "held_out_tail")
+
+
+def measure_held_out(
+    capture_dir,
+    layers,
+    seed,
+    out_dir,
+    *,
+    query_books,
+    controls=HELD_OUT_CONTROLS,
+    ref_books=range(12, 20),
+    n_sink=1,
+    n_tail=1024,
+    nlist=256,
+    hnsw_m=48,
+    ef_construction=500,
+    threads=15,
+) -> None:
+    """Profile `rebuild` (the reference corpus, as measure_real builds it) and
+    `held_out_tail` (the same keys, queries from the tails of `query_books`) at
+    `seed`. Both use corpus_seed(layer, g, seed) for the corpus and the index."""
+    import faiss
+
+    controls, ref_books, query_books = (
+        list(controls),
+        list(ref_books),
+        list(query_books),
+    )
+    bad = [c for c in controls if c not in HELD_OUT_CONTROLS]
+    if bad:
+        raise ValueError(
+            f"unknown controls {bad}; choose from {list(HELD_OUT_CONTROLS)}"
+        )
+    if not query_books:
+        raise ValueError("query_books is empty")
+    shared = sorted(set(query_books) & set(ref_books))
+    if shared:
+        raise ValueError(f"query_books {shared} are also reference books")
+    out_dir = Path(out_dir)
+    paths = {c: out_dir / f"{c}.jsonl" for c in controls}
+    for p in paths.values():
+        if p.exists():
+            raise FileExistsError(f"{p} exists; refusing to append duplicate records")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    faiss.omp_set_num_threads(threads)
+    dev = kv_gate._device()
+    for layer in layers:
+        load = lambda bs: [  # noqa: E731
+            h.to(dev).float() for h in kv_gate.load_books(capture_dir, layer, bs)
+        ]
+        h_ref = load(ref_books)
+        h_q = load(query_books) if "held_out_tail" in controls else None
+        w = kv_gate.load_layer_weights(capture_dir, layer)
+        wk, wq = w["k_proj"].to(dev).float(), w["q_proj"].to(dev).float()
+        for g in range(wk.shape[0] // kv_gate.HEAD_DIM):
+            s = kv_gate.corpus_seed(layer, g, seed)
+            for name in controls:
+                t0 = time.time()
+                kw = dict(n_sink=n_sink, n_tail=n_tail, seed=s)
+                if name == "rebuild":
+                    c = mixed_real_corpus(h_ref, wk, wq, g, **kw)
+                    qbooks = ref_books
+                else:
+                    c = held_out_tail_corpus(h_ref, h_q, wk, wq, g, **kw)
+                    qbooks = query_books
+                prof = kv_gate.profile_corpus(
+                    c.keys,
+                    c.q_ood,
+                    c.q_id,
+                    nlist=nlist,
+                    hnsw_m=hnsw_m,
+                    ef_construction=ef_construction,
+                    seed=s,
+                    target=kv_gate.TARGET,
+                )
+                rec = {
+                    "layer": layer,
+                    "kv_head": g,
+                    "source": "control",
+                    "seed": seed,
+                    "books": ref_books,
+                    "n_keys": len(c.keys),
+                    "n_q_ood": len(c.q_ood),
+                    "n_q_id": len(c.q_id),
+                    "n_sink": n_sink,
+                    "n_tail": n_tail,
+                    "conditions": kv_gate.conditions(
+                        nlist, hnsw_m, ef_construction, kv_gate.TARGET
+                    ),
+                    "own_book_share_top10": kv_gate._own_book_share_top10(c),
+                    **prof,
+                    "seconds": round(time.time() - t0, 1),
+                    "control": name,
+                    "query_books": qbooks,
+                }
+                kv_gate._append(paths[name], rec)
+                print(f"L{layer} g{g} {name}: {rec['seconds']} s", flush=True)
+        del h_ref, h_q

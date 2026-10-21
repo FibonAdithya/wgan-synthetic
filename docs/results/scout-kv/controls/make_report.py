@@ -186,11 +186,13 @@ def neighbours_table():
             f"<tr><td>{L}</td><td>{fmt(o['own_book_share'])}</td><td>{fmt(o['share_lag_le_1024'])}</td>"
             f"<td>{fmt(o['base_share_lag_le_1024'])}</td><td>{fmt(o['share_pos_lt_16'])}</td>"
             f"<td>{fmt(o['base_share_pos_lt_16'], 4)}</td><td>{fmt(o['hub_slot_share'])}</td>"
-            f"<td>{fmt(e['id']['share_lag_le_1024'])}</td></tr>"
+            f"<td>{fmt(e['id']['share_lag_le_1024'])}</td><td>{o['n_distinct_keys']:g}</td>"
+            f"<td>{o['hub_median_pos']:,.0f}</td></tr>"
         )
     return (
         "<table><thead><tr><th>layer</th><th>own-book share</th><th>lag ≤ 1024</th><th>baseline</th>"
-        "<th>key pos &lt; 16</th><th>baseline</th><th>top-1% key slot share</th><th>key-side lag ≤ 1024</th>"
+        "<th>key pos &lt; 16</th><th>baseline</th><th>top-1% slot share</th><th>key-side lag ≤ 1024</th>"
+        "<th>distinct keys</th><th>hub pos</th>"
         f"</tr></thead><tbody>{''.join(rows)}</tbody></table>"
     )
 
@@ -318,6 +320,9 @@ easier, not harder.</li>
 <p>Each corpus is the one <code>reference/seed0.jsonl</code> profiled: own-book shares matched on all 96 corpora, 92 exactly,
 largest difference 3.9e-5 (<code>check_pairing.py</code>). Medians over the 8 heads per layer:</p>
 <div class="scroll">{ntab}</div>
+<p class="note">Distinct keys: keys that appear in any real-style query's top-10 (of 31,736). Hub pos: median position
+of the most-used keys (all of them when fewer than 317 are used); keys sit at positions 1-31,743 with median about
+15,900. Both columns come from the 2026-10-21 rerun, which also corrected an error in the hub position (see the README).</p>
 <h3>Same-book lag, enrichment over the query's own-book keys</h3>
 <div class="panel">{heat_lag}</div>
 <h3>Key position, enrichment over all keys</h3>
@@ -328,8 +333,11 @@ largest difference 3.9e-5 (<code>check_pairing.py</code>). Medians over the 8 he
 A direct count shows why (head 0, seed 0):</p>
 <pre>{distinct}</pre>
 <p>All 5,120 real-style queries at layer 3 share 11 target keys of 31,736. Those keys are not simply the longest
-(norm-count correlation about 0). The distinct-key count was not part of the pre-registered records; it is reported here
-as an observation and is a candidate statistic for follow-up, not a result of this plan.</p>
+(norm-count correlation about 0). Over all 8 heads, the rerun's median is 31-949 distinct keys per layer (table above).
+At 8 of the 9 layers from 15 on, those keys sit at median positions 26,609-30,087, late in the books. The same-book share
+stays near 1/8 at most of these layers, so the late keys come from any book. The distinct-key count was not part of the
+pre-registered records; it is reported here as an observation and a candidate statistic for follow-up, not a result of
+this plan.</p>
 
 <h2>Caveats</h2>
 <ul>

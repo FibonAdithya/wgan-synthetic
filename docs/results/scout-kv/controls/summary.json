@@ -8,7 +8,8 @@
     "share_pos_lt_16": 0.0,
     "base_share_pos_lt_16": 0.0004253844214771868,
     "hub_slot_share": 1.0,
-    "hub_median_pos": 1198.5,
+    "n_distinct_keys": 61.5,
+    "hub_median_pos": 4492.5,
     "key_median_pos": 15919.5
    },
    "id": {
@@ -18,7 +19,8 @@
     "share_pos_lt_16": 0.0,
     "base_share_pos_lt_16": 0.0004253844214771868,
     "hub_slot_share": 1.0,
-    "hub_median_pos": 1173.5,
+    "n_distinct_keys": 53.0,
+    "hub_median_pos": 4792.0,
     "key_median_pos": 15919.5
    }
   },
@@ -30,7 +32,8 @@
     "share_pos_lt_16": 0.0,
     "base_share_pos_lt_16": 0.0004884043357701034,
     "hub_slot_share": 1.0,
-    "hub_median_pos": 1277.5,
+    "n_distinct_keys": 31.0,
+    "hub_median_pos": 7094.25,
     "key_median_pos": 15873.0
    },
    "id": {
@@ -40,7 +43,8 @@
     "share_pos_lt_16": 0.0,
     "base_share_pos_lt_16": 0.0004884043357701034,
     "hub_slot_share": 1.0,
-    "hub_median_pos": 1308.0,
+    "n_distinct_keys": 45.5,
+    "hub_median_pos": 28933.0,
     "key_median_pos": 15873.0
    }
   },
@@ -52,7 +56,8 @@
     "share_pos_lt_16": 0.0,
     "base_share_pos_lt_16": 0.0004884043357701034,
     "hub_slot_share": 1.0,
-    "hub_median_pos": 1253.0,
+    "n_distinct_keys": 64.0,
+    "hub_median_pos": 17213.0,
     "key_median_pos": 15813.75
    },
    "id": {
@@ -62,7 +67,8 @@
     "share_pos_lt_16": 0.0,
     "base_share_pos_lt_16": 0.0004884043357701034,
     "hub_slot_share": 1.0,
-    "hub_median_pos": 23083.0,
+    "n_distinct_keys": 234.5,
+    "hub_median_pos": 26368.0,
     "key_median_pos": 15813.75
    }
   },
@@ -74,7 +80,8 @@
     "share_pos_lt_16": 0.0,
     "base_share_pos_lt_16": 0.0004568943786236451,
     "hub_slot_share": 1.0,
-    "hub_median_pos": 24791.0,
+    "n_distinct_keys": 202.5,
+    "hub_median_pos": 29654.25,
     "key_median_pos": 15830.5
    },
    "id": {
@@ -84,7 +91,8 @@
     "share_pos_lt_16": 0.0,
     "base_share_pos_lt_16": 0.0004568943786236451,
     "hub_slot_share": 1.0,
-    "hub_median_pos": 1334.0,
+    "n_distinct_keys": 143.5,
+    "hub_median_pos": 29335.0,
     "key_median_pos": 15830.5
    }
   },
@@ -96,7 +104,8 @@
     "share_pos_lt_16": 0.005029296875,
     "base_share_pos_lt_16": 0.0004884043357701034,
     "hub_slot_share": 1.0,
-    "hub_median_pos": 8526.5,
+    "n_distinct_keys": 172.5,
+    "hub_median_pos": 30001.75,
     "key_median_pos": 15867.75
    },
    "id": {
@@ -106,7 +115,8 @@
     "share_pos_lt_16": 0.0,
     "base_share_pos_lt_16": 0.0004884043357701034,
     "hub_slot_share": 1.0,
-    "hub_median_pos": 1386.0,
+    "n_distinct_keys": 70.5,
+    "hub_median_pos": 31214.25,
     "key_median_pos": 15867.75
    }
   },
@@ -118,7 +128,8 @@
     "share_pos_lt_16": 9.765625e-06,
     "base_share_pos_lt_16": 0.0005041593143433325,
     "hub_slot_share": 1.0,
-    "hub_median_pos": 26275.5,
+    "n_distinct_keys": 221.0,
+    "hub_median_pos": 29481.5,
     "key_median_pos": 15817.5
    },
    "id": {
@@ -128,7 +139,8 @@
     "share_pos_lt_16": 0.0,
     "base_share_pos_lt_16": 0.0005041593143433325,
     "hub_slot_share": 1.0,
-    "hub_median_pos": 1217.5,
+    "n_distinct_keys": 35.5,
+    "hub_median_pos": 29019.75,
     "key_median_pos": 15817.5
    }
   },
@@ -140,6 +152,7 @@
     "share_pos_lt_16": 2.9296875e-05,
     "base_share_pos_lt_16": 0.0005041593143433325,
     "hub_slot_share": 0.9841796875,
+    "n_distinct_keys": 662.5,
     "hub_median_pos": 26609.0,
     "key_median_pos": 15835.75
    },
@@ -150,7 +163,8 @@
     "share_pos_lt_16": 0.0,
     "base_share_pos_lt_16": 0.0005041593143433325,
     "hub_slot_share": 1.0,
-    "hub_median_pos": 1221.0,
+    "n_distinct_keys": 29.5,
+    "hub_median_pos": 30961.25,
     "key_median_pos": 15835.75
    }
   },
@@ -162,6 +176,7 @@
     "share_pos_lt_16": 0.00072265625,
     "base_share_pos_lt_16": 0.0005356692714897907,
     "hub_slot_share": 0.9684375000000001,
+    "n_distinct_keys": 949.0,
     "hub_median_pos": 29431.5,
     "key_median_pos": 15854.75
    },
@@ -172,7 +187,8 @@
     "share_pos_lt_16": 0.0,
     "base_share_pos_lt_16": 0.0005356692714897907,
     "hub_slot_share": 1.0,
-    "hub_median_pos": 1335.5,
+    "n_distinct_keys": 110.0,
+    "hub_median_pos": 31013.0,
     "key_median_pos": 15854.75
    }
   },
@@ -184,7 +200,8 @@
     "share_pos_lt_16": 0.0015625,
     "base_share_pos_lt_16": 0.00045689437862364503,
     "hub_slot_share": 0.998271484375,
-    "hub_median_pos": 28378.0,
+    "n_distinct_keys": 401.5,
+    "hub_median_pos": 28757.25,
     "key_median_pos": 15906.25
    },
    "id": {
@@ -194,7 +211,8 @@
     "share_pos_lt_16": 0.0,
     "base_share_pos_lt_16": 0.00045689437862364503,
     "hub_slot_share": 1.0,
-    "hub_median_pos": 1459.5,
+    "n_distinct_keys": 148.0,
+    "hub_median_pos": 31002.75,
     "key_median_pos": 15906.25
    }
   },
@@ -206,7 +224,8 @@
     "share_pos_lt_16": 0.0016601562500000002,
     "base_share_pos_lt_16": 0.0003938744643307285,
     "hub_slot_share": 0.9989550781250001,
-    "hub_median_pos": 2706.5,
+    "n_distinct_keys": 322.0,
+    "hub_median_pos": 16037.5,
     "key_median_pos": 15896.5
    },
    "id": {
@@ -216,7 +235,8 @@
     "share_pos_lt_16": 0.0,
     "base_share_pos_lt_16": 0.0003938744643307285,
     "hub_slot_share": 1.0,
-    "hub_median_pos": 1272.5,
+    "n_distinct_keys": 76.0,
+    "hub_median_pos": 31211.5,
     "key_median_pos": 15896.5
    }
   },
@@ -228,7 +248,8 @@
     "share_pos_lt_16": 0.031787109375,
     "base_share_pos_lt_16": 0.0004884043357701034,
     "hub_slot_share": 1.0,
-    "hub_median_pos": 15169.0,
+    "n_distinct_keys": 156.0,
+    "hub_median_pos": 28709.25,
     "key_median_pos": 15919.75
    },
    "id": {
@@ -238,7 +259,8 @@
     "share_pos_lt_16": 0.0,
     "base_share_pos_lt_16": 0.0004884043357701034,
     "hub_slot_share": 1.0,
-    "hub_median_pos": 1336.0,
+    "n_distinct_keys": 41.5,
+    "hub_median_pos": 31351.75,
     "key_median_pos": 15919.75
    }
   },
@@ -250,7 +272,8 @@
     "share_pos_lt_16": 0.00240234375,
     "base_share_pos_lt_16": 0.0005199142929165617,
     "hub_slot_share": 1.0,
-    "hub_median_pos": 29626.5,
+    "n_distinct_keys": 237.0,
+    "hub_median_pos": 30086.75,
     "key_median_pos": 15887.5
    },
    "id": {
@@ -260,7 +283,8 @@
     "share_pos_lt_16": 0.0,
     "base_share_pos_lt_16": 0.0005199142929165617,
     "hub_slot_share": 1.0,
-    "hub_median_pos": 1282.0,
+    "n_distinct_keys": 12.0,
+    "hub_median_pos": 30441.0,
     "key_median_pos": 15887.5
    }
   }

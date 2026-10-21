@@ -22,7 +22,16 @@ The figures are in `report.html` (self-contained). `summary.json` is the machine
 - **R4 (descriptive).** Equalising norms does not move `pooled_real` toward v0. It makes HNSW much harder (layer 43
   recall@10: 0.296 against pooled 0.770 and real 0.574-0.637). The spread of norms makes real search easier.
 - **R5 (descriptive).** No neighbour-position scalar is associated with per-corpus hardness: every |rho| < 0.5 over the 96
-  corpora (largest 0.282).
+  corpora (largest 0.282). `hub_slot_share` is 1.0 in 61 of the 96 corpora, so its two rho values are computed mostly over
+  ties. That saturation is why `n_distinct_keys` was added in the rerun below.
+
+> **Correction, 2026-10-21.** The `hub_median_pos` values committed at `eedcd92` (in `neighbours.jsonl` and
+> `summary.json`) were wrong. When the top-10 lists used fewer distinct keys than `n_hub` (317), the hub set was
+> padded with never-used keys in index order, which are book 12's earliest positions. That put the median near positions
+> 1,100-1,400. Hubs now come only from keys that some query used (`ccfa551`). `neighbours.jsonl` was regenerated on the
+> box (`neighbours_rerun.log`, 177 s). The rerun pairs with `reference/seed0` exactly as before: 96/96 within 1e-3, 92
+> exact. Apart from run times, every other field is identical to the first run. Only `hub_median_pos` changed (61 OOD and 89 key-side corpora),
+> and `n_distinct_keys` is new. No decision-rule result changed: R1, R2, R5 and the v0 re-measure are as stated above.
 
 ## What this says about what makes real `h` hard
 
@@ -37,10 +46,15 @@ Two further measurements describe the real queries:
 - **Same-book neighbours are enriched at lags of 512-4,096 positions** (median ratio >= 2 over the own-book baseline at 7,
   8 and 4 of the 12 layers for the bins 512-1024, 1024-2048 and 2048-4096). At layers 19 and 23, 36% of same-book
   neighbours lie within 1,024 positions of the query, against a 1.6% baseline.
-- **Real queries share a tiny set of target keys.** For head 0 at seed 0, all 51,200 top-10 slots of the 5,120 real-style
-  queries fall on 11 distinct keys at layer 3, 673 at layer 19 and 199 at layer 43, out of 31,736. These keys are not
-  simply the longest (correlation between key norm and use is about 0). `distinct_keys.py` / `distinct_keys.txt`. This
-  count was not a pre-registered statistic; it is an observation for follow-up.
+- **Real queries share a small set of target keys, and those keys sit late in the books.** For head 0 at seed 0, all
+  51,200 top-10 slots of the 5,120 real-style queries fall on 11 distinct keys at layer 3, 673 at layer 19 and 199 at layer
+  43, out of 31,736 (`distinct_keys.py` / `distinct_keys.txt`). These keys are not simply the longest: the correlation
+  between key norm and use is about 0. Over all 8 heads (`n_distinct_keys`, added in the rerun), the median is 31-949
+  distinct keys per layer. At 8 of the 9 layers from 15 on, the median position of those keys is 26,609-30,087 (the exception is layer 39, at 16,038). Keys sit at positions
+  1-31,743, and their median is about 15,900. At most of these layers the same-book share is near the 1/8 baseline, so the
+  queries go to late keys of any book, not mainly of their own. Neither count was a pre-registered statistic; both are
+  observations for follow-up. The cross-book control tests whether this position effect, rather than the own-book link,
+  carries the hardness.
 
 ## Per-layer values
 
@@ -79,20 +93,20 @@ seeds 0, 1 and 2; every other control is seed 0 only.
 
 ### Neighbour positions, median over 8 heads (OOD queries)
 
-| layer | own-book share | same-book lag <= 1024 | baseline | key pos < 16 | baseline | top-1% key slot share |
-|---|---|---|---|---|---|---|
-| 3 | 0.125 | 0.000 | 0.016 | 0.000 | 0.0004 | 1.000 |
-| 7 | 0.125 | 0.000 | 0.016 | 0.000 | 0.0005 | 1.000 |
-| 11 | 0.125 | 0.000 | 0.016 | 0.000 | 0.0005 | 1.000 |
-| 15 | 0.109 | 0.029 | 0.016 | 0.000 | 0.0005 | 1.000 |
-| 19 | 0.108 | 0.362 | 0.016 | 0.005 | 0.0005 | 1.000 |
-| 23 | 0.136 | 0.367 | 0.016 | 0.000 | 0.0005 | 1.000 |
-| 27 | 0.197 | 0.084 | 0.016 | 0.000 | 0.0005 | 0.984 |
-| 31 | 0.215 | 0.204 | 0.016 | 0.001 | 0.0005 | 0.968 |
-| 35 | 0.163 | 0.157 | 0.016 | 0.002 | 0.0005 | 0.998 |
-| 39 | 0.131 | 0.014 | 0.016 | 0.002 | 0.0004 | 0.999 |
-| 43 | 0.127 | 0.080 | 0.016 | 0.032 | 0.0005 | 1.000 |
-| 47 | 0.142 | 0.193 | 0.016 | 0.002 | 0.0005 | 1.000 |
+| layer | own-book share | same-book lag <= 1024 | baseline | key pos < 16 | baseline | top-1% key slot share | distinct top-10 keys | hub median pos (all keys ~15,900) |
+|---|---|---|---|---|---|---|---|---|
+| 3 | 0.125 | 0.000 | 0.016 | 0.000 | 0.0004 | 1.000 | 61.5 | 4,492 |
+| 7 | 0.125 | 0.000 | 0.016 | 0.000 | 0.0005 | 1.000 | 31 | 7,094 |
+| 11 | 0.125 | 0.000 | 0.016 | 0.000 | 0.0005 | 1.000 | 64 | 17,213 |
+| 15 | 0.109 | 0.029 | 0.016 | 0.000 | 0.0005 | 1.000 | 202.5 | 29,654 |
+| 19 | 0.108 | 0.362 | 0.016 | 0.005 | 0.0005 | 1.000 | 172.5 | 30,002 |
+| 23 | 0.136 | 0.367 | 0.016 | 0.000 | 0.0005 | 1.000 | 221 | 29,482 |
+| 27 | 0.197 | 0.084 | 0.016 | 0.000 | 0.0005 | 0.984 | 662.5 | 26,609 |
+| 31 | 0.215 | 0.204 | 0.016 | 0.001 | 0.0005 | 0.968 | 949 | 29,432 |
+| 35 | 0.163 | 0.157 | 0.016 | 0.002 | 0.0005 | 0.998 | 401.5 | 28,757 |
+| 39 | 0.131 | 0.014 | 0.016 | 0.002 | 0.0004 | 0.999 | 322 | 16,038 |
+| 43 | 0.127 | 0.080 | 0.016 | 0.032 | 0.0005 | 1.000 | 156 | 28,709 |
+| 47 | 0.142 | 0.193 | 0.016 | 0.002 | 0.0005 | 1.000 | 237 | 30,087 |
 
 ## Files
 
@@ -104,6 +118,7 @@ seeds 0, 1 and 2; every other control is seed 0 only.
 | `norm_equalised.jsonl`, `gaussian.jsonl` | the other two controls, seed 0 |
 | `v0_best_subset.jsonl` | v0 `best_generator.pt` re-measured through `measure-run --layers` |
 | `b7.log`, `b7_seeds.log` | box logs (code hashes, per-step seconds) |
+| `neighbours_rerun.log` | box log of the 2026-10-21 neighbour rerun (commit, per-corpus lines, pairing check) |
 | `SHA256SUMS` | box-side hashes; every file was verified against them after transfer |
 | `b7.sh`, `check_pairing.py`, `distinct_keys.py` | box scripts |
 | `summarise.py`, `summary.json`, `make_report.py`, `report.html` | write-up |
@@ -118,4 +133,7 @@ seeds 0, 1 and 2; every other control is seed 0 only.
 | v0 re-measure matches | yes, 15/15 cells | MEASURED (tolerances ESTIMATE) | `summary.json` `v0_remeasure` | 2026-10-19 |
 | B7 wall time | 1,991 s, plus 700 s for the two extra seeds | MEASURED | `b7.log`, `b7_seeds.log` | 2026-10-19 |
 | distinct top-10 keys, head 0 | 11 / 673 / 199 at L3 / L19 / L43 | MEASURED | `distinct_keys.txt` | 2026-10-19 |
-| largest R5 abs(rho) | 0.282 | MEASURED | `summary.json` `r5` | 2026-10-19 |
+| largest R5 abs(rho) | 0.282 | MEASURED | `summary.json` `r5` | 2026-10-21 (unchanged by the rerun) |
+| neighbour rerun pairs with `seed0` | 96/96 within 1e-3, 92 exact | MEASURED | `neighbours_rerun.log` | 2026-10-21 |
+| median distinct top-10 keys per layer, 8 heads | 31-949 | MEASURED | `summary.json` `neighbours_per_layer` | 2026-10-21 |
+| median hub key position, layers 15-47 | 26,609-30,087 at 8 of 9 layers; 16,038 at layer 39 (key median ~15,900) | MEASURED | `summary.json` `neighbours_per_layer` | 2026-10-21 |

@@ -12,6 +12,8 @@ import torch
 
 from src.data.kv_capture import h_path, read_safetensor
 from src.eval import kv_gate
+from src.kv.corpus import Corpus, _np, mixed_real_corpus
+from src.kv.transforms import head_keys, head_queries, n_rep
 
 CONTROLS = ("pooled_real", "norm_equalised", "gaussian")
 # Not in CONTROLS, so the script default and b7.sh keep their original runs.
@@ -76,6 +78,56 @@ def tail_split(key_books, query_books, n_keys, n_tail, seed, n_sink=1):
     hk, kp = take(key_books, n_sink, Tk, per_k, np.random.default_rng([seed, 0]))
     hq, qp = take(query_books, Tk, T, per_q, np.random.default_rng([seed, 1]))
     return hk, hq, hq, kp, qp
+
+
+def held_out_tail_corpus(
+    h_ref_books, h_query_books, wk, wq, g, *, n_sink, n_tail, seed
+) -> Corpus:
+    """The reference corpus's keys, with queries from the tails of other books.
+
+    Keys, key_book and key_pos are exactly mixed_real_corpus(h_ref_books, ...) at
+    `seed`. Tail positions come from default_rng([seed, 1]): n_tail // Q per query
+    book, in order. q_id is the k-projection of the same tail rows as q_ood, as in
+    the reference. Query book j is labelled len(h_ref_books) + j, so no query
+    shares a label with any key.
+    """
+    Q = len(h_query_books)
+    if Q == 0:
+        raise ValueError("h_query_books is empty")
+    T = h_ref_books[0].shape[0]
+    if any(h.shape[0] != T for h in h_query_books):
+        raise ValueError(
+            f"query books differ in length from the reference books ({T}): "
+            f"{[h.shape[0] for h in h_query_books]}"
+        )
+    if n_tail % Q:
+        raise ValueError(f"n_tail {n_tail} is not divisible by {Q} query books")
+    ref = mixed_real_corpus(
+        h_ref_books, wk, wq, g, n_sink=n_sink, n_tail=n_tail, seed=seed
+    )
+    B, per, r = len(h_ref_books), n_tail // Q, n_rep(wq, wk)
+    rng = np.random.default_rng([seed, 1])
+    qs, ids, qb, qp, idp, idb = [], [], [], [], [], []
+    for j, h in enumerate(h_query_books):
+        tpos = np.sort(rng.choice(np.arange(T - n_tail, T), per, replace=False))
+        ht = h[torch.as_tensor(tpos).to(h.device)]
+        qs.append(_np(head_queries(ht, wq, g, r)))
+        ids.append(_np(head_keys(ht, wk, g)))
+        qb.append(np.full(per * r, B + j))
+        qp.append(np.repeat(tpos, r))
+        idp.append(tpos)
+        idb.append(np.full(per, B + j))
+    return Corpus(
+        ref.keys,
+        np.vstack(qs),
+        np.vstack(ids),
+        ref.key_book,
+        np.concatenate(qb),
+        ref.key_pos,
+        np.concatenate(qp),
+        np.concatenate(idp),
+        np.concatenate(idb),
+    )
 
 
 def equalise_norms(h_keys, h_query, h_id):

@@ -77,3 +77,44 @@ def test_differing_seed_is_meta_mismatch(tmp_path):
     assert rc == 1
     assert rep["meta_mismatch"] == [[rows[3]["layer"], rows[3]["kv_head"]]]
     assert rep["mismatched"] == [] and rep["missing"] == []
+
+
+# --- held-out plan, Task 3: --records and --layers ---
+
+
+def _run(tmp_path, rows, *extra):
+    p = tmp_path / "recs.jsonl"
+    p.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+    env = {**os.environ, "PYTHONPATH": str(REPO)}
+    r = subprocess.run(
+        [sys.executable, str(SCRIPT), "--records", str(p), "--reference", str(REF)]
+        + list(extra),
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    return r.returncode, json.loads(r.stdout), r
+
+
+def test_records_mode_with_layers(tmp_path):
+    """Catches --records reading the neighbours field, --layers filtering only one
+    side, and the filter hiding corpora missing inside the chosen layers."""
+    ref = _ref()
+    rc, rep, r = _run(tmp_path, ref)
+    assert rc == 0 and rep["n_compared"] == 96, r.stderr
+    rc, rep, r = _run(tmp_path, ref, "--layers", "11,19,43")
+    assert rc == 0 and rep["n_compared"] == 24 and rep["missing"] == [], r.stderr
+    rule = [x for x in ref if x["layer"] in (11, 19, 43)]
+    rc, rep, r = _run(tmp_path, rule, "--layers", "11,19,43")
+    assert rc == 0 and rep["n_compared"] == 24, r.stderr
+    rc, rep, _ = _run(tmp_path, rule)
+    assert rc == 1 and len(rep["missing"]) == 72
+    moved = [dict(x) for x in rule]
+    i = next(k for k, x in enumerate(moved) if x["layer"] == 11)
+    moved[i]["own_book_share_top10"] += 0.002
+    rc, rep, _ = _run(tmp_path, moved, "--layers", "11,19,43")
+    assert rc == 1 and rep["mismatched"] == [[11, moved[i]["kv_head"]]]
+    j = next(k for k, x in enumerate(rule) if x["layer"] == 19)
+    dropped = rule[:j] + rule[j + 1 :]
+    rc, rep, _ = _run(tmp_path, dropped, "--layers", "11,19,43")
+    assert rc == 1 and rep["missing"] == [[19, rule[j]["kv_head"]]]

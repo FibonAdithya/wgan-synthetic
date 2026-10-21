@@ -239,6 +239,99 @@ def xbook(refs, v0cmp):
     return out
 
 
+# Held-out-book plan (docs/ai/plans/2026-10-21-scout-kv-held-out.md): draw ->
+# (seed, held-out query books), fixed before the run.
+HELDOUT_DRAWS = {
+    "s5": (5, (0, 1, 2, 3, 4, 5, 6, 7)),
+    "s6": (6, (4, 5, 6, 7, 8, 9, 10, 11)),
+    "s7": (7, (0, 1, 2, 3, 8, 9, 10, 11)),
+    "s8": (8, (0, 1, 2, 4, 5, 6, 8, 10)),
+}
+HELDOUT_CONTROLS = ("rebuild", "held_out_tail")
+REF_BOOKS = list(range(12, 20))
+
+
+def path_check_ok(report):
+    """R6a: the seed-0 rebuild paired with reference/seed0 on all 24 rule-layer corpora."""
+    return (
+        report["n_compared"] == 24
+        and not report["missing"]
+        and not report["mismatched"]
+        and not report["meta_mismatch"]
+    )
+
+
+def heldout_verdict(path_ok, outside_rebuild, flatters_held_out):
+    """R6a/R6/R7 from the held-out plan."""
+    if not path_ok:
+        return {
+            "path_ok": False,
+            "positive_control_valid": None,
+            "n_held_out_flatter": None,
+            "reading": None,
+        }
+    v = xbook_verdict(outside_rebuild, flatters_held_out)
+    reading = "not_reachable" if v["reading"] == "own_book" else v["reading"]
+    return {
+        "path_ok": True,
+        "positive_control_valid": v["positive_control_valid"],
+        "n_held_out_flatter": v["n_cross_flatter"],
+        "reading": reading,
+    }
+
+
+def check_heldout_draw(records, seed, query_books, control):
+    """Refuse records that do not belong to this draw and control."""
+    want_q = REF_BOOKS if control == "rebuild" else list(query_books)
+    for r in records:
+        got = (r["seed"], r["control"], r["books"], r["query_books"])
+        if got != (seed, control, REF_BOOKS, want_q):
+            raise SystemExit(
+                f"record {got} does not match draw seed={seed} control={control} "
+                f"query_books={want_q}"
+            )
+
+
+def paired_diff(cmp_a, cmp_b):
+    """Per rule layer and statistic, a - b of the pooled value; None if either is None."""
+    out = {}
+    for L in LAYERS:
+        out[L] = {}
+        for s in RULE_STATS:
+            a = cmp_a["layers"][L]["statistics"][s]["value"]
+            b = cmp_b["layers"][L]["statistics"][s]["value"]
+            out[L][s] = None if a is None or b is None else a - b
+    return out
+
+
+def heldout(refs, v0cmp, path_report):
+    out = {"path_check": path_report, "draws": {}}
+    for d, (seed, qb) in HELDOUT_DRAWS.items():
+        out["draws"][d] = {"seed": seed, "query_books": list(qb)}
+        for c in HELDOUT_CONTROLS:
+            recs = _read(HERE / "heldout" / d / f"{c}.jsonl")
+            check_heldout_draw(recs, seed, qb, c)
+            cmp_ = _compare(recs, refs)
+            r = rules({c: cmp_}, v0cmp)[c]
+            out["draws"][d][c] = {
+                "compare_layers": cmp_,
+                "rules": r,
+                "flatters": r["statistics_with_2_of_3"] >= 2,
+                "n_outside": n_outside(cmp_),
+            }
+        dr = out["draws"][d]
+        dr["held_out_minus_rebuild"] = paired_diff(
+            dr["held_out_tail"]["compare_layers"], dr["rebuild"]["compare_layers"]
+        )
+    dr = out["draws"]
+    out["verdict"] = heldout_verdict(
+        path_check_ok(path_report),
+        [dr[d]["rebuild"]["n_outside"] >= 2 for d in HELDOUT_DRAWS],
+        [dr[d]["held_out_tail"]["flatters"] for d in HELDOUT_DRAWS],
+    )
+    return out
+
+
 def v0_match(v0cmp, subcmp):
     tol = {
         "hnsw_reach_k10": ("abs", 1 / 8),
@@ -339,6 +432,14 @@ def main():
     ):
         summary["xbook"] = xbook(refs, v0cmp)
         summary["R6_R7_xbook"] = summary["xbook"]["verdict"]
+    pc = HERE / "heldout" / "pair_check.json"
+    if pc.exists() and all(
+        (HERE / "heldout" / d / f"{c}.jsonl").exists()
+        for d in HELDOUT_DRAWS
+        for c in HELDOUT_CONTROLS
+    ):
+        summary["heldout"] = heldout(refs, v0cmp, json.loads(pc.read_text()))
+        summary["R6_R7_heldout"] = summary["heldout"]["verdict"]
     (HERE / "summary.json").write_text(json.dumps(summary, indent=1) + "\n")
     print(json.dumps({k: summary[k] for k in summary if k.startswith("R")}, indent=1))
 

@@ -127,3 +127,73 @@ def test_xbook_verdict_boundaries(summarise):
         }
     v = summarise.xbook_verdict([True, True, False, False], [False] * 4)
     assert v["positive_control_valid"] is False and v["reading"] is None
+
+
+# --- held-out plan, Task 3 ---
+
+
+def test_heldout_verdict_boundaries(summarise):
+    """Catches off-by-one in either threshold, the positive-control or path gate
+    being ignored, the label not renamed, and n_compared not checked."""
+    v = summarise.heldout_verdict
+    want = ["reachable", "reachable", "inconclusive", "not_reachable", "not_reachable"]
+    for n, reading in enumerate(want):
+        flat = [True] * n + [False] * (4 - n)
+        out = v(True, [True, False, False, False], flat)
+        assert out["reading"] == reading and out["n_held_out_flatter"] == n
+        assert out["positive_control_valid"] is True and out["path_ok"] is True
+    out = v(True, [True, True, False, False], [False] * 4)
+    assert out["positive_control_valid"] is False and out["reading"] is None
+    out = v(False, [False] * 4, [False] * 4)
+    assert out["path_ok"] is False and out["reading"] is None
+    clean = {"n_compared": 24, "missing": [], "mismatched": [], "meta_mismatch": []}
+    assert summarise.path_check_ok(clean) is True
+    assert summarise.path_check_ok({**clean, "n_compared": 23}) is False
+    for k in ("missing", "mismatched", "meta_mismatch"):
+        assert summarise.path_check_ok({**clean, k: [[11, 0]]}) is False
+
+
+def _heldout_recs(control, seed=5, qbooks=(0, 1, 2, 3, 4, 5, 6, 7)):
+    q = list(range(12, 20)) if control == "rebuild" else list(qbooks)
+    return [
+        {
+            "seed": seed,
+            "control": control,
+            "books": list(range(12, 20)),
+            "query_books": q,
+        }
+        for _ in range(3)
+    ]
+
+
+def test_check_heldout_draw_refuses_mislabelled_records(summarise):
+    """Catches draws not checked, and only the first record checked."""
+    chk = summarise.check_heldout_draw
+    qb = (0, 1, 2, 3, 4, 5, 6, 7)
+    chk(_heldout_recs("held_out_tail"), 5, qb, "held_out_tail")
+    chk(_heldout_recs("rebuild"), 5, qb, "rebuild")
+    for field, bad in (
+        ("seed", 6),
+        ("query_books", [4, 5, 6, 7, 8, 9, 10, 11]),
+        ("control", "rebuild"),
+        ("books", list(range(12, 19))),
+    ):
+        recs = _heldout_recs("held_out_tail")
+        recs[-1][field] = bad
+        with pytest.raises(SystemExit):
+            chk(recs, 5, qb, "held_out_tail")
+    recs = _heldout_recs("rebuild")
+    recs[-1]["query_books"] = list(qb)
+    with pytest.raises(SystemExit):
+        chk(recs, 5, qb, "rebuild")
+
+
+def test_paired_diff_keeps_zero(summarise):
+    """Catches a truthiness test where `is None` is meant: 0.0 is a real value."""
+    st = {s: ("inside",) * 3 for s in summarise.RULE_STATS}
+    a = _cmp(st, {"hnsw_reach_k10": (0.0, 0.5, None)})
+    b = _cmp(st, {"hnsw_reach_k10": (0.125, 0.0, 0.25)})
+    d = summarise.paired_diff(a, b)
+    assert d[11]["hnsw_reach_k10"] == pytest.approx(-0.125)
+    assert d[19]["hnsw_reach_k10"] == pytest.approx(0.5)
+    assert d[43]["hnsw_reach_k10"] is None

@@ -17,7 +17,7 @@ difficulty (`src/eval/kv_gate.py::evaluate`). The four intrinsic statistics of
 |---|---|
 | Ladder | `v0` trained for all 12 global layers (`docs/results/scout-kv/training/`); fails the gate on four of five statistics (`docs/results/scout-kv/v0/report.html`) |
 | Gate bands | **set** 2026-10-19 by the owner, as a tolerance around the five-draw real reference; see `## Gate bands` |
-| Gate question | **open** since 2026-10-19: real `h` split the way synthetic corpora are split is already outside the real range on v0's side (R1); v1 design waits on it. See `## Controls: why v0 is too easy` |
+| Gate question | **open** since 2026-10-19: real `h` split the way synthetic corpora are split is already outside the real range on v0's side (R1); v1 design waits on it. Evidence for keeping the reference: the held-out-book control (2026-10-21) reads *reachable*. See `## Controls: why v0 is too easy` |
 | Capture | lives only on the GPU box (`tig-gpu-alt` since 2026-10-19), at `/workspace/kv/capture`. It is not in the repo and not fetchable with `src/data/fetch.py` |
 
 ## What a sample is
@@ -182,8 +182,15 @@ every number in `summary.json`). All values below are MEASURED, from `summary.js
   0.637 (v0 0.824). Much of the gap comes from the reference taking queries from the
   last 1,024 positions of each book, which an unconditional generator cannot reproduce.
 - The training books are not easier than the reference books (R2 does not fire).
-- The plan's hard stop applies: no v1 design until the gate question is settled. The next step is a cross-book
-  control: keys from the bodies of some books, queries from the tails of others.
+- The plan's hard stop applies: no v1 design until the gate question is settled.
+- The cross-book control (`docs/ai/plans/2026-10-21-scout-kv-cross-book.md`) used four key books. Its positive
+  control failed (R6), so it gives no reading.
+- The held-out-book control (`docs/ai/plans/2026-10-21-scout-kv-held-out.md`) keeps the reference's keys exactly
+  (books 12-19) and takes the queries from the tails of eight books from 0-11. Its path check and positive control
+  pass, and the held-out queries are on v0's side in 0 of 4 draws. The reading is **reachable**: tail queries from
+  books outside the key set are not easier than the reference, so a position-conditioned generator is a viable v1
+  target. At layer 19 they are harder, partly because books 0-11 differ from 12-19. Results:
+  `docs/results/scout-kv/controls/README.md`.
 
 ## Not yet done
 

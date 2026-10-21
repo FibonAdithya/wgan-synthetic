@@ -220,7 +220,15 @@ def xbook_section():
 
 
 # Descriptive paragraph for the held-out section, written after the run (B12).
-HELDOUT_NOTE = ""
+HELDOUT_NOTE = (
+    "<p><b>Descriptive, not rule results.</b> Held-out queries are harder than the rebuild at layer 19 in every draw "
+    "(recall@10 down 0.047-0.091, IVF ratio up 0.095-0.171). Books 0-7 measured alone are also harder than the "
+    "reference at layer 19, so at least part of that gap is a difference between books 0-11 and 12-19, which the rule "
+    "cannot separate from an own-book effect. Layer 11 does not depend on the query's book (|Δ recall| ≤ 0.014). At "
+    "layer 43 held-out queries keep and add to the reference's IVF hardness (IVF ratio 3.32-4.05 against rebuild "
+    "2.96-3.55). The five-draw real range is narrow: the rebuild, exchangeable with the reference draws, falls outside it "
+    "in 17 of 36 cells. Three of the 12 layers; the 96-corpus gate was not run.</p>"
+)
 
 
 def heldout_section():

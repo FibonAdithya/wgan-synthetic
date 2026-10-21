@@ -54,7 +54,8 @@ Two further measurements describe the real queries:
   1-31,743, and their median is about 15,900. At most of these layers the same-book share is near the 1/8 baseline, so the
   queries go to late keys of any book, not mainly of their own. Neither count was a pre-registered statistic; both are
   observations for follow-up. The cross-book control tests whether this position effect, rather than the own-book link,
-  carries the hardness.
+  carries the hardness. Its rule-grade version, the held-out-book control below, reads **reachable**: tail queries from
+  books outside the key set are not easier than the reference.
 
 ## R6/R7: cross-book control (2026-10-21)
 
@@ -97,7 +98,64 @@ tail queries. The difference cross minus same is:
 - **Layer 19:** the gap is larger and changes sign with the partition. This is also the layer with the strongest
   same-book recency (36% of same-book neighbours within 1,024 positions).
 - These are observations from 4 draws at 3 layers. Testing them under a rule would need a construction whose positive
-  control holds, for example 8 key books with the queries taken from held-out books.
+  control holds, for example 8 key books with the queries taken from held-out books. That is the held-out-book control
+  below.
+
+## R6a/R6/R7: held-out-book control (2026-10-21)
+
+Plan: `docs/ai/plans/2026-10-21-scout-kv-held-out.md`, with the rules and the four draws fixed before the run. Box run B11
+on tig-gpu-alt used the code at `3bb39ee` (`heldout/b11.log` has the code hashes). The seed-0 pairing step took 357 s and
+each draw 714-720 s. All values are MEASURED, from `summary.json` `heldout`.
+
+The keys are exactly the reference's: all eight reference books 12-19, built per KV head by `mixed_real_corpus` at
+the reference's per-head seed.
+- `rebuild` is the reference corpus itself at a fresh seed (5-8, none of them a reference seed). It is the positive
+  control.
+- `held_out_tail` keeps the same keys and the same index seed. Its real-style and key-side queries come from the tails
+  (the last 1,024 positions) of eight books from 0-11, 128 rows each, so no query shares a book with any key. Its
+  own-book share is 0 in every corpus.
+- Draws: s5 (query books 0-7), s6 (4-11), s7 (0-3, 8-11), s8 (0-2, 4-6, 8, 10).
+
+**Verdict: R7 reads reachable.**
+- **R6a passes.** The seed-0 rebuild pairs with the committed `reference/seed0.jsonl` on all 24 rule-layer corpora (23
+  exact, max own-book share difference 3.9e-5), so the code path is the reference's.
+- **R6 passes.** `rebuild` is outside the real range on at least 2 of the 3 rule statistics in 1 of the 4 draws (s5);
+  the rule allows 1.
+- **R7: `held_out_tail` flatters in 0 of the 4 draws.** In every draw, 0 of the 3 rule statistics are on v0's side at 2
+  or more of the 3 layers. Under the plan this reads **reachable**: queries from books outside the key set keep the real
+  difficulty, so the difficulty does not need a query to come from the same book as its keys. That supports a
+  position-conditioned generator as the v1 target.
+
+Cells outside the real range (3 layers × 3 rule statistics × 4 draws = 36):
+
+| control | on v0's (easy) side | on the hard side |
+|---|---|---|
+| `rebuild` | 9 | 8 |
+| `held_out_tail` | 6 | 17 |
+
+**Paired difference, held-out minus rebuild** (same keys, same index seed; s5, s6, s7, s8):
+
+| layer | reach | recall@10 ef176 | IVF ratio |
+|---|---|---|---|
+| 11 | 0, 0, 0, 0 | -0.002, +0.004, +0.005, -0.014 | +0.022, +0.015, -0.004, +0.017 |
+| 19 | -0.375, -0.125, 0, -0.375 | -0.091, -0.048, -0.047, -0.089 | +0.106, +0.145, +0.095, +0.171 |
+| 43 | 0, 0, 0, +0.250 | +0.032, -0.016, +0.009, +0.039 | +0.359, +0.562, +0.051, +0.291 |
+
+What the result does not say (descriptive, not rule results):
+- **Held-out queries are harder, not just as hard, at layer 19.** In every draw, recall@10 drops by 0.047-0.091 and the
+  IVF ratio rises by 0.095-0.171. Books 0-7 measured alone (`train_books_real`) are also harder than the reference at
+  layer 19 (recall@10 0.831, IVF ratio 0.369, against 0.854-0.882 and 0.133-0.172). So at least part of the layer-19
+  gap is a difference between books 0-11 and 12-19, not an own-book effect. The rule cannot separate the two. A
+  generator trained on books 0-11 may therefore overshoot the reference at layer 19 rather than undershoot it.
+- **Layer 11 does not care which book a query comes from** (|Δ recall| ≤ 0.014, |Δ IVF ratio| ≤ 0.022).
+- **At layer 43, held-out queries keep the reference's IVF hardness and add to it** (IVF ratio 3.32-4.05 against rebuild
+  2.96-3.55 and real 2.97-3.48). HNSW recall moves by -0.016 to +0.039.
+- **The five-draw real range is narrow.** The positive control, which is exchangeable with the reference draws, falls
+  outside it in 17 of 36 cells. Layer 43 recall@10 is above it in 3 of 4 rebuild draws (0.629-0.707 against
+  0.574-0.637). The plan's base rate assumed 1 in 3 per cell (ESTIMATE). R6 passes because a statistic must be outside
+  at 2 of the 3 layers to count. A gate band set from the five draws alone would reject some real draws; the bands in
+  `gates/scout_kv.yaml` are wider than the five draws, and pooled over 96 corpora rather than per layer.
+- This covers 3 of the 12 layers and does not run the 96-corpus gate.
 
 ## Per-layer values
 
@@ -165,6 +223,7 @@ seeds 0, 1 and 2; every other control is seed 0 only.
 | `SHA256SUMS` | box-side hashes; every file was verified against them after transfer |
 | `b7.sh`, `check_pairing.py`, `distinct_keys.py` | box scripts |
 | `xbook/{a,b}_s{0,1}/{same,cross}_book_tail.jsonl`, `xbook.sh`, `b9.log` | cross-book control (R6/R7): records, box script, box log |
+| `heldout/pair_s0/rebuild.jsonl`, `heldout/s{5,6,7,8}/{rebuild,held_out_tail}.jsonl`, `heldout/pair_check.json`, `heldout/b11.log`, `heldout.py`, `heldout.sh` | held-out-book control (R6a/R6/R7): records, R6a pairing report, box log, script and box script |
 | `summarise.py`, `summary.json`, `make_report.py`, `report.html` | write-up |
 
 ## Claim table
@@ -184,4 +243,10 @@ seeds 0, 1 and 2; every other control is seed 0 only.
 | B9 wall time per draw | 651-673 s | MEASURED | `b9.log` | 2026-10-21 |
 | neighbour rerun pairs with `seed0` | 96/96 within 1e-3, 92 exact | MEASURED | `neighbours_rerun.log` | 2026-10-21 |
 | median distinct top-10 keys per layer, 8 heads | 31-949 | MEASURED | `summary.json` `neighbours_per_layer` | 2026-10-21 |
+| R6a (held-out path check) | passes: 24/24 within 1e-3, 23 exact, max 3.9e-5 | MEASURED | `heldout/pair_check.json` | 2026-10-21 |
+| R6 (held-out positive control valid) | yes: rebuild outside in 1 of 4 draws (s5) | MEASURED | `summary.json` `R6_R7_heldout` | 2026-10-21 |
+| R7 (held-out reading) | reachable: held_out_tail flatters in 0 of 4 draws | MEASURED | `summary.json` `R6_R7_heldout` | 2026-10-21 |
+| held-out minus rebuild, layer 19 | recall@10 -0.047 to -0.091; IVF ratio +0.095 to +0.171 | MEASURED | `summary.json` `heldout` | 2026-10-21 |
+| rebuild cells outside the 5-draw real range | 17 of 36 | MEASURED | `summary.json` `heldout` | 2026-10-21 |
+| B11 wall time | 357 s pairing step; 714-720 s per draw | MEASURED | `heldout/b11.log` | 2026-10-21 |
 | median hub key position, layers 15-47 | 26,609-30,087 at 8 of 9 layers; 16,038 at layer 39 (key median ~15,900) | MEASURED | `summary.json` `neighbours_per_layer` | 2026-10-21 |

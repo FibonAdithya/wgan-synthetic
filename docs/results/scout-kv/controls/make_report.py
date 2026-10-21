@@ -149,6 +149,76 @@ def values_table():
     )
 
 
+def xbook_section():
+    """R6/R7 (cross-book plan): verdict and a per-draw table. Empty until the run exists."""
+    if "xbook" not in S:
+        return ""
+    X, V = S["xbook"], S["xbook"]["verdict"]
+    draws = list(X["draws"])
+    pooled = [k for k in ("pooled_real", "pooled_real_seed1", "pooled_real_seed2") if k in C]
+    head = "".join(
+        f"<th>{c.split('_')[0]} {d.replace('_s', '')}</th>"
+        for c in ("same_book_tail", "cross_book_tail")
+        for d in draws
+    )
+    rows = []
+    short = {"hnsw_reach_k10": "reach", "hnsw_recall_k10_ef176": "recall@10", "ivf_ratio_k128": "IVF ratio"}
+    for L in LAYERS:
+        for stat, _ in STATS[:3]:
+            label = short[stat]
+            ref = C["v0_best"]["layers"][L]["statistics"][stat]
+            pv = [C[k]["layers"][L]["statistics"][stat]["value"] for k in pooled]
+            cells = "".join(
+                f'<td class="{e["status"]}">{fmt(e["value"])}</td>'
+                for c in ("same_book_tail", "cross_book_tail")
+                for d in draws
+                for e in [X["draws"][d][c]["compare_layers"]["layers"][L]["statistics"][stat]]
+            )
+            rows.append(
+                f"<tr><td>{L}</td><td>{esc(label)}</td><td>{fmt(ref['min'])}–{fmt(ref['max'])}</td>"
+                f"<td>{fmt(min(pv))}–{fmt(max(pv))}</td><td>{fmt(ref['value'])}</td>{cells}</tr>"
+            )
+    table = (
+        "<table><thead><tr><th>layer</th><th>statistic</th><th>real, 5 draws</th><th>pooled, 3 seeds</th>"
+        f"<th>v0</th>{head}</tr></thead><tbody>{''.join(rows)}</tbody></table>"
+    )
+    flags = "".join(
+        f"<tr><td>{d}</td><td>{X['draws'][d]['same_book_tail']['n_outside']}</td>"
+        f"<td>{X['draws'][d]['cross_book_tail']['rules']['statistics_with_2_of_3']}</td>"
+        f"<td>{'yes' if X['draws'][d]['cross_book_tail']['flatters'] else 'no'}</td></tr>"
+        for d in draws
+    )
+    flags = (
+        "<table><thead><tr><th>draw</th><th>same_book_tail: statistics outside (either way)</th>"
+        "<th>cross_book_tail: statistics on v0's side</th><th>cross flatters</th></tr></thead>"
+        f"<tbody>{flags}</tbody></table>"
+    )
+    reading = {
+        "reachable": "the reading is <b>reachable</b>: queries unrelated to the keys keep the real hardness",
+        "own_book": "the reading is <b>own_book</b>: the hardness needs queries related to their own book's keys",
+        "inconclusive": "the reading is <b>inconclusive</b>",
+        None: "R7 is <b>not read</b>, because the positive control failed",
+    }[V["reading"]]
+    return (
+        "<h2>R6 and R7: cross-book control</h2>"
+        "<p>Keys from the bodies of four reference books; queries from the tails of the same four books "
+        "(<code>same_book_tail</code>, the positive control) or of the other four (<code>cross_book_tail</code>). "
+        "Within a draw both controls use the same key rows. Draws: partition a (key books 12-15) and b (16-19), "
+        "seeds 0 and 1. Plan: <code>docs/ai/plans/2026-10-21-scout-kv-cross-book.md</code>.</p>"
+        f"<div class='verdict'><p><b>R6 (positive control valid):</b> {'yes' if V['positive_control_valid'] else 'no'}. "
+        f"{reading}. <b>For the record:</b> cross_book_tail is on v0's side in {V['n_cross_flatter']} of 4 draws.</p></div>"
+        f"<div class='scroll'>{flags}</div><div class='scroll'>{table}</div>"
+        "<p class='muted'>Cell shading: orange above the real range, blue below it. Draw labels: a0 is partition a, "
+        "seed 0, and so on.</p>"
+        "<p><b>Descriptive, not a rule result.</b> Same and cross share their key rows within a draw, so they can be paired. "
+        "At layers 11 and 43, cross minus same is at most 0.045 in recall@10 and 0.08 in IVF ratio, far below the spread "
+        "across draws (layer 43 IVF ratio 3.13-3.71). At layer 43 both tail controls keep an IVF ratio of 3.10-3.71, "
+        "against 1.12-1.15 for pooled_real. Layer 19, the layer with the strongest same-book recency, differs more "
+        "(up to 0.061 in recall and 0.092 in IVF ratio), with the sign set by the partition. Why R6 fails: with four "
+        "key books, layer 19 depends on which books form the key set.</p>"
+    )
+
+
 def rules_table():
     rows = []
     for name in ("pooled_real", "pooled_real_seed1", "pooled_real_seed2", "norm_equalised", "gaussian", "train_books_real"):
@@ -232,6 +302,7 @@ def main():
         rules=rules_table(),
         r5=r5_table(),
         ntab=neighbours_table(),
+        xbook=xbook_section(),
         heat_lag=heatmap("lag", "Same-book lag enrichment"),
         heat_pos=heatmap("pos", "Key position enrichment"),
         distinct=(HERE / "distinct_keys.txt").read_text().replace("<", "&lt;"),
@@ -316,6 +387,7 @@ much harder (recall@10 at layer 43: 0.296 against pooled 0.770 and real 0.574-0.
 easier, not harder.</li>
 </ul>
 
+{xbook}
 <h2>Neighbour positions (all 12 layers, 96 corpora)</h2>
 <p>Each corpus is the one <code>reference/seed0.jsonl</code> profiled: own-book shares matched on all 96 corpora, 92 exactly,
 largest difference 3.9e-5 (<code>check_pairing.py</code>). Medians over the 8 heads per layer:</p>

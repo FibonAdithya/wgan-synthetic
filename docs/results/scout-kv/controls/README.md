@@ -56,6 +56,49 @@ Two further measurements describe the real queries:
   observations for follow-up. The cross-book control tests whether this position effect, rather than the own-book link,
   carries the hardness.
 
+## R6/R7: cross-book control (2026-10-21)
+
+Plan: `docs/ai/plans/2026-10-21-scout-kv-cross-book.md`, with the rules fixed before the run. Box run B9 on tig-gpu-alt used
+the code at `6c914a5` (`b9.log` has the code hashes). Each of the 4 draws took 651-673 s. All values are MEASURED, from
+`summary.json` `xbook`.
+
+Both controls take keys from the bodies of four reference books and queries from book tails (the last 1,024 positions).
+The key-side queries are the same tail tokens, as in the reference.
+- `same_book_tail` (the positive control) takes its queries from the tails of the same four books.
+- `cross_book_tail` takes them from the tails of the other four books.
+- Within a draw, both controls use the same key rows.
+- Draws: partition a (key books 12-15) and partition b (key books 16-19), each at seeds 0 and 1.
+
+**Verdict: R6 fails, so R7 is not read.** The plan's rule is to report and stop.
+- `same_book_tail` is outside the real range on at least 2 of the 3 rule statistics in 2 of the 4 draws: a_s0 (3
+  statistics) and a_s1 (2). The rule allowed at most 1 draw.
+- Both failing draws are partition a, and both are outside on the *hard* side. At layer 19 the IVF ratio is 0.657 and
+  0.630 against real 0.133-0.172, and recall@10 is 0.778 and 0.744 against 0.854-0.882. Partition b is inside on every
+  rule statistic.
+- Reading: with four key books, the construction's hardness depends on which books form the key set, most of all at layer
+  19. The positive control therefore does not reproduce the 8-book reference, and the plan does not let the cross-book
+  draws be judged against that reference.
+- For the record, `cross_book_tail` is on v0's side in 0 of the 4 draws (`n_cross_flatter` 0). That number is not a
+  reading under the rules.
+
+**Descriptive (not a rule result).** Within each draw, the same key rows can be paired with own-book and with other-book
+tail queries. The difference cross minus same is:
+
+| layer | recall@10 ef176, cross minus same (a_s0, a_s1, b_s0, b_s1) | same, range over draws | IVF ratio, cross minus same | same, range over draws |
+|---|---|---|---|---|
+| 11 | +0.009, +0.013, +0.001, +0.001 | 0.438-0.696 | -0.002, -0.005, +0.005, -0.014 | 1.202-1.397 |
+| 19 | -0.061, -0.050, +0.041, +0.036 | 0.744-0.857 | +0.092, +0.084, +0.012, +0.025 | 0.142-0.657 |
+| 43 | +0.020, -0.001, +0.026, +0.045 | 0.458-0.696 | -0.029, -0.054, +0.032, +0.080 | 3.127-3.710 |
+
+- **Layers 11 and 43:** whether queries come from the key books or from other books changes recall and the IVF ratio by
+  much less than the spread across draws.
+- **Layer 43 tail split:** the IVF ratio is 3.10-3.71 for both controls, against 1.12-1.15 for `pooled_real` and 0.76
+  for v0. Queries from book tails, even other books' tails, keep the reference's IVF hardness at layer 43.
+- **Layer 19:** the gap is larger and changes sign with the partition. This is also the layer with the strongest
+  same-book recency (36% of same-book neighbours within 1,024 positions).
+- These are observations from 4 draws at 3 layers. Testing them under a rule would need a construction whose positive
+  control holds, for example 8 key books with the queries taken from held-out books.
+
 ## Per-layer values
 
 Arrows mark a value above (↑) or below (↓) the range of the five real reference draws. `pooled_real` s0, s1 and s2 are
@@ -121,6 +164,7 @@ seeds 0, 1 and 2; every other control is seed 0 only.
 | `neighbours_rerun.log` | box log of the 2026-10-21 neighbour rerun (commit, per-corpus lines, pairing check) |
 | `SHA256SUMS` | box-side hashes; every file was verified against them after transfer |
 | `b7.sh`, `check_pairing.py`, `distinct_keys.py` | box scripts |
+| `xbook/{a,b}_s{0,1}/{same,cross}_book_tail.jsonl`, `xbook.sh`, `b9.log` | cross-book control (R6/R7): records, box script, box log |
 | `summarise.py`, `summary.json`, `make_report.py`, `report.html` | write-up |
 
 ## Claim table
@@ -134,6 +178,10 @@ seeds 0, 1 and 2; every other control is seed 0 only.
 | B7 wall time | 1,991 s, plus 700 s for the two extra seeds | MEASURED | `b7.log`, `b7_seeds.log` | 2026-10-19 |
 | distinct top-10 keys, head 0 | 11 / 673 / 199 at L3 / L19 / L43 | MEASURED | `distinct_keys.txt` | 2026-10-19 |
 | largest R5 abs(rho) | 0.282 | MEASURED | `summary.json` `r5` | 2026-10-21 (unchanged by the rerun) |
+| R6 (cross-book positive control valid) | no: outside in 2 of 4 draws (a_s0, a_s1), hard side | MEASURED | `summary.json` `R6_R7_xbook` | 2026-10-21 |
+| cross_book_tail on v0's side | 0 of 4 draws (R7 not read) | MEASURED | `summary.json` `xbook` | 2026-10-21 |
+| L43 IVF ratio, tail controls | 3.097-3.710 (8 values) | MEASURED | `summary.json` `xbook` | 2026-10-21 |
+| B9 wall time per draw | 651-673 s | MEASURED | `b9.log` | 2026-10-21 |
 | neighbour rerun pairs with `seed0` | 96/96 within 1e-3, 92 exact | MEASURED | `neighbours_rerun.log` | 2026-10-21 |
 | median distinct top-10 keys per layer, 8 heads | 31-949 | MEASURED | `summary.json` `neighbours_per_layer` | 2026-10-21 |
 | median hub key position, layers 15-47 | 26,609-30,087 at 8 of 9 layers; 16,038 at layer 39 (key median ~15,900) | MEASURED | `summary.json` `neighbours_per_layer` | 2026-10-21 |

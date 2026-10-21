@@ -101,3 +101,29 @@ def test_spearman_ties_nulls_and_degenerate(summarise):
     assert n == 4 and rho == pytest.approx(4.5 / (4.5 * 5) ** 0.5, abs=1e-12)
     assert summarise.spearman([1, 2, None], [1, 2, 3]) == (None, 2)
     assert summarise.spearman([1, 1, 1], [1, 2, 3]) == (None, 3)
+
+
+def test_n_outside_counts_both_directions(summarise):
+    c = _cmp(
+        {
+            "hnsw_reach_k10": ("above", "below", "inside"),
+            "hnsw_recall_k10_ef176": ("inside", "inside", "below"),
+            "ivf_ratio_k128": ("none", "above", "inside"),
+        }
+    )
+    assert summarise.n_outside(c) == 2
+
+
+def test_xbook_verdict_boundaries(summarise):
+    same = [True, False, False, False]
+    want = ["reachable", "reachable", "inconclusive", "own_book", "own_book"]
+    for n, reading in enumerate(want):
+        cross = [True] * n + [False] * (4 - n)
+        v = summarise.xbook_verdict(same, cross)
+        assert v == {
+            "positive_control_valid": True,
+            "n_cross_flatter": n,
+            "reading": reading,
+        }
+    v = summarise.xbook_verdict([True, True, False, False], [False] * 4)
+    assert v["positive_control_valid"] is False and v["reading"] is None

@@ -71,7 +71,8 @@ def r5(neighbours, seed0):
 
     scalars = {
         "lag_le_1024_minus_base": lambda o: lag_excess(o),
-        "pos_lt_16_minus_base": lambda o: o["share_pos_lt_16"] - o["base_share_pos_lt_16"],
+        "pos_lt_16_minus_base": lambda o: o["share_pos_lt_16"]
+        - o["base_share_pos_lt_16"],
         "hub_slot_share": lambda o: o["hub_slot_share"],
         "own_book_share": lambda o: o["own_book_share"],
     }
@@ -126,7 +127,10 @@ def r5(neighbours, seed0):
             n_layers = sum(1 for v in table.values() if v[b] is not None and v[b] >= 2)
             if n_layers >= 4:
                 flagged.append(
-                    {"bin": [edges[b], edges[b + 1]], "layers_with_ratio_ge_2": n_layers}
+                    {
+                        "bin": [edges[b], edges[b + 1]],
+                        "layers_with_ratio_ge_2": n_layers,
+                    }
                 )
         enrich[kind] = {"per_layer_median_ratio": table, "flagged_bins": flagged}
     return {"spearman": rows, "enrichment": enrich}
@@ -181,6 +185,57 @@ def rules(compare, v0cmp):
             per_stat[s] = {"layers_in_v0_direction": n, "cells": cells}
         n_stats = sum(1 for v in per_stat.values() if v["layers_in_v0_direction"] >= 2)
         out[name] = {"per_statistic": per_stat, "statistics_with_2_of_3": n_stats}
+    return out
+
+
+XBOOK_DRAWS = ("a_s0", "a_s1", "b_s0", "b_s1")
+XBOOK_CONTROLS = ("same_book_tail", "cross_book_tail")
+
+
+def n_outside(cmp_):
+    """Rule statistics with >= 2 of the 3 layers outside the real range in either
+    direction. A null statistic (status "none") counts as outside."""
+    return sum(
+        1
+        for s in RULE_STATS
+        if sum(cmp_["layers"][L]["statistics"][s]["status"] != "inside" for L in LAYERS)
+        >= 2
+    )
+
+
+def xbook_verdict(outside_same, flatters_cross):
+    """R6/R7 from the cross-book plan (docs/ai/plans/2026-10-21-scout-kv-cross-book.md)."""
+    valid = sum(outside_same) <= 1
+    n = sum(flatters_cross)
+    if not valid:
+        reading = None
+    elif n <= 1:
+        reading = "reachable"
+    elif n >= 3:
+        reading = "own_book"
+    else:
+        reading = "inconclusive"
+    return {"positive_control_valid": valid, "n_cross_flatter": n, "reading": reading}
+
+
+def xbook(refs, v0cmp):
+    out = {"draws": {}}
+    for d in XBOOK_DRAWS:
+        out["draws"][d] = {}
+        for c in XBOOK_CONTROLS:
+            cmp_ = _compare(_read(HERE / "xbook" / d / f"{c}.jsonl"), refs)
+            r = rules({c: cmp_}, v0cmp)[c]
+            out["draws"][d][c] = {
+                "compare_layers": cmp_,
+                "rules": r,
+                "flatters": r["statistics_with_2_of_3"] >= 2,
+                "n_outside": n_outside(cmp_),
+            }
+    dr = out["draws"]
+    out["verdict"] = xbook_verdict(
+        [dr[d]["same_book_tail"]["n_outside"] >= 2 for d in XBOOK_DRAWS],
+        [dr[d]["cross_book_tail"]["flatters"] for d in XBOOK_DRAWS],
+    )
     return out
 
 
@@ -277,6 +332,13 @@ def main():
     p = HERE / "v0_best_subset.jsonl"
     if p.exists():
         summary["v0_remeasure"] = v0_match(v0cmp, _compare(_read(p), refs))
+    if all(
+        (HERE / "xbook" / d / f"{c}.jsonl").exists()
+        for d in XBOOK_DRAWS
+        for c in XBOOK_CONTROLS
+    ):
+        summary["xbook"] = xbook(refs, v0cmp)
+        summary["R6_R7_xbook"] = summary["xbook"]["verdict"]
     (HERE / "summary.json").write_text(json.dumps(summary, indent=1) + "\n")
     print(json.dumps({k: summary[k] for k in summary if k.startswith("R")}, indent=1))
 

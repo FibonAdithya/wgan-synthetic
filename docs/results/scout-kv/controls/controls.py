@@ -1,4 +1,5 @@
-"""Control sets of h for the v0 diagnosis: pooled_real, norm_equalised, gaussian.
+"""Control sets of h for the v0 diagnosis: pooled_real, norm_equalised, gaussian,
+and (by name, with --key-books) same_book_tail and cross_book_tail.
 
 Each control is profiled through the gate machinery under the locked conditions.
 Run on the box from the repo root:
@@ -19,6 +20,7 @@ def main():
     ap.add_argument("--layers", type=parse_books, default=[11, 19, 43])
     ap.add_argument("--controls", default=",".join(CONTROLS))
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--key-books", type=parse_books, default=[12, 13, 14, 15])
     ap.add_argument("--out-dir", type=Path, required=True)
     ap.add_argument("--threads", type=int, default=15)
     a = ap.parse_args()
@@ -29,6 +31,7 @@ def main():
         a.seed,
         a.out_dir,
         threads=a.threads,
+        key_books=a.key_books,
     )
 
 

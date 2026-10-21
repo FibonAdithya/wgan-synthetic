@@ -14,6 +14,8 @@ from src.data.kv_capture import h_path, read_safetensor
 from src.eval import kv_gate
 
 CONTROLS = ("pooled_real", "norm_equalised", "gaussian")
+# Not in CONTROLS, so the script default and b7.sh keep their original runs.
+TAIL_CONTROLS = ("same_book_tail", "cross_book_tail")
 
 
 def pooled_split(books, n_keys, n_tail, seed, n_sink=1):
@@ -33,6 +35,47 @@ def pooled_split(books, n_keys, n_tail, seed, n_sink=1):
     ii = perm[n_keys + n_tail : need]
     take = lambda i: pool[torch.from_numpy(i)]  # noqa: E731
     return take(ik), take(iq), take(ii), ik, iq, ii
+
+
+def tail_split(key_books, query_books, n_keys, n_tail, seed, n_sink=1):
+    """Keys from the bodies of `key_books`, queries from the tails of `query_books`.
+
+    Every book has the same length T. The body is positions n_sink .. T-n_tail-1
+    and the tail is positions T-n_tail .. T-1, as in mixed_real_corpus. Each key
+    book gives n_keys // len(key_books) rows and each query book gives
+    n_tail // len(query_books) rows, sampled without replacement. Key positions
+    come from default_rng([seed, 0]) and tail positions from default_rng([seed, 1]),
+    so the key rows do not depend on query_books. h_id is h_query (the same rows),
+    as in the reference.
+
+    Returns (h_keys, h_query, h_id, key_pos, q_pos); key_pos and q_pos are (n, 2)
+    int arrays of (index into the books argument list, position).
+    """
+    books = [torch.as_tensor(b) for b in (*key_books, *query_books)]
+    T = books[0].shape[0]
+    if any(b.shape[0] != T for b in books):
+        raise ValueError(f"books differ in length: {[b.shape[0] for b in books]}")
+    if n_keys % len(key_books) or n_tail % len(query_books):
+        raise ValueError(
+            f"n_keys {n_keys} / n_tail {n_tail} not divisible by "
+            f"{len(key_books)} key / {len(query_books)} query books"
+        )
+    Tk = T - n_tail
+    per_k, per_q = n_keys // len(key_books), n_tail // len(query_books)
+    if per_k > Tk - n_sink:
+        raise ValueError(f"each body has {Tk - n_sink} rows, need {per_k}")
+
+    def take(src, lo, hi, per, rng):
+        rows, pos = [], []
+        for i, b in enumerate(src):
+            p = np.sort(rng.choice(np.arange(lo, hi), per, replace=False))
+            rows.append(torch.as_tensor(b)[torch.from_numpy(p)])
+            pos.append(np.stack([np.full(per, i), p], 1))
+        return torch.cat(rows), np.concatenate(pos)
+
+    hk, kp = take(key_books, n_sink, Tk, per_k, np.random.default_rng([seed, 0]))
+    hq, qp = take(query_books, Tk, T, per_q, np.random.default_rng([seed, 1]))
+    return hk, hq, hq, kp, qp
 
 
 def equalise_norms(h_keys, h_query, h_id):
@@ -92,6 +135,7 @@ def measure_controls(
     threads=15,
     train_books=range(12),
     ref_books=range(12, 20),
+    key_books=(12, 13, 14, 15),
     n_keys=31736,
     n_tail=1024,
     nlist=256,
@@ -101,9 +145,20 @@ def measure_controls(
     import faiss
 
     controls = list(controls)
-    bad = [c for c in controls if c not in CONTROLS]
+    known = CONTROLS + TAIL_CONTROLS
+    bad = [c for c in controls if c not in known]
     if bad:
-        raise ValueError(f"unknown controls {bad}; choose from {list(CONTROLS)}")
+        raise ValueError(f"unknown controls {bad}; choose from {list(known)}")
+    train_books, ref_books = list(train_books), list(ref_books)
+    key_books = list(key_books)
+    if not key_books or not set(key_books) < set(ref_books):
+        raise ValueError(
+            f"key_books {key_books} must be a non-empty proper subset of {ref_books}"
+        )
+    query_books = {
+        "same_book_tail": key_books,
+        "cross_book_tail": [b for b in ref_books if b not in key_books],
+    }
     out_dir = Path(out_dir)
     paths = {c: out_dir / f"{c}.jsonl" for c in controls}
     for p in paths.values():
@@ -112,10 +167,9 @@ def measure_controls(
     out_dir.mkdir(parents=True, exist_ok=True)
     faiss.omp_set_num_threads(threads)
     dev = kv_gate._device()
-    train_books, ref_books = list(train_books), list(ref_books)
     idx = dict(nlist=nlist, hnsw_m=hnsw_m, ef_construction=ef_construction)
 
-    def run(h, layer, name, books):
+    def run(h, layer, name, books, extra=None):
         t0 = time.time()
         recs = kv_gate.measure_h_layer(
             *h,
@@ -123,7 +177,7 @@ def measure_controls(
             layer,
             source=name,
             seed=seed,
-            extra={"control": name, "books": books},
+            extra={"control": name, "books": books, **(extra or {})},
             **idx,
         )
         for r in recs:
@@ -148,3 +202,20 @@ def measure_controls(
             s = sample_gaussian(fit, n_keys + 2 * n_tail, seed, device=dev)
             h = (s[:n_keys], s[n_keys : n_keys + n_tail], s[n_keys + n_tail :])
             run(h, layer, "gaussian", train_books)
+        tails = [c for c in TAIL_CONTROLS if c in controls]
+        if tails:
+            need = sorted({b for c in tails for b in query_books[c]} | set(key_books))
+            rows = {b: _book_rows(capture_dir, b, layer) for b in need}
+            for name in tails:
+                qb = query_books[name]
+                hk, hq, hi, *_ = tail_split(
+                    [rows[b] for b in key_books],
+                    [rows[b] for b in qb],
+                    n_keys,
+                    n_tail,
+                    seed,
+                    n_sink=1,
+                )
+                h = tuple(t.to(dev).float() for t in (hk, hq, hi))
+                run(h, layer, name, key_books, {"query_books": list(qb)})
+            del rows

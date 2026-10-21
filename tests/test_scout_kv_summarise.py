@@ -1,4 +1,5 @@
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -157,12 +158,15 @@ def _heldout_recs(control, seed=5, qbooks=(0, 1, 2, 3, 4, 5, 6, 7)):
     q = list(range(12, 20)) if control == "rebuild" else list(qbooks)
     return [
         {
+            "layer": L,
+            "kv_head": g,
             "seed": seed,
             "control": control,
             "books": list(range(12, 20)),
             "query_books": q,
         }
-        for _ in range(3)
+        for L in (11, 19, 43)
+        for g in range(8)
     ]
 
 
@@ -186,6 +190,29 @@ def test_check_heldout_draw_refuses_mislabelled_records(summarise):
     recs[-1]["query_books"] = list(qb)
     with pytest.raises(SystemExit):
         chk(recs, 5, qb, "rebuild")
+    # A partial draw (one head missing, or one duplicated) is refused.
+    recs = _heldout_recs("held_out_tail")
+    with pytest.raises(SystemExit):
+        chk(recs[:-1], 5, qb, "held_out_tail")
+    with pytest.raises(SystemExit):
+        chk(recs[:-1] + recs[:1], 5, qb, "held_out_tail")
+
+
+def test_load_path_report_reads_a_failed_check(summarise, tmp_path):
+    """Catches a failed R6a (pair_check.json moved into failed-pair_check-*/ by
+    heldout.sh) being reported as absent instead of as a failed path check."""
+    assert summarise.load_path_report(tmp_path) is None
+    rep_ = {"n_compared": 24, "missing": [], "mismatched": [], "meta_mismatch": []}
+    failed = tmp_path / "failed-pair_check-123"
+    failed.mkdir()
+    (failed / "pair_check.json").write_text(
+        json.dumps({**rep_, "mismatched": [[11, 0]]})
+    )
+    report, ok = summarise.load_path_report(tmp_path)
+    assert ok is False and report["mismatched"] == [[11, 0]]
+    (tmp_path / "pair_check.json").write_text(json.dumps(rep_))
+    report, ok = summarise.load_path_report(tmp_path)
+    assert ok is True and report == rep_
 
 
 def test_paired_diff_keeps_zero(summarise):

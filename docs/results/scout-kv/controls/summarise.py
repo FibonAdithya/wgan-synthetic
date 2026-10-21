@@ -283,6 +283,12 @@ def heldout_verdict(path_ok, outside_rebuild, flatters_held_out):
 def check_heldout_draw(records, seed, query_books, control):
     """Refuse records that do not belong to this draw and control."""
     want_q = REF_BOOKS if control == "rebuild" else list(query_books)
+    cells = sorted((r["layer"], r["kv_head"]) for r in records)
+    if cells != [(L, g) for L in LAYERS for g in range(8)]:
+        raise SystemExit(
+            f"draw seed={seed} control={control} has {len(cells)} records, not one per "
+            f"(layer, KV head) over layers {LAYERS} x 8 heads"
+        )
     for r in records:
         got = (r["seed"], r["control"], r["books"], r["query_books"])
         if got != (seed, control, REF_BOOKS, want_q):
@@ -302,6 +308,20 @@ def paired_diff(cmp_a, cmp_b):
             b = cmp_b["layers"][L]["statistics"][s]["value"]
             out[L][s] = None if a is None or b is None else a - b
     return out
+
+
+def load_path_report(heldout_dir):
+    """R6a's pair_check.json and whether it passes. heldout.sh moves a failed check's
+    output into failed-pair_check-*/, which is read (and fails) when no passing copy
+    exists. None when the check has not run."""
+    d = Path(heldout_dir)
+    if (d / "pair_check.json").exists():
+        report = json.loads((d / "pair_check.json").read_text())
+        return report, path_check_ok(report)
+    failed = sorted(d.glob("failed-pair_check-*/pair_check.json"))
+    if failed:
+        return json.loads(failed[-1].read_text()), False
+    return None
 
 
 def heldout(refs, v0cmp, path_report):
@@ -432,13 +452,21 @@ def main():
     ):
         summary["xbook"] = xbook(refs, v0cmp)
         summary["R6_R7_xbook"] = summary["xbook"]["verdict"]
-    pc = HERE / "heldout" / "pair_check.json"
-    if pc.exists() and all(
+    pr = load_path_report(HERE / "heldout")
+    if pr is not None and not pr[1]:
+        # R6a failed: the plan reads nothing else.
+        summary["heldout"] = {
+            "path_check": pr[0],
+            "draws": {},
+            "verdict": heldout_verdict(False, [], []),
+        }
+        summary["R6_R7_heldout"] = summary["heldout"]["verdict"]
+    elif pr is not None and all(
         (HERE / "heldout" / d / f"{c}.jsonl").exists()
         for d in HELDOUT_DRAWS
         for c in HELDOUT_CONTROLS
     ):
-        summary["heldout"] = heldout(refs, v0cmp, json.loads(pc.read_text()))
+        summary["heldout"] = heldout(refs, v0cmp, pr[0])
         summary["R6_R7_heldout"] = summary["heldout"]["verdict"]
     (HERE / "summary.json").write_text(json.dumps(summary, indent=1) + "\n")
     print(json.dumps({k: summary[k] for k in summary if k.startswith("R")}, indent=1))

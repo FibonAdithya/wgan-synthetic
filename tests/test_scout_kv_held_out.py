@@ -76,6 +76,9 @@ def test_held_out_corpus_seeds_and_errors():
     assert not np.array_equal(
         _corpus(ref, qb, seed=3).q_id_pos, _corpus(ref, qb, seed=4).q_id_pos
     )
+    rng = np.random.default_rng([3, 1])
+    first = np.sort(rng.choice(np.arange(T - NT, T), NT // 2, replace=False))
+    assert np.array_equal(_corpus(ref, qb).q_id_pos[: NT // 2], first)
     with pytest.raises(ValueError):
         _corpus(ref, [])
     with pytest.raises(ValueError):
@@ -155,6 +158,37 @@ def test_measure_held_out_records(tmp_path):
             want_q = ref_books if name == "rebuild" else [0, 1]
             assert r["query_books"] == want_q
     assert all(r["own_book_share_top10"] == 0.0 for r in got["held_out_tail"])
+    from src.kv.controls import held_out_tail_corpus
+    from src.kv.corpus import corpus_seed
+    from src.kv.search_profile import profile_corpus
+    from src.kv.transforms import load_layer_weights
+
+    w = load_layer_weights(cap, 3)
+    h_ref = [h.float() for h in kv_gate.load_books(cap, 3, ref_books)]
+    h_q = [h.float() for h in kv_gate.load_books(cap, 3, [0, 1])]
+    for r in got["held_out_tail"]:
+        s = corpus_seed(3, r["kv_head"], 0)
+        c = held_out_tail_corpus(
+            h_ref,
+            h_q,
+            w["k_proj"],
+            w["q_proj"],
+            r["kv_head"],
+            n_sink=1,
+            n_tail=NT,
+            seed=s,
+        )
+        prof = profile_corpus(
+            c.keys,
+            c.q_ood,
+            c.q_id,
+            nlist=4,
+            hnsw_m=8,
+            ef_construction=16,
+            seed=s,
+            target=0.9,
+        )
+        assert {k: r[k] for k in prof} == json.loads(json.dumps(prof))
     real = tmp_path / "real.jsonl"
     kv_gate.measure_real(
         cap, books=ref_books, layers=[3], seed=0, out=real, n_sink=1, **_IDX

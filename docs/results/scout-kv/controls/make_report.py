@@ -219,6 +219,101 @@ def xbook_section():
     )
 
 
+# Descriptive paragraph for the held-out section, written after the run (B12).
+HELDOUT_NOTE = ""
+
+
+def heldout_section():
+    """R6a/R6/R7 (held-out plan): verdict, flags, per-layer values, paired deltas."""
+    if "heldout" not in S:
+        return ""
+    X, V = S["heldout"], S["heldout"]["verdict"]
+    if not V["path_ok"]:
+        pc = X["path_check"]
+        return (
+            "<h2>R6a, R6 and R7: held-out-book control</h2><div class='verdict'><p><b>R6a (path) FAILS:</b> "
+            f"the seed-0 rebuild did not pair with the committed reference ({pc.get('n_compared')} compared, "
+            f"missing {len(pc.get('missing', []))}, mismatched {len(pc.get('mismatched', []))}, metadata "
+            f"mismatches {len(pc.get('meta_mismatch', []))}). Per the plan nothing else is read.</p></div>"
+        )
+    draws = list(X["draws"])
+    ctl = ("rebuild", "held_out_tail")
+    short = {"hnsw_reach_k10": "reach", "hnsw_recall_k10_ef176": "recall@10", "ivf_ratio_k128": "IVF ratio"}
+    head = "".join(f"<th>{'rebuild' if c == 'rebuild' else 'held-out'} {d}</th>" for c in ctl for d in draws)
+    rows = []
+    for L in LAYERS:
+        for stat, _ in STATS[:3]:
+            ref = C["v0_best"]["layers"][L]["statistics"][stat]
+            tb = C["train_books_real"]["layers"][L]["statistics"][stat]
+            cells = "".join(
+                f'<td class="{e["status"]}">{fmt(e["value"])}</td>'
+                for c in ctl
+                for d in draws
+                for e in [X["draws"][d][c]["compare_layers"]["layers"][L]["statistics"][stat]]
+            )
+            rows.append(
+                f"<tr><td>{L}</td><td>{short[stat]}</td><td>{fmt(ref['min'])}–{fmt(ref['max'])}</td>"
+                f'<td class="{tb["status"]}">{fmt(tb["value"])}</td><td>{fmt(ref["value"])}</td>{cells}</tr>'
+            )
+    table = (
+        "<table><thead><tr><th>layer</th><th>statistic</th><th>real, 5 draws</th><th>books 0-7 alone</th>"
+        f"<th>v0</th>{head}</tr></thead><tbody>{''.join(rows)}</tbody></table>"
+    )
+    drows = []
+    for L in LAYERS:
+        for stat, _ in STATS[:3]:
+            vals = [X["draws"][d]["held_out_minus_rebuild"][L][stat] for d in draws]
+            drows.append(
+                f"<tr><td>{L}</td><td>{short[stat]}</td>" + "".join(f"<td>{fmt(v)}</td>" for v in vals) + "</tr>"
+            )
+    deltas = (
+        "<table><thead><tr><th>layer</th><th>statistic</th>"
+        + "".join(f"<th>{d}</th>" for d in draws)
+        + f"</tr></thead><tbody>{''.join(drows)}</tbody></table>"
+    )
+    flags = "".join(
+        f"<tr><td>{d}</td><td>{X['draws'][d]['seed']}</td><td>{', '.join(map(str, X['draws'][d]['query_books']))}</td>"
+        f"<td>{X['draws'][d]['rebuild']['n_outside']}</td>"
+        f"<td>{X['draws'][d]['held_out_tail']['rules']['statistics_with_2_of_3']}</td>"
+        f"<td>{'yes' if X['draws'][d]['held_out_tail']['flatters'] else 'no'}</td></tr>"
+        for d in draws
+    )
+    flags = (
+        "<table><thead><tr><th>draw</th><th>seed</th><th>held-out query books</th>"
+        "<th>rebuild: statistics outside (either way)</th><th>held-out: statistics on v0's side</th>"
+        f"<th>held-out flatters</th></tr></thead><tbody>{flags}</tbody></table>"
+    )
+    pc = X["path_check"]
+    reading = {
+        "reachable": "R7 reads <b>reachable</b>: queries from books outside the key set keep the real difficulty",
+        "not_reachable": "R7 reads <b>not reachable</b>: queries from books outside the key set are too easy",
+        "inconclusive": "R7 reads <b>inconclusive</b>",
+        None: "R7 is <b>not read</b>",
+    }[V["reading"]]
+    pcv = "n/a" if V["positive_control_valid"] is None else ("yes" if V["positive_control_valid"] else "no")
+    nflat = "" if V["n_held_out_flatter"] is None else (
+        f" held_out_tail is on v0's side in {V['n_held_out_flatter']} of 4 draws."
+    )
+    return (
+        "<h2>R6a, R6 and R7: held-out-book control</h2>"
+        "<p>The rule-grade redo of the cross-book control. Keys are exactly the reference's: all eight reference "
+        "books 12-19, built per KV head by the reference code at the reference's per-head seed. "
+        "<code>rebuild</code> is the reference corpus itself at a fresh seed (the positive control); "
+        "<code>held_out_tail</code> keeps the same keys and index seed and takes the queries from the tails of eight "
+        "books from 0-11, none of which is in the key set. Plan: "
+        "<code>docs/ai/plans/2026-10-21-scout-kv-held-out.md</code>.</p>"
+        f"<div class='verdict'><p><b>R6a (path):</b> {'passes' if V['path_ok'] else 'FAILS'}: the seed-0 rebuild "
+        f"pairs with the committed reference on {pc['n_compared']} corpora, {pc['n_exact']} exact, max own-book "
+        f"share difference {fmt(pc['max_abs_diff'], 5)}. <b>R6 (positive control valid):</b> {pcv}. "
+        f"{reading}.{nflat}</p></div>"
+        f"<div class='scroll'>{flags}</div><div class='scroll'>{table}</div>"
+        "<p class='muted'>Cell shading: orange above the real range, blue below it. "
+        "“books 0-7 alone” is <code>train_books_real</code>: keys and queries both from books 0-7, seed 0.</p>"
+        "<h3>Paired difference, held-out minus rebuild (same keys, same index seed)</h3>"
+        f"<div class='scroll'>{deltas}</div>{HELDOUT_NOTE}"
+    )
+
+
 def rules_table():
     rows = []
     for name in ("pooled_real", "pooled_real_seed1", "pooled_real_seed2", "norm_equalised", "gaussian", "train_books_real"):
@@ -303,6 +398,7 @@ def main():
         r5=r5_table(),
         ntab=neighbours_table(),
         xbook=xbook_section(),
+        heldout=heldout_section(),
         heat_lag=heatmap("lag", "Same-book lag enrichment"),
         heat_pos=heatmap("pos", "Key position enrichment"),
         distinct=(HERE / "distinct_keys.txt").read_text().replace("<", "&lt;"),
@@ -388,6 +484,7 @@ easier, not harder.</li>
 </ul>
 
 {xbook}
+{heldout}
 <h2>Neighbour positions (all 12 layers, 96 corpora)</h2>
 <p>Each corpus is the one <code>reference/seed0.jsonl</code> profiled: own-book shares matched on all 96 corpora, 92 exactly,
 largest difference 3.9e-5 (<code>check_pairing.py</code>). Medians over the 8 heads per layer:</p>

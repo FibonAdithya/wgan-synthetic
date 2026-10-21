@@ -604,6 +604,18 @@ def test_measure_run_layers_rejects_a_non_global_layer(tmp_path):
     assert not out.exists()
 
 
+def test_measure_run_layers_rejects_duplicates_and_empty(tmp_path):
+    """Catches a repeated layer measured twice (duplicate records) and an empty
+    list that writes nothing and exits cleanly."""
+    run_dir, cap, _ = _tiny_run(tmp_path)
+    out = tmp_path / "o.jsonl"
+    with pytest.raises(ValueError, match="more than once"):
+        kv_gate.measure_run(cap, {3: run_dir}, 0, out, layers=[3, 3])
+    with pytest.raises(ValueError, match="empty"):
+        kv_gate.measure_run(cap, {3: run_dir}, 0, out, layers=[])
+    assert not out.exists()
+
+
 def test_measure_run_without_layers_still_needs_every_global_layer(tmp_path):
     """Catches the default changing to 'whatever was supplied'."""
     run_dir, cap, _ = _tiny_run(tmp_path)

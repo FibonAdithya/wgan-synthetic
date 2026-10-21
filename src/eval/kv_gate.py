@@ -515,6 +515,11 @@ def measure_run(
             )
     else:
         todo = list(layers)
+        if not todo:
+            raise ValueError("layers is empty")
+        repeated = sorted({L for L in todo if todo.count(L) > 1})
+        if repeated:
+            raise ValueError(f"layers {repeated} appear more than once")
         for L in todo:
             if L not in GLOBAL_LAYERS:
                 raise ValueError(f"layer {L} is not a global layer {GLOBAL_LAYERS}")

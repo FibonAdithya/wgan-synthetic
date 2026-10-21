@@ -79,7 +79,10 @@ def _query_set(c: Corpus, q, q_pos, q_book, k: int, n_hub: int) -> dict:
         base_recent[rows] = (base_lags <= RECENT_LAG).mean(axis=1)
 
     counts = np.bincount(gt.ravel(), minlength=len(key_pos))
-    hubs = np.argsort(-counts, kind="stable")[:n_hub]
+    n_distinct = int((counts > 0).sum())
+    # Hubs are the n_hub most-used keys, but never keys no query used: when the
+    # top-k lists use fewer than n_hub keys, every used key is a hub.
+    hubs = np.argsort(-counts, kind="stable")[: min(n_hub, n_distinct)]
     n_same = int(same.sum())
     return {
         "own_book_share": float(same.mean()),
@@ -93,6 +96,7 @@ def _query_set(c: Corpus, q, q_pos, q_book, k: int, n_hub: int) -> dict:
         "base_share_lag_le_1024": float(base_recent.mean()),
         "share_pos_lt_16": float((slot_pos < EARLY_POS).mean()),
         "base_share_pos_lt_16": float((key_pos < EARLY_POS).mean()),
+        "n_distinct_keys": n_distinct,
         "hub_slot_share": float(np.sort(counts)[::-1][:n_hub].sum() / gt.size),
         "hub_median_pos": float(np.median(key_pos[hubs])),
         "key_median_pos": float(np.median(key_pos)),

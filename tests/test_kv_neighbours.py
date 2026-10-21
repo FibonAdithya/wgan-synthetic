@@ -128,6 +128,36 @@ def test_hubs_are_counted_over_slots_and_located_by_position():
     assert r["ood"]["key_median_pos"] == 75.5
 
 
+def test_hubs_exclude_unused_keys_when_few_keys_are_used():
+    """2,000 keys (n_hub 20) but every top-10 is the same 10 keys at positions
+    1991-2000. Catches the hub set padded with never-used keys in index order
+    (median 1000.5 over positions 1-10 and 1991-2000), and
+    n_distinct_keys counted over all keys or over slots."""
+    from src.kv.neighbours import neighbour_positions
+
+    rng = np.random.default_rng(0)
+    keys = np.zeros((2000, 2), np.float32)
+    keys[:, 1] = rng.normal(size=2000)
+    keys[-10:, 0] = 1000.0 + np.arange(10)
+    q = np.tile(np.array([[1.0, 0.0]], np.float32), (5, 1))
+    c = Corpus(
+        keys=keys,
+        q_ood=q,
+        q_id=q.copy(),
+        key_book=np.zeros(2000, int),
+        q_book=np.zeros(5, int),
+        key_pos=1 + np.arange(2000),
+        q_pos=np.full(5, 3000),
+        q_id_pos=np.full(5, 3000),
+        q_id_book=np.zeros(5, int),
+    )
+    r = neighbour_positions(c)
+    assert r["n_hub"] == 20
+    assert r["ood"]["n_distinct_keys"] == 10
+    assert r["ood"]["hub_slot_share"] == 1.0
+    assert r["ood"]["hub_median_pos"] == 1995.5
+
+
 def _random_corpus(n_keys, n_q, seed=0):
     rng = np.random.default_rng(seed)
     q = rng.normal(size=(n_q, 4)).astype(np.float32)

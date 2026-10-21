@@ -138,6 +138,7 @@ def per_layer_neighbours(neighbours):
         by[r["layer"]].append(r)
 
     def med(xs):
+        # .get: n_distinct_keys is absent from records made before it existed.
         xs = [x for x in xs if x is not None]
         return float(np.median(xs)) if xs else None
 
@@ -145,7 +146,7 @@ def per_layer_neighbours(neighbours):
     for L, rs in sorted(by.items()):
         out[L] = {
             q: {
-                f: med([r[q][f] for r in rs])
+                f: med([r[q].get(f) for r in rs])
                 for f in (
                     "own_book_share",
                     "share_lag_le_1024",
@@ -153,6 +154,7 @@ def per_layer_neighbours(neighbours):
                     "share_pos_lt_16",
                     "base_share_pos_lt_16",
                     "hub_slot_share",
+                    "n_distinct_keys",
                     "hub_median_pos",
                     "key_median_pos",
                 )
@@ -195,8 +197,13 @@ def v0_match(v0cmp, subcmp):
         for s, (kind, t) in tol.items():
             a = v0cmp["layers"][L]["statistics"][s]
             b = subcmp["layers"][L]["statistics"][s]
-            d = abs(a["value"] - b["value"])
-            within = d <= (t * abs(a["value"]) if kind == "rel" else t + 1e-12)
+            if a["value"] is None or b["value"] is None:
+                # A null statistic matches only a null statistic.
+                within = a["value"] is None and b["value"] is None
+            else:
+                d = abs(a["value"] - b["value"])
+                lim = t * abs(a["value"]) if kind == "rel" else t
+                within = d <= lim + 1e-12
             same = a["status"] == b["status"]
             ok &= within and same
             cells.append(
@@ -212,6 +219,22 @@ def v0_match(v0cmp, subcmp):
     return {"match": bool(ok), "cells": cells}
 
 
+_CANONICAL = None
+
+
+def _compare(records, refs):
+    """compare_layers under the gate's canonical conditions; refuses records whose
+    conditions differ, so no summary is built on mismatched measurements."""
+    global _CANONICAL
+    if _CANONICAL is None:
+        _CANONICAL = kv_gate.load_kv_gate(kv_gate.GATES_FILE)["canonical"]
+    out = kv_gate.compare_layers(records, refs, _CANONICAL)
+    if out["condition_mismatches"]:
+        raise SystemExit(f"condition mismatches: {out['condition_mismatches'][:3]}")
+    del out["condition_mismatches"]
+    return out
+
+
 def main():
     refs = [_read(RES / f"reference/seed{i}.jsonl") for i in range(5)]
     nb = _read(HERE / "neighbours.jsonl")
@@ -219,7 +242,7 @@ def main():
         "neighbours_per_layer": per_layer_neighbours(nb),
         "r5": r5(nb, refs[0]),
     }
-    real_per_layer = kv_gate.compare_layers(_read(RES / "v0/best.jsonl"), refs)
+    real_per_layer = _compare(_read(RES / "v0/best.jsonl"), refs)
     summary["real_per_layer_hardness"] = {
         L: {
             s: {"min": v["min"], "max": v["max"], "mean": v["mean"]}
@@ -228,12 +251,12 @@ def main():
         for L, e in real_per_layer["layers"].items()
     }
     v0_sub = [r for r in _read(RES / "v0/best.jsonl") if r["layer"] in LAYERS]
-    v0cmp = kv_gate.compare_layers(v0_sub, refs)
+    v0cmp = _compare(v0_sub, refs)
     compare = {}
     for name in CONTROLS:
         p = HERE / f"{name}.jsonl"
         if p.exists():
-            compare[name] = kv_gate.compare_layers(_read(p), refs)
+            compare[name] = _compare(_read(p), refs)
     summary["compare_layers"] = {"v0_best": v0cmp, **compare}
     if compare:
         summary["rules"] = rules(compare, v0cmp)
@@ -253,7 +276,7 @@ def main():
             )
     p = HERE / "v0_best_subset.jsonl"
     if p.exists():
-        summary["v0_remeasure"] = v0_match(v0cmp, kv_gate.compare_layers(_read(p), refs))
+        summary["v0_remeasure"] = v0_match(v0cmp, _compare(_read(p), refs))
     (HERE / "summary.json").write_text(json.dumps(summary, indent=1) + "\n")
     print(json.dumps({k: summary[k] for k in summary if k.startswith("R")}, indent=1))
 

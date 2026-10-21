@@ -7,10 +7,13 @@ queries the model would really issue. See docs/datasets/scout_kv.md.
 
     python -m src.eval.kv_gate measure-real --capture-dir D --books 12-19 --out real.jsonl
     python -m src.eval.kv_gate measure-run  --capture-dir D --run-dir 3=runs/a ... --out run.jsonl
+    python -m src.eval.kv_gate measure-run  ... --layers 11,19,43   # a subset, for controls
+    python -m src.eval.kv_gate compare-layers --records run.jsonl [--reference ref.jsonl ...]
     python -m src.eval.kv_gate check --records run.jsonl
 
 `check` prints the JSON report on stdout and exits 0 (pass), 1 (fail) or
-2 (unset: at least one band is null).
+2 (unset: at least one band is null). `compare-layers` reports each layer's
+statistics against that layer's real range; `check` refuses subset records.
 """
 
 from __future__ import annotations

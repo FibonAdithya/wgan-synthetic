@@ -1,0 +1,4 @@
+# Output of distinct_keys.py on tig-gpu-alt, 2026-10-19 (MEASURED). Corpus = reference seed 0, KV head 0.
+3 0 distinct_keys_in_top10 11 of 31736 | top1%share 1.0 | keynorm pct of used keys (median) 0.6619611797327956 | corr(norm,count) over all keys 0.009373115565246089
+19 0 distinct_keys_in_top10 673 of 31736 | top1%share 0.989453125 | keynorm pct of used keys (median) 0.8119170657927905 | corr(norm,count) over all keys 0.024379678081239455
+43 0 distinct_keys_in_top10 199 of 31736 | top1%share 1.0 | keynorm pct of used keys (median) 0.9020985631459542 | corr(norm,count) over all keys -0.018454149593157616

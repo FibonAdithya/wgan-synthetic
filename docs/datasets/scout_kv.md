@@ -17,6 +17,7 @@ difficulty (`src/eval/kv_gate.py::evaluate`). The four intrinsic statistics of
 |---|---|
 | Ladder | `v0` trained for all 12 global layers (`docs/results/scout-kv/training/`); fails the gate on four of five statistics (`docs/results/scout-kv/v0/report.html`) |
 | Gate bands | **set** 2026-10-19 by the owner, as a tolerance around the five-draw real reference; see `## Gate bands` |
+| Gate question | **open** since 2026-10-19: real `h` split the way synthetic corpora are split is already outside the real range on v0's side (R1); v1 design waits on it. See `## Controls: why v0 is too easy` |
 | Capture | lives only on the GPU box (`tig-gpu-alt` since 2026-10-19), at `/workspace/kv/capture`. It is not in the repo and not fetchable with `src/data/fetch.py` |
 
 ## What a sample is
@@ -33,13 +34,14 @@ generator never sees keys or queries.
 
 ## Commands
 
-All three `kv_gate` subcommands run on the GPU box, where the capture lives, except
-`check`, which needs only a records file.
+The `measure-real` and `measure-run` subcommands run on the GPU box, where the capture lives.
+`check` and `compare-layers` need only a records file.
 
 ```
 python -m src.eval.kv_gate measure-real --capture-dir D --out real.jsonl [--books 12-19] [--layers 3,7,...] [--n-sink 1]
 python -m src.eval.kv_gate measure-run  --capture-dir D --run-dir 3=runs/scout_kv/v0/L03 ... --out run.jsonl \
-    [--checkpoint-name best_generator.pt] [--ema] [--n-keys 31736]
+    [--checkpoint-name best_generator.pt] [--ema] [--n-keys 31736] [--layers 11,19,43]
+python -m src.eval.kv_gate compare-layers --records run.jsonl [--reference ref.jsonl ...]
 python -m src.eval.kv_gate check --records run.jsonl [--gate-file gates/scout_kv.yaml]
 ```
 
@@ -49,6 +51,19 @@ python -m src.eval.kv_gate check --records run.jsonl [--gate-file gates/scout_kv
 - `measure-run` needs one `--run-dir LAYER=PATH` for every one of the 12 global layers
   and refuses to start otherwise. `--ema` measures the checkpoint under its stored EMA
   weights; `best_generator.pt` already holds them, so the flag changes nothing there.
+  With `--layers 11,19,43` it measures only those layers. Each must be global and have a
+  run dir, and the list must be non-empty with no repeats. All of this is checked before the
+  first measurement. That is for control experiments:
+  `check` still fails such records, because the gate needs all 96 corpora.
+- `compare-layers` pools each layer's records separately and reports, per statistic, the
+  min, max and mean over the reference draws, the candidate's value, and whether it is
+  `inside` (bounds inclusive), `above`, `below` or `none`. `--reference` is repeatable and
+  defaults to `docs/results/scout-kv/reference/seed0.jsonl` to `seed4.jsonl` under the repo
+  root. Each layer entry also gives its `n_reference_sets`. The command loads the gate
+  file's `canonical` block. The top-level `condition_mismatches` list in the output names
+  records whose counts (`n_keys`, `n_q_ood`, `n_q_id`, `n_sink`, `n_tail`) or index
+  conditions differ from it. The list is reported, not enforced. It prints JSON and exits 0,
+  or exits 1 on an unreadable input or a missing or malformed gate file.
 - Both measuring commands also take `--n-tail` (1024), `--nlist` (256), `--hnsw-m` (48),
   `--ef-construction` (500), `--threads` (15) and `--seed` (0). The first four defaults
   are locked conditions, and `check` fails records measured under other values.
@@ -153,7 +168,26 @@ the 4 single-book profiles. All numbers are MEASURED, from
 
 `data.metric: l2` only governs the in-training selector on `h`; the gate searches by inner product.
 
+## Controls: why v0 is too easy
+
+The controls plan (`docs/ai/plans/2026-10-19-scout-kv-controls.md`) measured real and
+synthetic-like control sets on layers 11, 19 and 43 against the five-draw real range.
+The write-up is `docs/results/scout-kv/controls/README.md` (figures in `report.html`,
+every number in `summary.json`). All values below are MEASURED, from `summary.json`.
+
+- **R1 fires at seeds 0, 1 and 2.** `pooled_real` is real `h` from books 12-19 with keys
+  and queries drawn from one pool, as synthetic corpora are built. It is already outside
+  the real range on v0's side. At L43 its IVF ratio is 1.12 to 1.15 against real 2.97 to
+  3.48 (v0 0.76), and its recall@10 at ef176 is 0.685 to 0.770 against real 0.574 to
+  0.637 (v0 0.824). Much of the gap comes from the reference taking queries from the
+  last 1,024 positions of each book, which an unconditional generator cannot reproduce.
+- The training books are not easier than the reference books (R2 does not fire).
+- The plan's hard stop applies: no v1 design until the gate question is settled. The next step is a cross-book
+  control: keys from the bodies of some books, queries from the tails of others.
+
 ## Not yet done
 
+- The gate question above: keep the end-of-book reference and condition the generator on
+  position, or re-base the reference on pooled sampling.
 - A generator that passes the gate. v0 fails it (see `## Gate bands`).
 - Whether the in-training selector (`select_on: gate`, LID and contrast on `h`, holdout 2% = 7,864 rows) picks good checkpoints under the search-difficulty gate. In v0 the best and final checkpoints differ only at layers 7 and 11, and both fail the gate on the same four statistics, so v0 does not settle it.

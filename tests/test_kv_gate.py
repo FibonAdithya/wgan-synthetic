@@ -470,3 +470,245 @@ def test_measure_run_layer_ema_without_ema_params_raises(tmp_path):
         kv_gate.measure_run_layer(
             run_dir, cap, 3, checkpoint_name=p.name, ema=True, **_TINY
         )
+
+
+def _spy_profiles(monkeypatch):
+    """Record (keys, q_ood, q_id, seed) for every profile_corpus call."""
+    seen = []
+    real = kv_gate.profile_corpus
+
+    def spy(keys, q_ood, q_id, **k):
+        seen.append((np.array(keys), np.array(q_ood), np.array(q_id), k["seed"]))
+        return real(keys, q_ood, q_id, **k)
+
+    monkeypatch.setattr(kv_gate, "profile_corpus", spy)
+    return seen
+
+
+def _fixed_h(n_keys=200, n_tail=16):
+    import torch
+
+    g = torch.Generator().manual_seed(123)
+    return (
+        torch.randn(n_keys, 16, generator=g),
+        torch.randn(n_tail, 16, generator=g),
+        torch.randn(n_tail, 16, generator=g),
+    )
+
+
+def test_measure_h_layer_profiles_each_head_of_the_supplied_h(tmp_path, monkeypatch):
+    """Catches a changed seed formula or head order, keys/queries built from the
+    wrong tensor (h_query and h_id swapped), source or extra ignored, and extra
+    merged before the fixed fields."""
+    from src.kv.transforms import head_keys, head_queries, load_layer_weights
+
+    _, cap, _ = _tiny_run(tmp_path)
+    h_keys, h_query, h_id = _fixed_h()
+    seen = _spy_profiles(monkeypatch)
+    recs = kv_gate.measure_h_layer(
+        h_keys,
+        h_query,
+        h_id,
+        cap,
+        3,
+        source="pooled_real",
+        seed=2,
+        nlist=4,
+        hnsw_m=8,
+        ef_construction=16,
+        extra={"control": "x", "books": [12, 13]},
+    )
+    w = load_layer_weights(cap, 3)
+    wk, wq = w["k_proj"].float(), w["q_proj"].float()
+    assert len(seen) == 2
+    assert [s[3] for s in seen] == [1009 * 3 + g + 7919 * 2 for g in (0, 1)]
+    for g, (keys, q_ood, q_id, _) in enumerate(seen):
+        np.testing.assert_allclose(keys, head_keys(h_keys, wk, g).numpy(), rtol=1e-6)
+        np.testing.assert_allclose(
+            q_ood, head_queries(h_query, wq, g, 5).numpy(), rtol=1e-6
+        )
+        np.testing.assert_allclose(q_id, head_keys(h_id, wk, g).numpy(), rtol=1e-6)
+    assert [r["kv_head"] for r in recs] == [0, 1]
+    for r in recs:
+        assert r["source"] == "pooled_real" and r["control"] == "x"
+        assert r["books"] == [12, 13] and r["n_tail"] == len(h_query)
+
+
+def test_measure_run_layer_records_keep_the_committed_fields(tmp_path):
+    """Catches a field dropped, renamed or reordered by the refactor, which
+    would make new v0 measurements incomparable with the committed ones."""
+    from pathlib import Path
+
+    run_dir, cap, _ = _tiny_run(tmp_path)
+    first = Path(__file__).resolve().parents[1] / "docs/results/scout-kv/v0/best.jsonl"
+    committed = json.loads(first.read_text(encoding="utf-8").splitlines()[0])
+    recs = kv_gate.measure_run_layer(run_dir, cap, 3, **_TINY)
+    assert set(recs[0]) == set(committed)
+    assert list(recs[0]) == list(committed)
+
+
+def test_measure_h_layer_refuses_mismatched_query_counts(tmp_path):
+    _, cap, _ = _tiny_run(tmp_path)
+    h_keys, h_query, h_id = _fixed_h()
+    with pytest.raises(ValueError, match="h_id"):
+        kv_gate.measure_h_layer(
+            h_keys,
+            h_query,
+            h_id[:-1],
+            cap,
+            3,
+            source="pooled_real",
+            seed=0,
+            nlist=4,
+            hnsw_m=8,
+            ef_construction=16,
+        )
+
+
+# --- measure-run --layers and compare-layers --------------------------------
+
+
+def _out_layers(out):
+    return [json.loads(line)["layer"] for line in out.read_text().splitlines() if line]
+
+
+def test_measure_run_layers_measures_only_the_requested_layers(tmp_path):
+    """Catches `layers` being ignored, so every supplied run dir is measured."""
+    run_dir, cap, _ = _tiny_run(tmp_path)
+    out = tmp_path / "o.jsonl"
+    kv_gate.measure_run(
+        cap, {3: run_dir, 7: run_dir}, 0, out, layers=[3],
+        n_keys=200, n_tail=16, nlist=4, hnsw_m=8, ef_construction=16,
+    )  # fmt: skip
+    recs = [json.loads(line) for line in out.read_text().splitlines() if line]
+    assert [(r["layer"], r["kv_head"]) for r in recs] == [(3, 0), (3, 1)]
+
+
+def test_measure_run_layers_missing_run_dir_raises_before_writing(tmp_path):
+    """Catches a missing run dir silently skipped, and validation that runs after
+    layer 3 has already been written."""
+    run_dir, cap, _ = _tiny_run(tmp_path)
+    out = tmp_path / "o.jsonl"
+    with pytest.raises(ValueError, match="7"):
+        kv_gate.measure_run(cap, {3: run_dir}, 0, out, layers=[3, 7])
+    assert not out.exists()
+
+
+def test_measure_run_layers_rejects_a_non_global_layer(tmp_path):
+    """Catches a non-global layer being accepted. A run dir is supplied for 4 so
+    the missing-run-dir check cannot raise instead."""
+    run_dir, cap, _ = _tiny_run(tmp_path)
+    out = tmp_path / "o.jsonl"
+    with pytest.raises(ValueError, match="4.*not a global layer"):
+        kv_gate.measure_run(cap, {3: run_dir, 4: run_dir}, 0, out, layers=[4])
+    assert not out.exists()
+
+
+def test_measure_run_layers_rejects_duplicates_and_empty(tmp_path):
+    """Catches a repeated layer measured twice (duplicate records) and an empty
+    list that writes nothing and exits cleanly."""
+    run_dir, cap, _ = _tiny_run(tmp_path)
+    out = tmp_path / "o.jsonl"
+    with pytest.raises(ValueError, match="more than once"):
+        kv_gate.measure_run(cap, {3: run_dir}, 0, out, layers=[3, 3])
+    with pytest.raises(ValueError, match="empty"):
+        kv_gate.measure_run(cap, {3: run_dir}, 0, out, layers=[])
+    assert not out.exists()
+
+
+def test_measure_run_without_layers_still_needs_every_global_layer(tmp_path):
+    """Catches the default changing to 'whatever was supplied'."""
+    run_dir, cap, _ = _tiny_run(tmp_path)
+    with pytest.raises(ValueError, match="every global layer"):
+        kv_gate.measure_run(cap, {3: run_dir}, 0, tmp_path / "o.jsonl")
+
+
+def test_check_refuses_the_committed_three_layer_subset():
+    """Catches a subset passing `check`."""
+    recs = [r for r in _committed("v0/best") if r["layer"] in (11, 19, 43)]
+    assert len(recs) == 24
+    rep = kv_gate.evaluate(recs, kv_gate.load_kv_gate(GATE))
+    assert rep["verdict"] == "fail"
+    assert any("need 96 records" in r and "(3, 0)" in r for r in rep["reasons"])
+
+
+def _refs():
+    return [_committed(f"reference/seed{s}") for s in range(5)]
+
+
+def test_compare_layers_on_committed_v0_statuses():
+    """Catches swapped above/below and pooling over all layers instead of per layer."""
+    res = kv_gate.compare_layers(_committed("v0/best"), _refs())
+    assert res["n_reference_sets"] == 5
+    assert sorted(res["layers"]) == list(kv_gate.GLOBAL_LAYERS)
+    assert all(v["n_records"] == 8 for v in res["layers"].values())
+    want = {
+        (11, "hnsw_reach_k10"): "above",
+        (11, "ivf_ratio_k128"): "below",
+        (19, "hnsw_recall_k10_ef176_id"): "below",
+        (43, "ivf_ratio_k128"): "below",
+        (43, "hnsw_recall_k10_ef176"): "above",
+        (11, "ivf_recall_k128_np24"): "above",
+        (19, "ivf_recall_k128_np24"): "below",
+    }
+    for (L, stat), status in want.items():
+        assert res["layers"][L]["statistics"][stat]["status"] == status, (L, stat)
+    e = res["layers"][11]["statistics"]["hnsw_reach_k10"]
+    assert set(e) >= {"min", "max", "mean", "value", "status"}
+
+
+def test_compare_layers_bounds_are_inclusive_and_none_is_none():
+    """Catches exclusive bounds on either side, and a None compared as a number."""
+    refs = [_full(rec10=0.8), _full(rec10=0.9)]
+    for v in (0.9, 0.8):
+        res = kv_gate.compare_layers(_full(rec10=v), refs)
+        e = res["layers"][3]["statistics"]["hnsw_recall_k10_ef176"]
+        assert e["status"] == "inside", v
+    res = kv_gate.compare_layers(_full(rec10=0.95), refs)
+    assert res["layers"][3]["statistics"]["hnsw_recall_k10_ef176"]["status"] == "above"
+    res = kv_gate.compare_layers(_full(rec10=0.75), refs)
+    assert res["layers"][3]["statistics"]["hnsw_recall_k10_ef176"]["status"] == "below"
+    res = kv_gate.compare_layers(_full(ivf_o=None, ivf_i=None), refs)
+    e = res["layers"][3]["statistics"]["ivf_ratio_k128"]
+    assert e["value"] is None and e["status"] == "none"
+
+
+def test_cli_compare_layers_resolves_default_references_from_the_repo_root(tmp_path):
+    """Catches default references resolved against the working directory."""
+    import os
+
+    env = dict(os.environ, PYTHONPATH=str(GATE.parents[1]))
+    p = subprocess.run(
+        [
+            sys.executable, "-m", "src.eval.kv_gate", "compare-layers",
+            "--records", str(RESULTS / "v0/best.jsonl"),
+        ],  # fmt: skip
+        capture_output=True, text=True, cwd=tmp_path, env=env,
+    )  # fmt: skip
+    assert p.returncode == 0, p.stderr
+    out = json.loads(p.stdout)
+    assert out["n_reference_sets"] == 5
+    assert sorted(out["layers"], key=int) == [str(L) for L in kv_gate.GLOBAL_LAYERS]
+
+
+def test_compare_layers_reports_condition_mismatches():
+    """Catches condition mismatches being silently ignored by compare-layers."""
+    canonical = kv_gate.load_kv_gate(kv_gate.GATES_FILE)["canonical"]
+    refs = [_full()]
+    ok = kv_gate.compare_layers(_full(), refs, canonical)
+    assert ok["condition_mismatches"] == []
+    R = _full()
+    R[4]["n_keys"] = 100
+    bad = kv_gate.compare_layers(R, refs, canonical)
+    assert bad["condition_mismatches"]
+    assert any("n_keys" in m for m in bad["condition_mismatches"])
+
+
+def test_compare_layers_counts_reference_sets_per_layer():
+    """Catches the per-layer count being copied from the global count."""
+    full = _full()
+    partial = [r for r in _full() if r["layer"] != 3]
+    rep = kv_gate.compare_layers(_full(), [full, partial])
+    assert rep["n_reference_sets"] == 2
+    assert rep["layers"][3]["n_reference_sets"] == 1
+    assert all(v["n_reference_sets"] == 2 for k, v in rep["layers"].items() if k != 3)

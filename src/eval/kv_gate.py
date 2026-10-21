@@ -7,10 +7,13 @@ queries the model would really issue. See docs/datasets/scout_kv.md.
 
     python -m src.eval.kv_gate measure-real --capture-dir D --books 12-19 --out real.jsonl
     python -m src.eval.kv_gate measure-run  --capture-dir D --run-dir 3=runs/a ... --out run.jsonl
+    python -m src.eval.kv_gate measure-run  ... --layers 11,19,43   # a subset, for controls
+    python -m src.eval.kv_gate compare-layers --records run.jsonl [--reference ref.jsonl ...]
     python -m src.eval.kv_gate check --records run.jsonl
 
 `check` prints the JSON report on stdout and exits 0 (pass), 1 (fail) or
-2 (unset: at least one band is null).
+2 (unset: at least one band is null). `compare-layers` reports each layer's
+statistics against that layer's real range; `check` refuses subset records.
 """
 
 from __future__ import annotations
@@ -29,7 +32,12 @@ import yaml
 from src.data.kv_capture import GLOBAL_LAYERS, h_path, read_safetensor
 from src.eval import check_gate
 from src.eval.check_gate import EXIT_FAIL, EXIT_PASS, EXIT_UNSET, GateError
-from src.kv.corpus import mixed_real_corpus, real_sizes, synthetic_corpus
+from src.kv.corpus import (
+    corpus_seed,
+    mixed_real_corpus,
+    real_sizes,
+    synthetic_corpus,
+)
 from src.kv.search_profile import conditions, profile_corpus
 from src.kv.transforms import HEAD_DIM, load_layer_weights
 
@@ -147,6 +155,11 @@ def _condition_failures(records: list[dict], canonical: dict) -> list[str]:
             f"need {canonical['n_corpora']} records with distinct (layer, kv_head) covering "
             f"GLOBAL_LAYERS x 8; got {len(records)}, duplicates {dup}, missing {missing}"
         )
+    return reasons + _record_condition_failures(records, canonical)
+
+
+def _record_condition_failures(records: list[dict], canonical: dict) -> list[str]:
+    reasons = []
     for r in records:
         who = f"record (layer {r.get('layer')}, kv_head {r.get('kv_head')})"
         for key in ("n_keys", "n_q_ood", "n_q_id", "n_sink", "n_tail"):
@@ -237,7 +250,7 @@ def measure_real(
         n_keys, n_q, n_id = real_sizes(h_books[0].shape[0], len(books), n_sink, n_tail)
         for g in range(wk.shape[0] // HEAD_DIM):
             t0 = time.time()
-            s = 1009 * layer + g + 7919 * seed
+            s = corpus_seed(layer, g, seed)
             c = mixed_real_corpus(
                 h_books, wk, wq, g, n_sink=n_sink, n_tail=n_tail, seed=s
             )
@@ -341,6 +354,88 @@ def synthetic_h(
     return h[:n_keys], h[n_keys : n_keys + n_tail], h[n_keys + n_tail :], weights
 
 
+def measure_h_layer(
+    h_keys,
+    h_query,
+    h_id,
+    capture_dir,
+    layer,
+    *,
+    source,
+    seed,
+    nlist,
+    hnsw_m,
+    ef_construction,
+    extra=None,
+) -> list[dict]:
+    """Profile one layer of any supplied h: one record per KV head.
+
+    n_tail is len(h_query); h_id must have the same length. `extra` is merged
+    into each record after the fixed fields, so it can replace `books`. Callers
+    set the faiss thread count.
+    """
+    n_tail = len(h_query)
+    if len(h_id) != n_tail:
+        raise ValueError(f"h_id has {len(h_id)} rows but h_query has {n_tail}")
+    dev = h_keys.device
+    w = load_layer_weights(capture_dir, layer)
+    wk, wq = w["k_proj"].to(dev).float(), w["q_proj"].to(dev).float()
+    recs = []
+    for g in range(wk.shape[0] // HEAD_DIM):
+        t0 = time.time()
+        s = corpus_seed(layer, g, seed)
+        c = synthetic_corpus(h_keys, h_query, h_id, wk, wq, g)
+        prof = profile_corpus(
+            c.keys,
+            c.q_ood,
+            c.q_id,
+            nlist=nlist,
+            hnsw_m=hnsw_m,
+            ef_construction=ef_construction,
+            seed=s,
+            target=TARGET,
+        )
+        rec = {
+            "layer": layer,
+            "kv_head": g,
+            "source": source,
+            "seed": seed,
+            "books": [],
+            "n_keys": len(c.keys),
+            "n_q_ood": len(c.q_ood),
+            "n_q_id": len(c.q_id),
+            # Synthetic corpora have no sink; n_sink records the reference
+            # condition they are compared under, not a property of h.
+            "n_sink": 1,
+            "n_tail": n_tail,
+            "conditions": conditions(nlist, hnsw_m, ef_construction, TARGET),
+            **prof,
+            "seconds": round(time.time() - t0, 1),
+        }
+        rec.update(extra or {})
+        recs.append(rec)
+    return recs
+
+
+# Field order of the committed v0 records; kept so new measurements diff cleanly.
+_RUN_RECORD_ORDER = (
+    "layer",
+    "kv_head",
+    "source",
+    "seed",
+    "books",
+    "run_dir",
+    "n_keys",
+    "n_q_ood",
+    "n_q_id",
+    "n_sink",
+    "n_tail",
+    "checkpoint",
+    "generator_weights",
+    "conditions",
+)
+
+
 def measure_run_layer(
     run_dir,
     capture_dir,
@@ -356,8 +451,6 @@ def measure_run_layer(
     ema=False,
 ) -> list[dict]:
     """Profile one layer of a trained run: one record per KV head."""
-    run_dir = Path(run_dir)
-    dev = _device()
     h_keys, h_query, h_id, weights = synthetic_h(
         run_dir,
         layer,
@@ -367,46 +460,30 @@ def measure_run_layer(
         checkpoint_name=checkpoint_name,
         ema=ema,
     )
-    w = load_layer_weights(capture_dir, layer)
-    wk, wq = w["k_proj"].to(dev).float(), w["q_proj"].to(dev).float()
-    recs = []
-    for g in range(wk.shape[0] // HEAD_DIM):
-        t0 = time.time()
-        s = 1009 * layer + g + 7919 * seed
-        c = synthetic_corpus(h_keys, h_query, h_id, wk, wq, g)
-        prof = profile_corpus(
-            c.keys,
-            c.q_ood,
-            c.q_id,
-            nlist=nlist,
-            hnsw_m=hnsw_m,
-            ef_construction=ef_construction,
-            seed=s,
-            target=TARGET,
-        )
-        recs.append(
-            {
-                "layer": layer,
-                "kv_head": g,
-                "source": "synthetic",
-                "seed": seed,
-                "books": [],
-                "run_dir": str(run_dir),
-                "n_keys": len(c.keys),
-                "n_q_ood": len(c.q_ood),
-                "n_q_id": len(c.q_id),
-                # Synthetic corpora have no sink; n_sink records the reference
-                # condition they are compared under, not a property of h.
-                "n_sink": 1,
-                "n_tail": n_tail,
-                "checkpoint": checkpoint_name,
-                "generator_weights": weights,
-                "conditions": conditions(nlist, hnsw_m, ef_construction, TARGET),
-                **prof,
-                "seconds": round(time.time() - t0, 1),
-            }
-        )
-    return recs
+    recs = measure_h_layer(
+        h_keys,
+        h_query,
+        h_id,
+        capture_dir,
+        layer,
+        source="synthetic",
+        seed=seed,
+        nlist=nlist,
+        hnsw_m=hnsw_m,
+        ef_construction=ef_construction,
+        extra={
+            "run_dir": str(Path(run_dir)),
+            "checkpoint": checkpoint_name,
+            "generator_weights": weights,
+        },
+    )
+    return [
+        {
+            **{k: r[k] for k in _RUN_RECORD_ORDER},
+            **{k: v for k, v in r.items() if k not in _RUN_RECORD_ORDER},
+        }
+        for r in recs
+    ]
 
 
 def measure_run(
@@ -423,19 +500,37 @@ def measure_run(
     threads=15,
     checkpoint_name="best_generator.pt",
     ema=False,
+    layers=None,
 ) -> None:
+    """Measure generator runs. `layers=None` needs and measures all 12 global
+    layers. A subset is for control experiments; `check` still refuses its records."""
     import faiss
 
     out = Path(out)
     if out.exists():
         raise FileExistsError(f"{out} exists; refusing to append duplicate records")
-    missing = [L for L in GLOBAL_LAYERS if L not in run_dirs]
-    if missing:
-        raise ValueError(
-            f"measure-run needs a run dir for every global layer; missing {missing}"
-        )
+    if layers is None:
+        todo = list(GLOBAL_LAYERS)
+        missing = [L for L in todo if L not in run_dirs]
+        if missing:
+            raise ValueError(
+                f"measure-run needs a run dir for every global layer; missing {missing}"
+            )
+    else:
+        todo = list(layers)
+        if not todo:
+            raise ValueError("layers is empty")
+        repeated = sorted({L for L in todo if todo.count(L) > 1})
+        if repeated:
+            raise ValueError(f"layers {repeated} appear more than once")
+        for L in todo:
+            if L not in GLOBAL_LAYERS:
+                raise ValueError(f"layer {L} is not a global layer {GLOBAL_LAYERS}")
+        missing = [L for L in todo if L not in run_dirs]
+        if missing:
+            raise ValueError(f"measure-run has no run dir for layers {missing}")
     faiss.omp_set_num_threads(threads)
-    for layer in GLOBAL_LAYERS:
+    for layer in todo:
         for rec in measure_run_layer(
             run_dirs[layer],
             capture_dir,
@@ -451,6 +546,61 @@ def measure_run(
         ):
             _append(out, rec)
             print(layer, rec["kv_head"], rec["seconds"], "s", flush=True)
+
+
+def compare_layers(
+    records: list[dict], references: list[list[dict]], canonical: dict | None = None
+) -> dict:
+    """Per layer present in `records`, each pooled statistic against the range of
+    the same layer's pooled statistic over the reference sets. Bounds are inclusive.
+    With `canonical`, also lists records whose conditions differ from it."""
+
+    def by_layer(recs):
+        groups: dict[int, list[dict]] = {}
+        for r in recs:
+            groups.setdefault(r["layer"], []).append(r)
+        return groups
+
+    ref_groups = [by_layer(ref) for ref in references]
+    layers = {}
+    for layer, recs in sorted(by_layer(records).items()):
+        cand = pooled_statistics(recs)
+        ref_stats = [pooled_statistics(g[layer]) for g in ref_groups if layer in g]
+        stats = {}
+        for name in STATISTICS:
+            vals = [s[name] for s in ref_stats if s[name] is not None]
+            lo = min(vals) if vals else None
+            hi = max(vals) if vals else None
+            v = cand[name]
+            if v is None or lo is None:
+                status = "none"
+            elif v < lo:
+                status = "below"
+            elif v > hi:
+                status = "above"
+            else:
+                status = "inside"
+            stats[name] = {
+                "min": lo,
+                "max": hi,
+                "mean": float(np.mean(vals)) if vals else None,
+                "value": v,
+                "status": status,
+            }
+        layers[layer] = {
+            "n_records": len(recs),
+            "n_reference_sets": len(ref_stats),
+            "statistics": stats,
+        }
+    report = {"n_reference_sets": len(references), "layers": layers}
+    if canonical is not None:
+        report["condition_mismatches"] = _record_condition_failures(records, canonical)
+    return report
+
+
+def _read_records(path: Path) -> list[dict]:
+    text = Path(path).read_text(encoding="utf-8")
+    return [json.loads(line) for line in text.splitlines() if line.strip()]
 
 
 def parse_books(text: str) -> list[int]:
@@ -488,6 +638,12 @@ def main(argv: list[str] | None = None) -> int:
     pn = sub.add_parser("measure-run")
     pn.add_argument("--capture-dir", type=Path, required=True)
     pn.add_argument("--run-dir", action="append", required=True, metavar="LAYER=PATH")
+    pn.add_argument(
+        "--layers",
+        type=lambda t: [int(x) for x in t.split(",")],
+        default=None,
+        help="measure only these global layers (default: all 12, each needing a run dir)",
+    )
     pn.add_argument("--checkpoint-name", default="best_generator.pt")
     pn.add_argument(
         "--ema",
@@ -500,6 +656,14 @@ def main(argv: list[str] | None = None) -> int:
     pc = sub.add_parser("check")
     pc.add_argument("--records", type=Path, required=True)
     pc.add_argument("--gate-file", type=Path, default=GATES_FILE)
+    pl = sub.add_parser("compare-layers")
+    pl.add_argument("--records", type=Path, required=True)
+    pl.add_argument(
+        "--reference",
+        type=Path,
+        action="append",
+        help="reference records file, repeatable (default: reference/seed0-4)",
+    )
     a = ap.parse_args(argv)
 
     if a.cmd == "measure-real":
@@ -532,7 +696,23 @@ def main(argv: list[str] | None = None) -> int:
             threads=a.threads,
             checkpoint_name=a.checkpoint_name,
             ema=a.ema,
+            layers=a.layers,
         )
+        return 0
+    if a.cmd == "compare-layers":
+        ref_paths = a.reference or [
+            GATES_FILE.parents[1] / f"docs/results/scout-kv/reference/seed{s}.jsonl"
+            for s in range(5)
+        ]
+        try:
+            records = _read_records(a.records)
+            references = [_read_records(p) for p in ref_paths]
+            canonical = load_kv_gate(GATES_FILE)["canonical"]
+            report = compare_layers(records, references, canonical)
+        except (GateError, OSError, json.JSONDecodeError, KeyError) as exc:
+            print(f"kv_gate: {exc!r}", file=sys.stderr)
+            return EXIT_FAIL
+        print(json.dumps(report, indent=2))
         return 0
     try:
         gate = load_kv_gate(a.gate_file)

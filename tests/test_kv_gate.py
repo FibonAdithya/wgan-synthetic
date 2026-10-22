@@ -712,3 +712,146 @@ def test_compare_layers_counts_reference_sets_per_layer():
     assert rep["n_reference_sets"] == 2
     assert rep["layers"][3]["n_reference_sets"] == 1
     assert all(v["n_reference_sets"] == 2 for k, v in rep["layers"].items() if k != 3)
+
+
+def _tiny_flagged_run(tmp_path):
+    """A trained flagged run plus layer-3 weights shaped like _tiny_run's."""
+    from tests.test_train_flagged import flagged_config
+
+    from src.train.train_wgan_gp import train
+
+    ckpt, _ = train(flagged_config(tmp_path))
+    run_dir = ckpt.parent
+    cap = tmp_path / "wcapture"
+    (cap / "weights").mkdir(parents=True)
+    rng = np.random.default_rng(0)
+    _write_multi(
+        cap / "weights" / "layer03.safetensors",
+        {
+            "k_proj": rng.normal(size=(2 * 128, 16)).astype(np.float32),
+            "q_proj": rng.normal(size=(2 * 5 * 128, 16)).astype(np.float32),
+        },
+    )
+    return run_dir, cap
+
+
+def _inline_draw(run_dir, layer, seed, parts):
+    """Seed, then draw each (flag, rows) part in order with gen(z, flags), written
+    out here so a bug in sample_generator's flag handling cannot hide. Returns the
+    inverted rows of each part, on the gate's device."""
+    import torch
+    import yaml
+
+    from src.eval.compare_variants import invert_samples, load_preprocess_state
+    from src.eval.evaluate_distribution import load_generator
+
+    cfg = yaml.safe_load((run_dir / "run_config.yaml").read_text())
+    dev = kv_gate._device()
+    gen = load_generator(cfg, run_dir / "best_generator.pt", dev)
+    latent = int(cfg["model"]["latent_dim"])
+    bs = int(cfg["training"]["batch_size"])
+    state = load_preprocess_state(run_dir)
+    torch.manual_seed(7919 * seed + layer)
+    out = []
+    with torch.no_grad():
+        for flag, n in parts:
+            xs = []
+            for start in range(0, n, bs):
+                cur = min(bs, n - start)
+                z = torch.randn(cur, latent, device=dev)
+                flags = torch.full((cur,), flag, dtype=torch.long, device=dev)
+                xs.append(gen(z, flags).cpu().numpy().astype(np.float32))
+            out.append(
+                np.asarray(invert_samples(np.concatenate(xs), state), np.float32)
+            )
+    return out
+
+
+def test_flagged_run_keys_come_from_body_and_queries_from_tail(tmp_path):
+    """Catches the sampler drawing keys and queries under the same flag (spec: the test
+    that matters most). Recomputes the draw with an inline loop. Checking keys alone
+    would not catch queries sampled with flag=BODY, so the query and id rows are
+    compared too, against both the tail draw and a body draw."""
+    from src.models.conditional import BODY, TAIL
+
+    run_dir, _ = _tiny_flagged_run(tmp_path)
+    n_keys, n_tail = 40, 8
+    hk, hq, hi, _ = kv_gate.synthetic_h(
+        run_dir, 3, seed=0, n_keys=n_keys, n_tail=n_tail
+    )
+    hk, hq, hi = (t.cpu().numpy() for t in (hk, hq, hi))
+    keys, tail = _inline_draw(run_dir, 3, 0, [(BODY, n_keys), (TAIL, 2 * n_tail)])
+    np.testing.assert_allclose(hk, keys, rtol=1e-5, atol=1e-5)
+    np.testing.assert_allclose(hq, tail[:n_tail], rtol=1e-5, atol=1e-5)
+    np.testing.assert_allclose(hi, tail[n_tail:], rtol=1e-5, atol=1e-5)
+    (tail_keys,) = _inline_draw(run_dir, 3, 0, [(TAIL, n_keys)])
+    assert not np.allclose(hk, tail_keys, atol=1e-4)
+    _, body_tail = _inline_draw(run_dir, 3, 0, [(BODY, n_keys), (BODY, 2 * n_tail)])
+    assert not np.allclose(hq, body_tail[:n_tail], atol=1e-4)
+    assert not np.allclose(hi, body_tail[n_tail:], atol=1e-4)
+
+
+def test_unflagged_run_sampling_is_unchanged(tmp_path):
+    """Catches the v0 path changing (an extra RNG draw, a reordered split, a flag
+    argument leaking in): synthetic_h on _tiny_run equals the pre-v1 formula written
+    out inline. It does not call sample_generator, so a change to that function
+    cannot move the expected value with it. The committed v0 best.jsonl/final.jsonl
+    tests read files and never re-sample, so they do not guard this."""
+    import torch
+    import yaml
+
+    from src.eval.compare_variants import invert_samples, load_preprocess_state
+    from src.eval.evaluate_distribution import load_generator
+
+    run_dir, _, _ = _tiny_run(tmp_path)
+    n_keys, n_tail = 200, 16
+    hk, hq, hi, _ = kv_gate.synthetic_h(
+        run_dir, 3, seed=0, n_keys=n_keys, n_tail=n_tail
+    )
+    cfg = yaml.safe_load((run_dir / "run_config.yaml").read_text())
+    assert cfg["model"].get("n_flags") is None
+    dev = kv_gate._device()
+    gen = load_generator(cfg, run_dir / "best_generator.pt", dev)
+    latent = int(cfg["model"]["latent_dim"])
+    bs = int(cfg["training"]["batch_size"])
+    total = n_keys + 2 * n_tail
+    torch.manual_seed(7919 * 0 + 3)
+    xs = []
+    with torch.no_grad():
+        for start in range(0, total, bs):
+            cur = min(bs, total - start)
+            z = torch.randn(cur, latent, device=dev)
+            xs.append(gen(z).cpu().numpy().astype(np.float32))
+    h = np.asarray(
+        invert_samples(np.concatenate(xs), load_preprocess_state(run_dir)), np.float32
+    )
+    np.testing.assert_allclose(hk.cpu().numpy(), h[:n_keys], rtol=1e-5, atol=1e-5)
+    np.testing.assert_allclose(
+        hq.cpu().numpy(), h[n_keys : n_keys + n_tail], rtol=1e-5, atol=1e-5
+    )
+    np.testing.assert_allclose(
+        hi.cpu().numpy(), h[n_keys + n_tail :], rtol=1e-5, atol=1e-5
+    )
+
+
+def test_generate_refuses_a_flagged_run(tmp_path, monkeypatch):
+    """Catches src.sample.generate emitting unconditioned samples from a v1 checkpoint:
+    the flagged generator needs flags, so main() must raise instead of writing a file."""
+    from src.sample import generate
+
+    run_dir, _ = _tiny_flagged_run(tmp_path)
+    out = tmp_path / "samples.npy"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "generate",
+            "--checkpoint", str(run_dir / "best_generator.pt"),
+            "--config", str(run_dir / "run_config.yaml"),
+            "--num-samples", "8",
+            "--output-path", str(out),
+        ],
+    )  # fmt: skip
+    with pytest.raises((TypeError, ValueError)):
+        generate.main()
+    assert not out.exists()

@@ -537,13 +537,16 @@ def half_gate_stats(
     metric: str,
     seed: int,
     distance_floor: float,
-) -> dict[str, Any]:
-    """Gate statistics and selection score for one flag's fake sample.
+) -> tuple[dict[str, Any], float]:
+    """Gate statistics and selection score for a fake sample: `(stats, score)`.
 
-    Keys are `prefix` + the unflagged eval's names (`gate_fake_*`,
-    `gate_real_*`, `gate_error`), plus the unprefixed score under
-    `"score"`. A fake-side failure records the error and scores inf, as the
-    unflagged eval does.
+    `stats` keys are `prefix` + `gate_fake_*` and `gate_real_*`. The real
+    side is passed in, computed once outside the training loop, and is not
+    wrapped: a failure there means the holdout itself is broken, which should
+    stop the run. A fake-side failure is a property of one checkpoint and must
+    not take the whole run down with it, so it is recorded under
+    `prefix + "gate_error"`, the `gate_fake_*` keys are set to None, and the
+    score is inf. The unflagged eval calls this with `prefix=""`.
     """
     out: dict[str, Any] = {}
     try:
@@ -553,12 +556,10 @@ def half_gate_stats(
     except Exception as e:
         out[f"{prefix}gate_error"] = f"{type(e).__name__}: {e}"
         out.update({f"{prefix}gate_fake_{key}": None for key in LOGGED})
-        out["score"] = math.inf
-    else:
-        out.update(prefixed(fake_gate, f"{prefix}gate_fake_"))
-        out.update(prefixed(real_gate, f"{prefix}gate_real_"))
-        out["score"] = selection_score(fake_gate, real_gate)
-    return out
+        return out, math.inf
+    out.update(prefixed(fake_gate, f"{prefix}gate_fake_"))
+    out.update(prefixed(real_gate, f"{prefix}gate_real_"))
+    return out, selection_score(fake_gate, real_gate)
 
 
 def flagged_eval_stats(
@@ -597,7 +598,7 @@ def flagged_eval_stats(
         half = tensor_stats(holdout, fake)
         half.update(collapse_stats(fake))
         stats.update(prefixed(half, prefix))
-        gate = half_gate_stats(
+        gate, scores[flag] = half_gate_stats(
             fake,
             real_gate_by_flag[flag],
             prefix=prefix,
@@ -605,7 +606,6 @@ def flagged_eval_stats(
             seed=seed,
             distance_floor=distance_floor,
         )
-        scores[flag] = gate.pop("score")
         stats.update(gate)
     stats["selection_score_body"] = scores[BODY]
     stats["selection_score_tail"] = scores[TAIL]
@@ -1100,28 +1100,17 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
                         except Exception as e:
                             stats["diagnostics_error"] = f"{type(e).__name__}: {e}"
                     if select_on == "gate":
-                        # The real side is computed once outside the loop and is
-                        # not wrapped: a failure there means the holdout itself
-                        # is broken, which should stop the run. A fake-side
-                        # failure is a property of this one checkpoint and must
-                        # not take the whole run down with it.
-                        try:
-                            fake_gate = gate_statistics(
-                                fake_holdout,
-                                metric=metric,
-                                seed=seed,
-                                distance_floor=gate_distance_floor,
-                            )
-                        except Exception as e:
-                            stats["gate_error"] = f"{type(e).__name__}: {e}"
-                            stats.update({f"gate_fake_{key}": None for key in LOGGED})
-                            stats["selection_score"] = math.inf
-                        else:
-                            stats.update(prefixed(fake_gate, "gate_fake_"))
-                            stats.update(prefixed(real_gate, "gate_real_"))
-                            stats["selection_score"] = selection_score(
-                                fake_gate, real_gate
-                            )
+                        # A fake-side failure is contained; see half_gate_stats.
+                        gate, score = half_gate_stats(
+                            fake_holdout,
+                            real_gate,
+                            prefix="",
+                            metric=metric,
+                            seed=seed,
+                            distance_floor=gate_distance_floor,
+                        )
+                        stats.update(gate)
+                        stats["selection_score"] = score
                 stats["step"] = step
                 run_meta.setdefault("eval", []).append(stats)
                 print(json.dumps({"eval": stats}))

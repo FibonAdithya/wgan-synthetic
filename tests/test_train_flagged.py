@@ -282,3 +282,59 @@ def test_tail_fake_gate_failure_is_contained(tmp_path, monkeypatch):
     assert first["selection_score"] == math.inf
     assert "tail_gate_error" not in second
     assert math.isfinite(second["selection_score"])
+
+
+def test_each_flag_is_scored_against_its_own_holdout(tmp_path, monkeypatch):
+    """Catches three eval mix-ups: each half sampled to the whole holdout's size instead
+    of its own; the body holdout taken as the whole holdout; the tail's real gate
+    computed from the body holdout. Spies on gate_statistics and tensor_stats as
+    train_wgan_gp looks them up. The expected holdouts come from a separate
+    build_training_data call with the fixture's settings (22 body and 4 tail rows)."""
+    from src.data.dataset import PreprocessConfig, build_training_data
+
+    cfg = flagged_config(tmp_path)
+    d = cfg["data"]
+    _, xh, _, _, fh = build_training_data(
+        d["real_path"],
+        d["format"],
+        d["descriptor_dim"],
+        d["holdout_fraction"],
+        PreprocessConfig(**d["preprocess"]),
+        cfg["seed"],
+        kv_layer=d["kv_layer"],
+        kv_books=d["kv_books"],
+        kv_n_sink=d["kv_n_sink"],
+        kv_n_tail=d["kv_n_tail"],
+        kv_tail_holdout=d["kv_tail_holdout"],
+    )
+    body, tail = xh[fh == BODY], xh[fh == TAIL]
+    assert (len(body), len(tail)) == (22, 4)
+
+    gate_inputs, tensor_inputs = [], []
+    real_gate, real_tensor = train_mod.gate_statistics, train_mod.tensor_stats
+
+    def gate_spy(x, **kwargs):
+        gate_inputs.append(np.array(x, copy=True))
+        return real_gate(x, **kwargs)
+
+    def tensor_spy(real, fake):
+        tensor_inputs.append((np.array(real, copy=True), np.array(fake, copy=True)))
+        return real_tensor(real, fake)
+
+    monkeypatch.setattr(train_mod, "gate_statistics", gate_spy)
+    monkeypatch.setattr(train_mod, "tensor_stats", tensor_spy)
+    _, meta = train(cfg)
+    n_evals = len(meta["eval"])
+    assert n_evals == 2
+
+    # Real side, once per flag before the loop: body then tail.
+    np.testing.assert_array_equal(gate_inputs[0], body)
+    np.testing.assert_array_equal(gate_inputs[1], tail)
+    # Fake side, per eval: body then tail, each sized to its own holdout.
+    fake_gate_rows = [len(x) for x in gate_inputs[2:]]
+    assert fake_gate_rows == [22, 4] * n_evals
+    assert len(tensor_inputs) == 2 * n_evals
+    for k, (real_rows, fake_rows) in enumerate(tensor_inputs):
+        expected = body if k % 2 == 0 else tail
+        np.testing.assert_array_equal(real_rows, expected)
+        assert len(fake_rows) == len(expected)

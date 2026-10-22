@@ -15,9 +15,9 @@ difficulty (`src/eval/kv_gate.py::evaluate`). The four intrinsic statistics of
 
 | | |
 |---|---|
-| Ladder | `v0` trained for all 12 global layers (`docs/results/scout-kv/training/`); fails the gate on four of five statistics (`docs/results/scout-kv/v0/report.html`) |
+| Ladder | `v0` trained for all 12 global layers (`docs/results/scout-kv/training/`); fails the gate on four of five statistics (`docs/results/scout-kv/v0/report.html`); `v1` (v0 plus a body/tail position flag) is designed, not trained (`docs/ai/specs/2026-10-22-scout-kv-v1-position-flag-design.md`) |
 | Gate bands | **set** 2026-10-19 by the owner, as a tolerance around the five-draw real reference; see `## Gate bands` |
-| Gate question | **open** since 2026-10-19: real `h` split the way synthetic corpora are split is already outside the real range on v0's side (R1); v1 design waits on it. See `## Controls: why v0 is too easy` |
+| Gate question | decided 2026-10-22: position-aware `v1` (`docs/ai/specs/2026-10-22-scout-kv-v1-position-flag-design.md`). Background: real `h` split the way synthetic corpora are split is already outside the real range on v0's side (R1). See `## Controls: why v0 is too easy` |
 | Capture | lives only on the GPU box (`tig-gpu-alt` since 2026-10-19), at `/workspace/kv/capture`. It is not in the repo and not fetchable with `src/data/fetch.py` |
 
 ## What a sample is
@@ -29,7 +29,7 @@ generator never sees keys or queries.
 
 - Global layers: `3, 7, 11, 15, 19, 23, 27, 31, 35, 39, 43, 47` (`src/data/kv_capture.py::GLOBAL_LAYERS`), 12 in all, no RoPE.
 - 8 KV heads and 40 query heads, `head_dim` 128. Query head `j` reads KV head `j // 5`.
-- One generator is trained per layer, so there are 12 `v0` configs, `configs/scout_kv/v0/L03.yaml` through `configs/scout_kv/v0/L47.yaml`. They differ only in `data.kv_layer` and `output_dir` (pinned by `tests/test_scout_kv_configs.py`).
+- One generator is trained per layer, so there are 12 `v0` configs, `configs/scout_kv/v0/L03.yaml` through `configs/scout_kv/v0/L47.yaml`. They differ only in `data.kv_layer` and `output_dir` (pinned by `tests/test_scout_kv_configs.py`). The 12 `v1` configs, `configs/scout_kv/v1/L03.yaml` through `configs/scout_kv/v1/L47.yaml`, equal v0 plus `data.kv_n_tail: 1024`, `data.kv_tail_holdout: 1024`, `model.n_flags: 2` and `training.tail_batch_share: 0.25`, with `output_dir: runs/scout_kv/v1/L{LL}`. They have not been trained.
 - Position 0 (the attention sink) and the last 1,024 positions of a 32,768-token book are never indexed in a corpus. Training rows use positions 1 to 32,767, so 12 books give 393,204 rows per layer.
 
 ## Commands

@@ -8,6 +8,8 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
+from src.models.conditional import FlagConditionedGenerator
+
 
 class Generator(nn.Module):
     def __init__(
@@ -623,6 +625,21 @@ def build_generator(model_cfg: Mapping[str, Any], output_dim: int) -> nn.Module:
     """Build the configured generator, defaulting to the legacy MLP."""
     kind = model_cfg.get("generator_type", "mlp")
     kind = GENERATOR_TYPE_ALIASES.get(kind, kind)
+    n_flags = model_cfg.get("n_flags")
+    if n_flags is not None:
+        if int(n_flags) != 2:
+            raise ValueError(f"n_flags must be 2 (body/tail), got {n_flags!r}")
+        if kind != "mlp":
+            raise ValueError(
+                f"n_flags is supported for generator_type 'mlp' only, got {kind!r}"
+            )
+        base = Generator(
+            latent_dim=int(model_cfg["latent_dim"]) + 2,
+            output_dim=output_dim,
+            hidden_dims=model_cfg["generator_hidden_dims"],
+            negative_slope=float(model_cfg["negative_slope"]),
+        )
+        return FlagConditionedGenerator(base, 2)
     common = {
         "latent_dim": int(model_cfg["latent_dim"]),
         "output_dim": output_dim,

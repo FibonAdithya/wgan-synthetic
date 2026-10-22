@@ -16,6 +16,8 @@ from pathlib import Path
 
 import numpy as np
 
+from src.models.conditional import BODY, TAIL
+
 GLOBAL_LAYERS = (3, 7, 11, 15, 19, 23, 27, 31, 35, 39, 43, 47)
 _DTYPES = {"BF16": 2, "F16": 2, "F32": 4}
 
@@ -70,11 +72,40 @@ def write_bf16_safetensor(path: Path, name: str, arr: np.ndarray) -> None:
     Path(path).write_bytes(struct.pack("<Q", len(header)) + header + rounded.tobytes())
 
 
+def kv_flags(T: int, n_sink: int, n_tail: int) -> np.ndarray:
+    """Per-row body/tail flags for one book of T positions with n_sink rows dropped.
+
+    Row i is position i + n_sink. Positions >= T - n_tail are TAIL, the rest BODY.
+    """
+    if T < n_sink + n_tail + 1:
+        raise ValueError(
+            f"book of {T} positions is too short for n_sink={n_sink}, n_tail={n_tail}"
+        )
+    flags = np.full(T - n_sink, BODY, dtype=np.int64)
+    flags[T - n_tail - n_sink :] = TAIL
+    return flags
+
+
 def load_kv_capture(
-    capture_dir: Path, layer: int, books: Sequence[int], n_sink: int = 1
-) -> np.ndarray:
+    capture_dir: Path,
+    layer: int,
+    books: Sequence[int],
+    n_sink: int = 1,
+    n_tail: int | None = None,
+) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
+    """Stack the h rows of the given books, dropping n_sink rows from each.
+
+    With n_tail=None the result is the row array. With an int it is
+    (rows, flags), flags from kv_flags for each book, concatenated in book order.
+    All books must have the same length when n_tail is set.
+    """
     if layer not in GLOBAL_LAYERS:
         raise ValueError(f"layer {layer} is not a global layer {GLOBAL_LAYERS}")
-    return np.vstack(
-        [read_safetensor(h_path(capture_dir, b, layer), "h")[n_sink:] for b in books]
-    )
+    arrs = [read_safetensor(h_path(capture_dir, b, layer), "h") for b in books]
+    x = np.vstack([a[n_sink:] for a in arrs])
+    if n_tail is None:
+        return x
+    lengths = {a.shape[0] for a in arrs}
+    if len(lengths) > 1:
+        raise ValueError(f"books have different lengths {sorted(lengths)}")
+    return x, np.concatenate([kv_flags(a.shape[0], n_sink, n_tail) for a in arrs])

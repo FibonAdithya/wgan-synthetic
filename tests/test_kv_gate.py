@@ -852,6 +852,8 @@ def test_generate_refuses_a_flagged_run(tmp_path, monkeypatch):
             "--output-path", str(out),
         ],
     )  # fmt: skip
-    with pytest.raises((TypeError, ValueError)):
+    with pytest.raises(
+        TypeError, match="missing 1 required positional argument: 'flags'"
+    ):
         generate.main()
     assert not out.exists()

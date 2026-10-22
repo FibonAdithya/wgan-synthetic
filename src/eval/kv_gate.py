@@ -371,10 +371,24 @@ def synthetic_h(
         xk = sample_generator(
             gen, n_keys, latent_dim, batch_size, dev, normalize=normalize, flag=BODY
         )
-        xt = sample_generator(
-            gen, 2 * n_tail, latent_dim, batch_size, dev, normalize=normalize, flag=TAIL
+        xt = (
+            sample_generator(
+                gen,
+                2 * n_tail,
+                latent_dim,
+                batch_size,
+                dev,
+                normalize=normalize,
+                flag=TAIL,
+            )
+            if n_tail > 0
+            else None
         )
-    h_keys, h_tail = to_h(xk), to_h(xt)
+    h_keys = to_h(xk)
+    if xt is None:
+        empty = h_keys[:0]
+        return h_keys, empty, empty, weights
+    h_tail = to_h(xt)
     return h_keys, h_tail[:n_tail], h_tail[n_tail:], weights
 
 

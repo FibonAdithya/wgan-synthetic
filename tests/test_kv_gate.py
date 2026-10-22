@@ -857,3 +857,80 @@ def test_generate_refuses_a_flagged_run(tmp_path, monkeypatch):
     ):
         generate.main()
     assert not out.exists()
+
+
+def test_flagged_synthetic_h_with_zero_tail_returns_body_keys_and_empty_queries(
+    tmp_path,
+):
+    """Catches the flagged branch drawing 0 tail rows (sample_generator then fails
+    with 'need at least one array to concatenate'): removing the n_tail == 0 skip
+    makes this test raise. Also pins that the key draw is unchanged by the skip,
+    since keys are drawn first."""
+    run_dir, _ = _tiny_flagged_run(tmp_path)
+    hk0, hq0, hi0, w0 = kv_gate.synthetic_h(run_dir, 3, seed=0, n_keys=40, n_tail=0)
+    hk8, hq8, hi8, _ = kv_gate.synthetic_h(run_dir, 3, seed=0, n_keys=40, n_tail=8)
+    assert hk0.shape == (40, 16)
+    np.testing.assert_array_equal(hk0.cpu().numpy(), hk8.cpu().numpy())
+    for empty, full in ((hq0, hq8), (hi0, hi8)):
+        assert empty.shape == (0, 16)
+        assert empty.dtype == full.dtype
+        assert empty.device == full.device
+    assert w0 in ("live", "ema")
+
+
+def _tiny_flagged_ema_run(tmp_path):
+    """A flagged run with EMA on whose only eval is step 4, the same step as the
+    periodic checkpoint, so best_generator.pt and checkpoint_step_4.pt come from one
+    model state: the first holds the EMA weights, the second the live ones."""
+    from tests.test_train_flagged import flagged_config
+
+    from src.train.train_wgan_gp import train
+
+    cfg = flagged_config(tmp_path)
+    cfg["training"].update(num_gen_steps=4, eval_every=4, save_every=4, ema_decay=0.9)
+    ckpt, meta = train(cfg)
+    assert [e["step"] for e in meta["eval"]] == [4]
+    run_dir = ckpt.parent
+    assert (run_dir / "checkpoint_step_4.pt").exists()
+    return run_dir
+
+
+def test_flagged_sampling_happens_inside_the_ema_context(tmp_path):
+    """Catches the flagged branch sampling outside the EMA swap (then ema=True on the
+    live checkpoint silently measures live weights while labelling them "ema"):
+    checkpoint_step_4.pt with ema=True must equal best_generator.pt (already EMA)
+    for all three outputs, and ema=False on the live file must differ."""
+    run_dir = _tiny_flagged_ema_run(tmp_path)
+    a = kv_gate.synthetic_h(
+        run_dir,
+        3,
+        seed=0,
+        n_keys=40,
+        n_tail=8,
+        checkpoint_name="checkpoint_step_4.pt",
+        ema=True,
+    )
+    b = kv_gate.synthetic_h(
+        run_dir,
+        3,
+        seed=0,
+        n_keys=40,
+        n_tail=8,
+        checkpoint_name="best_generator.pt",
+        ema=False,
+    )
+    live = kv_gate.synthetic_h(
+        run_dir,
+        3,
+        seed=0,
+        n_keys=40,
+        n_tail=8,
+        checkpoint_name="checkpoint_step_4.pt",
+        ema=False,
+    )
+    assert a[3] == "ema" and b[3] == "ema" and live[3] == "live"
+    for x, y in zip(a[:3], b[:3]):
+        np.testing.assert_allclose(
+            x.cpu().numpy(), y.cpu().numpy(), rtol=1e-5, atol=1e-5
+        )
+    assert not np.allclose(a[0].cpu().numpy(), live[0].cpu().numpy(), atol=1e-4)

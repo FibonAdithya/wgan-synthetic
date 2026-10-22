@@ -98,10 +98,16 @@ def _required(value: float | None, name: str, layer: int | str, what: str) -> fl
     return value
 
 
-def train_books_targets(path: Path, layer: int) -> dict[str, float]:
-    """Pooled statistics of the training books' real records at one layer."""
-    stats = _layer_statistics(read_records(path), layer, f"train books {path}")
-    return {n: _required(stats[n], n, layer, f"train books {path}") for n in STATISTICS}
+def train_books_targets(source: Path | list[dict], layer: int) -> dict[str, float]:
+    """Pooled statistics of the training books' real records at one layer.
+    `source` is the jsonl path or its records already read; pilot_verdict
+    passes records, the CLI and tests pass the path."""
+    if isinstance(source, list):
+        records, what = source, "train books"
+    else:
+        records, what = read_records(source), f"train books {source}"
+    stats = _layer_statistics(records, layer, what)
+    return {n: _required(stats[n], n, layer, what) for n in STATISTICS}
 
 
 def _check_seed_labels(by_seed: dict[int, list[dict]], what: str) -> None:
@@ -114,11 +120,40 @@ def _check_seed_labels(by_seed: dict[int, list[dict]], what: str) -> None:
 
 
 def _check_one_checkpoint(records: list[dict], what: str) -> None:
-    kinds = sorted({r["checkpoint"] for r in records if "checkpoint" in r})
+    """One checkpoint file and one weight set (EMA or raw) across all records,
+    so best and final, or --ema and plain sampling, are never judged together."""
+    kinds = sorted(
+        {(r.get("checkpoint"), r.get("generator_weights")) for r in records},
+        key=repr,
+    )
     if len(kinds) > 1:
         raise ValueError(
-            f"{what} mixes checkpoint kinds {kinds}; judge one kind at a time"
+            f"{what} mixes checkpoint kinds (checkpoint, generator_weights) "
+            f"{kinds}; judge one kind at a time"
         )
+
+
+def _corpora(records: list[dict], layers=None) -> set[tuple[int, int]]:
+    return {
+        (r["layer"], r["kv_head"])
+        for r in records
+        if layers is None or r["layer"] in layers
+    }
+
+
+def _check_same_corpora(
+    base: list[dict], base_what: str, others: dict[str, list[dict]], layers=None
+) -> None:
+    """Every input must cover the same (layer, kv_head) corpora as `base`, or
+    pooled values and the v0 seed spread would be taken over different sets."""
+    want = _corpora(base, layers)
+    for what, recs in others.items():
+        got = _corpora(recs, layers)
+        if got != want:
+            raise ValueError(
+                f"{what} covers different corpora from {base_what}: "
+                f"missing {sorted(want - got)}, extra {sorted(got - want)}"
+            )
 
 
 def _reference_range(ref_stats: list[dict], name: str, layer) -> tuple[float, float]:
@@ -168,8 +203,10 @@ def pilot_verdict(
     across the seeds at that layer. `go` is the AND of all of these over both
     layers."""
     seeds = sorted(v1_by_seed)
-    if not seeds:
-        raise ValueError("v1 has no seeds")
+    # The spec judges the pilot "at both sampling seeds"; with one seed the
+    # key-side allowance (v0's seed spread) is 0 by construction.
+    if len(seeds) < 2:
+        raise ValueError(f"the pilot needs at least two sampling seeds; got {seeds}")
     if set(seeds) != set(v0_by_seed):
         raise ValueError(
             f"v1 seeds {seeds} and v0 seeds {sorted(v0_by_seed)} must be the same"
@@ -179,6 +216,17 @@ def pilot_verdict(
     _check_seed_labels(v1_by_seed, "v1")
     _check_seed_labels(v0_by_seed, "v0")
     _check_one_checkpoint([r for s in seeds for r in v1_by_seed[s]], "v1")
+    _check_one_checkpoint([r for s in seeds for r in v0_by_seed[s]], "v0")
+    _check_same_corpora(
+        v1_by_seed[seeds[0]],
+        f"v1 seed {seeds[0]}",
+        {
+            **{f"v1 seed {s}": v1_by_seed[s] for s in seeds[1:]},
+            **{f"v0 seed {s}": v0_by_seed[s] for s in seeds},
+        },
+        layers=PILOT_LAYERS,
+    )
+    train = train_books_targets(train_books, WIDENED_LAYER)
 
     go = True
     layers = {}
@@ -193,11 +241,6 @@ def pilot_verdict(
         v1_stats = {
             s: _layer_statistics(v1_by_seed[s], layer, f"v1 seed {s}") for s in seeds
         }
-        train = (
-            _layer_statistics(train_books, layer, "train books")
-            if layer == WIDENED_LAYER
-            else None
-        )
 
         stats = {}
         for name in PILOT_STATISTICS:
@@ -205,8 +248,8 @@ def pilot_verdict(
             spread = ref_hi - ref_lo
             lo, hi = ref_lo, ref_hi
             tb = None
-            if train is not None:
-                tb = _required(train[name], name, layer, "train books")
+            if layer == WIDENED_LAYER:
+                tb = train[name]
                 lo, hi = min(ref_lo, tb), max(ref_hi, tb)
             cells = {}
             for s in seeds:
@@ -266,6 +309,12 @@ def full_verdict(
     recall, whose allowance is v0's pooled max - min across `v0_by_seed`.
     `ivf_recall_k128_np24` must stay inside its band; every other statistic
     must move toward it."""
+    # The key-side allowance is v0's spread across seeds; one seed makes it 0,
+    # the degenerate case the spec rules out.
+    if len(v0_by_seed) < 2:
+        raise ValueError(
+            f"full verdict needs v0 at two or more seeds; got {sorted(v0_by_seed)}"
+        )
     if 0 not in v0_by_seed:
         raise ValueError(f"full verdict needs v0 at seed 0; got {sorted(v0_by_seed)}")
     if not references:
@@ -273,7 +322,13 @@ def full_verdict(
     if not v1:
         raise ValueError("v1 has no records")
     _check_seed_labels(v0_by_seed, "v0")
+    # v1 is compared with v0 at seed 0, so it must be the seed-0 measurement.
+    _check_seed_labels({0: v1}, "v1")
     _check_one_checkpoint(v1, "v1")
+    _check_one_checkpoint([r for recs in v0_by_seed.values() for r in recs], "v0")
+    _check_same_corpora(
+        v1, "v1", {f"v0 seed {s}": recs for s, recs in sorted(v0_by_seed.items())}
+    )
 
     v1_stats = pooled_statistics(v1)
     v0_stats = {s: pooled_statistics(recs) for s, recs in sorted(v0_by_seed.items())}

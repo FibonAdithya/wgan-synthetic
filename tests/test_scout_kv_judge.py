@@ -45,6 +45,7 @@ def _layer(
     id_recall=1.0,
     seed=0,
     checkpoint="best_generator.pt",
+    generator_weights="ema",
 ):
     """Eight records (one per KV head) whose pooled statistics are exactly the
     given values: reach is a share of 8 heads, the rest are constant per head."""
@@ -58,6 +59,7 @@ def _layer(
                 "kv_head": g,
                 "seed": seed,
                 "checkpoint": checkpoint,
+                "generator_weights": generator_weights,
                 "plain_ood_k10": {
                     "hnsw_reached": g < n_reached,
                     "hnsw_recall_op": recall,
@@ -105,6 +107,17 @@ GOOD_L43 = dict(reach=0.0, recall=0.60, ratio=3.0, id_recall=0.97)
 
 def _v0(seeds=(0, 1)):
     return {s: _pilot_set(V0_L19, V0_L43, seed=s) for s in seeds}
+
+
+def _v1_good(seeds=(0, 1)):
+    return {s: _pilot_set(GOOD_L19, GOOD_L43, seed=s) for s in seeds}
+
+
+def _relabel(records, seed):
+    """Copies of `records` with their `seed` field set to `seed`. The committed
+    v0 records exist at seed 0 only; tests that need a second v0 seed use this
+    relabelled copy (same measurements, so v0's seed spread is 0)."""
+    return [dict(r, seed=seed) for r in records]
 
 
 # ---------------------------------------------------------------------------
@@ -196,8 +209,8 @@ def test_l19_target_is_widened_to_the_training_books():
     refs = [_read(p) for p in REFERENCE_PATHS]
     train = _read(TRAIN_BOOKS_PATH)
     v0 = _read(V0_BEST)
-    v1 = _pilot_set(dict(ratio=0.30), dict(ratio=3.0))
-    out = pilot_verdict({0: v1}, {0: v0}, refs, train)
+    v1 = {s: _pilot_set(dict(ratio=0.30), dict(ratio=3.0), seed=s) for s in (0, 1)}
+    out = pilot_verdict(v1, {0: v0, 1: _relabel(v0, 1)}, refs, train)
     cell = out["layers"][19]["statistics"]["ivf_ratio_k128"]
     assert cell["reference_min"] == pytest.approx(0.1330, abs=1e-4)
     assert cell["reference_max"] == pytest.approx(0.1718, abs=1e-4)
@@ -268,6 +281,14 @@ def test_pilot_pairs_seeds():
     assert out["go"] is True
 
 
+def test_pilot_refuses_a_single_seed():
+    """Catches the two-seed requirement being dropped: with one seed a v1 inside
+    every target would return go True, and the key-side allowance would be 0
+    by construction. The spec judges the pilot "at both sampling seeds"."""
+    with pytest.raises(ValueError, match="two sampling seeds"):
+        pilot_verdict(_v1_good(seeds=(0,)), _v0(seeds=(0,)), REFS, TRAIN)
+
+
 def test_pilot_refuses_unpaired_seeds():
     """Catches the seed sets not being checked: v1 at seeds {0, 1}, v0 at {0}."""
     v1 = {s: _pilot_set(GOOD_L19, GOOD_L43, seed=s) for s in (0, 1)}
@@ -289,11 +310,45 @@ def test_pilot_refuses_records_labelled_with_another_seed():
 def test_pilot_refuses_mixed_checkpoint_kinds():
     """Catches best and final checkpoints being mixed across layers, which the
     spec forbids ("all-best or all-final, never mixed across layers")."""
-    mixed = _layer(19, seed=0, **GOOD_L19) + _layer(
+    v1 = _v1_good()
+    v1[0] = _layer(19, seed=0, **GOOD_L19) + _layer(
         43, seed=0, checkpoint="checkpoint_step_30000.pt", **GOOD_L43
     )
     with pytest.raises(ValueError, match="checkpoint"):
-        pilot_verdict({0: mixed}, _v0(seeds=(0,)), REFS, TRAIN)
+        pilot_verdict(v1, _v0(), REFS, TRAIN)
+
+
+def test_pilot_refuses_mixed_generator_weights():
+    """Catches the one-kind guard checking only the checkpoint file: v1 seed 0
+    sampled with --ema and seed 1 without, same checkpoint file, must raise.
+    The same holds for v0's seeds."""
+    v1 = _v1_good()
+    v1[1] = _layer(19, seed=1, generator_weights="raw", **GOOD_L19) + _layer(
+        43, seed=1, generator_weights="raw", **GOOD_L43
+    )
+    with pytest.raises(ValueError, match="generator_weights"):
+        pilot_verdict(v1, _v0(), REFS, TRAIN)
+
+    v0 = _v0()
+    for r in v0[1]:
+        r["generator_weights"] = "raw"
+    with pytest.raises(ValueError, match="generator_weights"):
+        pilot_verdict(_v1_good(), v0, REFS, TRAIN)
+
+
+def test_pilot_refuses_seeds_with_different_corpora():
+    """Catches the corpus-set check being dropped from the pilot: v0 seed 1
+    lacks head 7 at L43, so its pooled values and the seed spread would be over
+    a different set of corpora. Layers outside 19 and 43 are not compared."""
+    v0 = _v0()
+    v0[1] = [r for r in v0[1] if not (r["layer"] == 43 and r["kv_head"] == 7)]
+    with pytest.raises(ValueError, match=r"missing \[\(43, 7\)\]"):
+        pilot_verdict(_v1_good(), v0, REFS, TRAIN)
+
+    # An extra non-pilot layer in v0 (as in the committed 12-layer files) is fine.
+    v0 = _v0()
+    v0[0] = v0[0] + _layer(3, seed=0)
+    assert pilot_verdict(_v1_good(), v0, REFS, TRAIN)["go"] is True
 
 
 def test_key_side_drop_beyond_v0_seed_spread_blocks_go():
@@ -330,11 +385,11 @@ def test_v1_none_does_not_move_and_blocks_go():
     """Catches a None v1 statistic raising, or being counted as a move. A v1
     whose L19 IVF ratio has no qualifying corpus (all key-side scan fractions 0)
     reads None."""
-    v1 = _pilot_set(GOOD_L19, GOOD_L43, seed=0)
-    for r in v1:
+    v1 = _v1_good()
+    for r in v1[0]:
         if r["layer"] == 19:
             r["plain_id_k128"]["ivf_scan_frac"] = 0.0
-    out = pilot_verdict({0: v1}, _v0(seeds=(0,)), REFS, TRAIN)
+    out = pilot_verdict(v1, _v0(), REFS, TRAIN)
     cell = out["layers"][19]["statistics"]["ivf_ratio_k128"]
     assert cell["seeds"][0]["v1"] is None
     assert cell["moves"] is False
@@ -348,13 +403,13 @@ def test_none_in_reference_or_v0_raises_naming_statistic_and_layer():
     for r in refs[1]:
         if r["layer"] == 43:
             r["plain_ood_k10"] = dict(r["plain_ood_k10"], hnsw_recall_op=None)
-    v1 = {0: _pilot_set(GOOD_L19, GOOD_L43, seed=0)}
+    v1 = _v1_good()
     with pytest.raises(
         ValueError, match=r"hnsw_recall_k10_ef176.*43|43.*hnsw_recall_k10_ef176"
     ):
-        pilot_verdict(v1, _v0(seeds=(0,)), refs, TRAIN)
+        pilot_verdict(v1, _v0(), refs, TRAIN)
 
-    v0 = _v0(seeds=(0,))
+    v0 = _v0()
     for r in v0[0]:
         if r["layer"] == 19:
             r["plain_id_k10"] = dict(r["plain_id_k10"], hnsw_recall_op=None)
@@ -427,7 +482,7 @@ def test_full_ivf_recall_must_stay_inside_the_band():
     """Catches ivf_recall_k128_np24 being judged by the toward rule: v0 at 0.95
     (distance 0.085), v1 at 0.87 closes 0.08 > spread 0.02, but is outside the
     0.80-0.865 band, so it does not meet its requirement."""
-    v0 = {0: _layer(3, seed=0, **dict(V0_FULL, ivf_recall=0.95))}
+    v0 = {s: _layer(3, seed=s, **dict(V0_FULL, ivf_recall=0.95)) for s in (0, 1)}
     out = full_verdict(
         _layer(3, **dict(V0_FULL, ivf_recall=0.87)), v0, FULL_REFS, BANDS
     )
@@ -440,7 +495,7 @@ def test_full_ivf_recall_must_stay_inside_the_band():
 
 def test_full_meets_all_when_every_statistic_lands_in_its_band():
     """Catches a full verdict that can never succeed."""
-    v0 = {0: _layer(3, seed=0, **V0_FULL)}
+    v0 = {s: _layer(3, seed=s, **V0_FULL) for s in (0, 1)}
     v1 = _layer(3, reach=0.625, recall=0.83, ratio=1.0, ivf_recall=0.83, id_recall=1.0)
     out = full_verdict(v1, v0, FULL_REFS, BANDS)
     assert out["all_bands_pass"] is True
@@ -449,8 +504,52 @@ def test_full_meets_all_when_every_statistic_lands_in_its_band():
 
 def test_full_needs_v0_seed_0():
     """Catches v1 being compared with whichever v0 seed comes first."""
-    v0 = {1: _layer(3, seed=1, **V0_FULL)}
+    v0 = {s: _layer(3, seed=s, **V0_FULL) for s in (1, 2)}
     with pytest.raises(ValueError, match="seed 0"):
+        full_verdict(_layer(3, **V0_FULL), v0, FULL_REFS, BANDS)
+
+
+def test_full_refuses_a_single_v0_seed():
+    """Catches the two-seed requirement being dropped from full_verdict: with
+    one v0 seed the key-side allowance is 0, which the spec rules out."""
+    v0 = {0: _layer(3, seed=0, **V0_FULL)}
+    with pytest.raises(ValueError, match="two or more seeds"):
+        full_verdict(_layer(3, **V0_FULL), v0, FULL_REFS, BANDS)
+
+
+def test_full_refuses_v0_seeds_with_different_corpora():
+    """Catches the corpus-set check being dropped from full_verdict: v0 seed 1
+    holding only layer 19 against v1 and v0 seed 0 holding layers 3 and 5 would
+    give a seed spread taken over different corpora. The error names them."""
+    v1 = _layer(3, **V0_FULL) + _layer(5, **V0_FULL)
+    v0 = {
+        0: _layer(3, seed=0, **V0_FULL) + _layer(5, seed=0, **V0_FULL),
+        1: _layer(19, seed=1, **dict(V0_FULL, id_recall=0.90)),
+    }
+    with pytest.raises(ValueError, match=r"v0 seed 1.*missing \[\(3, 0\)"):
+        full_verdict(v1, v0, FULL_REFS, BANDS)
+
+
+def test_full_refuses_v1_not_measured_at_seed_0():
+    """Catches v1's seed label not being checked in full_verdict: v1 is compared
+    with v0 at seed 0, so a v1 measured at seed 1 would be compared with the
+    wrong v0 draw."""
+    v0 = {s: _layer(3, seed=s, **V0_FULL) for s in (0, 1)}
+    with pytest.raises(ValueError, match="v1 passed as seed 0"):
+        full_verdict(_layer(3, seed=1, **V0_FULL), v0, FULL_REFS, BANDS)
+
+
+def test_full_refuses_mixed_generator_weights():
+    """Catches the one-kind guard checking only the checkpoint file in
+    full_verdict: v1 heads sampled with and without --ema, or v0 seeds sampled
+    differently, must raise."""
+    v0 = {s: _layer(3, seed=s, **V0_FULL) for s in (0, 1)}
+    v1 = _layer(3, **V0_FULL)
+    v1[0] = dict(v1[0], generator_weights="raw")
+    with pytest.raises(ValueError, match="generator_weights"):
+        full_verdict(v1, v0, FULL_REFS, BANDS)
+    v0[1] = _layer(3, seed=1, generator_weights="raw", **V0_FULL)
+    with pytest.raises(ValueError, match="generator_weights"):
         full_verdict(_layer(3, **V0_FULL), v0, FULL_REFS, BANDS)
 
 
@@ -464,7 +563,8 @@ def test_v0_records_judged_against_themselves_do_not_move():
     requirement."""
     refs = [_read(p) for p in REFERENCE_PATHS]
     v0 = _read(V0_BEST)
-    pilot = pilot_verdict({0: v0}, {0: v0}, refs, _read(TRAIN_BOOKS_PATH))
+    by_seed = {0: v0, 1: _relabel(v0, 1)}
+    pilot = pilot_verdict(by_seed, by_seed, refs, _read(TRAIN_BOOKS_PATH))
     assert pilot["go"] is False
     for layer in (19, 43):
         for name in PILOT_STATS:
@@ -474,7 +574,7 @@ def test_v0_records_judged_against_themselves_do_not_move():
         "v1"
     ] == pytest.approx(0.9722, abs=1e-4)
 
-    full = full_verdict(v0, {0: v0}, refs, BANDS)
+    full = full_verdict(v0, by_seed, refs, BANDS)
     meets = {n for n, c in full["statistics"].items() if c["meets"]}
     assert meets == {"ivf_recall_k128_np24"}
     failing = {n for n, c in full["statistics"].items() if not c["band_pass"]}
@@ -492,18 +592,21 @@ def test_v0_records_judged_against_themselves_do_not_move():
 
 def test_cli_writes_sorted_json_with_inputs(tmp_path, capsys):
     """Catches the CLI dropping the input paths, the default reference/train-books/
-    gate paths not resolving from the repo root, or unsorted output keys."""
-    out = tmp_path / "pilot.json"
-    assert (
-        main(
-            ["pilot", "--v1", f"0={V0_BEST}", "--v0", f"0={V0_BEST}", "--out", str(out)]
-        )
-        == 0
+    gate paths not resolving from the repo root, or unsorted output keys. The
+    second seed is a relabelled copy of the committed v0 best records."""
+    seed1 = tmp_path / "v0_best_seed1.jsonl"
+    seed1.write_text(
+        "".join(json.dumps(r) + "\n" for r in _relabel(_read(V0_BEST), 1)), "utf-8"
     )
+    pairs = ["0=" + str(V0_BEST), "1=" + str(seed1)]
+    out = tmp_path / "pilot.json"
+    argv = ["pilot", "--v1", pairs[0], "--v1", pairs[1]]
+    argv += ["--v0", pairs[0], "--v0", pairs[1], "--out", str(out)]
+    assert main(argv) == 0
     text = out.read_text(encoding="utf-8")
     data = json.loads(text)
     assert data["go"] is False
-    assert data["inputs"]["v1"] == {"0": str(V0_BEST)}
+    assert data["inputs"]["v1"] == {"0": str(V0_BEST), "1": str(seed1)}
     assert data["inputs"]["references"] == [str(p) for p in REFERENCE_PATHS]
     assert data["inputs"]["train_books"] == str(TRAIN_BOOKS_PATH)
     assert text == json.dumps(data, sort_keys=True, indent=2) + "\n"
@@ -516,7 +619,9 @@ def test_cli_writes_sorted_json_with_inputs(tmp_path, capsys):
                 "--v1",
                 str(V0_BEST),
                 "--v0",
-                f"0={V0_BEST}",
+                pairs[0],
+                "--v0",
+                pairs[1],
                 "--out",
                 str(out_full),
             ]

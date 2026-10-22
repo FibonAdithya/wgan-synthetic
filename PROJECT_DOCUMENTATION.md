@@ -418,6 +418,10 @@ batch-dependent critic (its docstring says so).
 | `data.kv_layer` | required with `data.format: kv_capture` | The Llama 4 Scout global layer whose `h` is read (3, 7, ..., 47). See `data/README.md`. |
 | `data.kv_books` | required with `data.format: kv_capture` | Book indices to read, concatenated in the order given. `scout_kv` trains on books 0-11. |
 | `data.kv_n_sink` | `1` | Leading positions dropped from each book (the attention sink). |
+| `data.kv_n_tail` | unset | `kv_capture` only. The last `kv_n_tail` positions of every book are flagged TAIL and the rest BODY (`src/data/kv_capture.py::kv_flags`); all books must then have the same length. Set together with `model.n_flags`: one without the other is refused. |
+| `data.kv_tail_holdout` | unset | Number of tail rows held out exactly, with `round(holdout_fraction * n_body)` body rows held out as before (`src/data/dataset.py::build_training_data`). Must satisfy `1 <= value < number of tail rows`. Required with `data.kv_n_tail`; refused without `model.n_flags`. |
+| `model.n_flags` | unset | Makes the generator and critic position-conditioned: a one-hot of the flag is appended to the latent (generator) and to the input (critic). Only `2` (body, tail) is accepted, only with `generator_type: mlp` and `critic_type: per_vector`. Requires `data.kv_n_tail`, `training.tail_batch_share` and `training.select_on: gate`. |
+| `training.tail_batch_share` | unset | Fraction of each batch drawn from tail rows; the tail count is `round(share * batch_size)` and must lie in `[1, batch_size - 1]`. Required with `model.n_flags`; refused without it. |
 
 Checkpoints do not record `critic_type` either; like the generator, the
 critic is rebuilt from `run_config.yaml`, and the per-vector, neighbourhood
@@ -481,6 +485,17 @@ checkpoints within one run and are not the family's profile. Checkpoints
 record `select_on` and `best_score`; a resume under a different selector is
 refused. They also record `model.output_normalize`, and a resume that flips it
 is refused too. Checkpoints written before that record existed are not checked.
+
+With `model.n_flags` set, the selector must be `gate`; `select_on: cov_fro` is
+refused, since it would select on the body covariance alone. Each evaluation
+samples the generator once per flag, to the size of that flag's holdout, and
+scores body against the body holdout and tail against the tail holdout
+(`flagged_eval_stats`). `selection_score` is `selection_score_body +
+selection_score_tail`, and is infinite if either is. Tail statistics are logged
+under the same names with a `tail_` prefix. Checkpoints record `n_flags`
+(`null` for an unconditioned run), and a resume whose config changes it is
+refused; like `output_normalize`, checkpoints written before the record existed
+are read as unconditioned.
 
 Both sides are measured with exact-zero rows dropped (`zero_rows` in the
 logged statistics is the count) -- a zero row sits at the origin rather than

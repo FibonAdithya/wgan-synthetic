@@ -43,6 +43,8 @@ python -m src.eval.kv_gate measure-run  --capture-dir D --run-dir 3=runs/scout_k
     [--checkpoint-name best_generator.pt] [--ema] [--n-keys 31736] [--layers 11,19,43]
 python -m src.eval.kv_gate compare-layers --records run.jsonl [--reference ref.jsonl ...]
 python -m src.eval.kv_gate check --records run.jsonl [--gate-file gates/scout_kv.yaml]
+python -m src.kv.judge pilot --v1 SEED=v1.jsonl ... --v0 SEED=v0.jsonl ... --out pilot_best.json
+python -m src.kv.judge full  --v1 v1.jsonl --v0 SEED=v0.jsonl ... --out full_best.json
 ```
 
 - `measure-real` profiles the real reference. `--books` takes a range (`12-19`) or a
@@ -55,6 +57,13 @@ python -m src.eval.kv_gate check --records run.jsonl [--gate-file gates/scout_kv
   run dir, and the list must be non-empty with no repeats. All of this is checked before the
   first measurement. That is for control experiments:
   `check` still fails such records, because the gate needs all 96 corpora.
+- `src.kv.judge` applies the v1 "moves toward real" rule (spec: `docs/ai/specs/2026-10-22-scout-kv-v1-position-flag-design.md`,
+  "How v1 is judged") to records files, in plain Python with no GPU. Each call judges one
+  checkpoint kind (all best or all final). `pilot` compares v1 with v0 at layers 19 and 43,
+  per layer, pairing each v1 sampling seed with the v0 file of the same seed. `full` compares
+  pooled statistics against `gates/scout_kv.yaml`. `--out` writes the verdict as JSON; the
+  module docstring in `src/kv/judge.py` has the details and the one-seed, mismatched-corpus
+  and mixed-kind refusals.
 - `compare-layers` pools each layer's records separately and reports, per statistic, the
   min, max and mean over the reference draws, the candidate's value, and whether it is
   `inside` (bounds inclusive), `above`, `below` or `none`. `--reference` is repeatable and
@@ -182,12 +191,12 @@ every number in `summary.json`). All values below are MEASURED, from `summary.js
   0.637 (v0 0.824). Much of the gap comes from the reference taking queries from the
   last 1,024 positions of each book, which an unconditional generator cannot reproduce.
 - The training books are not easier than the reference books (R2 does not fire).
-- The plan's hard stop applies: no v1 design until the gate question is settled. The next step is a cross-book
-  control: keys from the bodies of some books, queries from the tails of others.
+- The plan's hard stop was: no v1 design until the gate question is settled. The question was
+  settled on 2026-10-22 in favour of keeping the end-of-book reference and conditioning the
+  generator on position (a body/tail flag). The design is
+  `docs/ai/specs/2026-10-22-scout-kv-v1-position-flag-design.md`; `v1` is designed, not trained.
 
 ## Not yet done
 
-- The gate question above: keep the end-of-book reference and condition the generator on
-  position, or re-base the reference on pooled sampling.
 - A generator that passes the gate. v0 fails it (see `## Gate bands`).
 - Whether the in-training selector (`select_on: gate`, LID and contrast on `h`, holdout 2% = 7,864 rows) picks good checkpoints under the search-difficulty gate. In v0 the best and final checkpoints differ only at layers 7 and 11, and both fail the gate on the same four statistics, so v0 does not settle it.

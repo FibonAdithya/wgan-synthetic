@@ -137,16 +137,37 @@ def test_kv_tail_holdout_is_required_with_kv_n_tail(tmp_path):
 
 
 def test_kv_n_tail_with_another_format_raises(tmp_path):
-    """Catches silently ignoring kv_n_tail for a non-kv_capture format."""
-    with pytest.raises(ValueError):
+    """Catches silently ignoring kv_n_tail for a non-kv_capture format. The path is a real
+    .npy file, so only the format check can raise (deleting it returns a 3-tuple)."""
+    path = tmp_path / "x.npy"
+    np.save(path, np.ones((50, 4), dtype=np.float32))
+    with pytest.raises(ValueError, match="kv_n_tail"):
+        build_training_data(
+            str(path),
+            "npy",
+            4,
+            0.2,
+            PreprocessConfig(l2_normalize=False),
+            0,
+            kv_n_tail=8,
+            kv_tail_holdout=4,
+        )
+
+
+def test_kv_n_tail_without_a_path_raises(tmp_path):
+    """Catches kv_n_tail being accepted with descriptor_path=None and kv_capture: with
+    synthetic_if_missing the synthetic branch would otherwise return a flagless 3-tuple."""
+    with pytest.raises(ValueError, match="kv_n_tail"):
         build_training_data(
             None,
-            "fvecs",
+            "kv_capture",
             4,
             0.2,
             PreprocessConfig(l2_normalize=False),
             0,
             synthetic_if_missing=True,
+            kv_layer=3,
+            kv_books=[0],
             kv_n_tail=8,
             kv_tail_holdout=4,
         )

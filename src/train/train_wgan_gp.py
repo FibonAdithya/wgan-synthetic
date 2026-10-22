@@ -24,6 +24,7 @@ from src.data.dataset import (
     build_training_data,
 )
 from src.device import cuda_device_index, resolve_device
+from src.models.conditional import FlagConditionedGenerator
 from src.models.critic import (
     DEFAULT_DISTANCE_FLOOR,
     BankNeighbourhoodCritic,
@@ -146,7 +147,11 @@ def split_batch(batch: Tensor | list | tuple) -> tuple[Tensor, Tensor | None]:
 
 
 def gradient_penalty(
-    critic: nn.Module, real: Tensor, fake: Tensor, device: torch.device
+    critic: nn.Module,
+    real: Tensor,
+    fake: Tensor,
+    device: torch.device,
+    flags: Tensor | None = None,
 ) -> Tensor:
     """WGAN-GP penalty on row-wise interpolates of `real` and `fake`.
 
@@ -159,6 +164,10 @@ def gradient_penalty(
     formulation for a minibatch-dependent critic, and the interpolated batch
     mixing real and fake neighbourhoods is fine: the penalty is about the
     critic's smoothness, not the population the batch came from.
+
+    With `flags`, the critic is called as `critic(interpolated, flags)`. The
+    flags are discrete and are not differentiated; the gradient is taken with
+    respect to `interpolated` only.
     """
     batch_size = real.shape[0]
     alpha = torch.rand(batch_size, 1, device=device)
@@ -166,7 +175,9 @@ def gradient_penalty(
     interpolated = alpha * real + (1.0 - alpha) * fake
     interpolated.requires_grad_(True)
 
-    critic_interpolated = critic(interpolated)
+    critic_interpolated = (
+        critic(interpolated) if flags is None else critic(interpolated, flags)
+    )
     grad_outputs = torch.ones_like(critic_interpolated, device=device)
     gradients = torch.autograd.grad(
         outputs=critic_interpolated,
@@ -371,6 +382,7 @@ def save_checkpoint(
     select_on: str = "cov_fro",
     best_score: float = float("inf"),
     output_normalize: bool = True,
+    n_flags: int | None = None,
 ) -> None:
     """Write a checkpoint.
 
@@ -392,6 +404,8 @@ def save_checkpoint(
     a resume under a different selector is refused rather than silently
     mixing two scores. `output_normalize` is recorded for the same reason:
     flipping it on resume would change what the critic sees mid-run.
+    `n_flags` is the number of position flags the generator and critic are
+    conditioned on, or None for an unconditioned model.
     """
     if generator_weights not in ("live", "ema"):
         raise ValueError(
@@ -410,6 +424,7 @@ def save_checkpoint(
         "select_on": select_on,
         "best_score": float(best_score),
         "output_normalize": bool(output_normalize),
+        "n_flags": None if n_flags is None else int(n_flags),
     }
     out_dir.mkdir(parents=True, exist_ok=True)
     torch.save(ckpt, out_dir / f"checkpoint_step_{step}.pt")
@@ -434,7 +449,18 @@ def sample_generator(
     batch_size: int,
     device: torch.device,
     normalize: bool = True,
+    flag: int | None = None,
 ) -> np.ndarray:
+    """Draw `num_samples` rows from `generator`.
+
+    A `FlagConditionedGenerator` requires `flag` and every row is generated
+    under it. Any other generator must be called with `flag=None`.
+    """
+    flagged = isinstance(generator, FlagConditionedGenerator)
+    if flagged and flag is None:
+        raise ValueError("a flag-conditioned generator needs flag=")
+    if not flagged and flag is not None:
+        raise ValueError("flag= given for a generator that is not flag-conditioned")
     # Restore the mode we found rather than forcing train(): callers outside
     # the training loop (evaluate_distribution, compare_variants) hand us an
     # eval()-mode generator and would otherwise get it back in train mode.
@@ -449,7 +475,11 @@ def sample_generator(
             if cur <= 0:
                 break
             z = torch.randn(cur, latent_dim, device=device)
-            x = generator(z)
+            if flagged:
+                flags = torch.full((cur,), flag, dtype=torch.long, device=device)
+                x = generator(z, flags)
+            else:
+                x = generator(z)
             x = normalize_l2(x) if normalize else x
             x = x.detach().cpu().numpy()
             out.append(x)

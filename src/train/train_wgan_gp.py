@@ -24,6 +24,7 @@ from src.data.dataset import (
     build_training_data,
 )
 from src.device import cuda_device_index, resolve_device
+from src.models.conditional import BODY, TAIL, FlagConditionedGenerator
 from src.models.critic import (
     DEFAULT_DISTANCE_FLOOR,
     BankNeighbourhoodCritic,
@@ -36,6 +37,7 @@ from src.models.generator import (
     SphericalGenerator,
     build_generator,
 )
+from src.train.flag_batches import FlagBatchStream
 from src.train.gpu_lock import claim_gpu, gpu_lock_key
 from src.train.log_ratio import LogRatioTarget, log_ratio_penalty
 from src.train.selection import (
@@ -146,7 +148,11 @@ def split_batch(batch: Tensor | list | tuple) -> tuple[Tensor, Tensor | None]:
 
 
 def gradient_penalty(
-    critic: nn.Module, real: Tensor, fake: Tensor, device: torch.device
+    critic: nn.Module,
+    real: Tensor,
+    fake: Tensor,
+    device: torch.device,
+    flags: Tensor | None = None,
 ) -> Tensor:
     """WGAN-GP penalty on row-wise interpolates of `real` and `fake`.
 
@@ -159,6 +165,10 @@ def gradient_penalty(
     formulation for a minibatch-dependent critic, and the interpolated batch
     mixing real and fake neighbourhoods is fine: the penalty is about the
     critic's smoothness, not the population the batch came from.
+
+    With `flags`, the critic is called as `critic(interpolated, flags)`. The
+    flags are discrete and are not differentiated; the gradient is taken with
+    respect to `interpolated` only.
     """
     batch_size = real.shape[0]
     alpha = torch.rand(batch_size, 1, device=device)
@@ -166,7 +176,9 @@ def gradient_penalty(
     interpolated = alpha * real + (1.0 - alpha) * fake
     interpolated.requires_grad_(True)
 
-    critic_interpolated = critic(interpolated)
+    critic_interpolated = (
+        critic(interpolated) if flags is None else critic(interpolated, flags)
+    )
     grad_outputs = torch.ones_like(critic_interpolated, device=device)
     gradients = torch.autograd.grad(
         outputs=critic_interpolated,
@@ -371,6 +383,7 @@ def save_checkpoint(
     select_on: str = "cov_fro",
     best_score: float = float("inf"),
     output_normalize: bool = True,
+    n_flags: int | None = None,
 ) -> None:
     """Write a checkpoint.
 
@@ -392,6 +405,8 @@ def save_checkpoint(
     a resume under a different selector is refused rather than silently
     mixing two scores. `output_normalize` is recorded for the same reason:
     flipping it on resume would change what the critic sees mid-run.
+    `n_flags` is the number of position flags the generator and critic are
+    conditioned on, or None for an unconditioned model.
     """
     if generator_weights not in ("live", "ema"):
         raise ValueError(
@@ -410,6 +425,7 @@ def save_checkpoint(
         "select_on": select_on,
         "best_score": float(best_score),
         "output_normalize": bool(output_normalize),
+        "n_flags": None if n_flags is None else int(n_flags),
     }
     out_dir.mkdir(parents=True, exist_ok=True)
     torch.save(ckpt, out_dir / f"checkpoint_step_{step}.pt")
@@ -434,7 +450,18 @@ def sample_generator(
     batch_size: int,
     device: torch.device,
     normalize: bool = True,
+    flag: int | None = None,
 ) -> np.ndarray:
+    """Draw `num_samples` rows from `generator`.
+
+    A `FlagConditionedGenerator` requires `flag` and every row is generated
+    under it. Any other generator must be called with `flag=None`.
+    """
+    flagged = isinstance(generator, FlagConditionedGenerator)
+    if flagged and flag is None:
+        raise ValueError("a flag-conditioned generator needs flag=")
+    if not flagged and flag is not None:
+        raise ValueError("flag= given for a generator that is not flag-conditioned")
     # Restore the mode we found rather than forcing train(): callers outside
     # the training loop (evaluate_distribution, compare_variants) hand us an
     # eval()-mode generator and would otherwise get it back in train mode.
@@ -449,13 +476,145 @@ def sample_generator(
             if cur <= 0:
                 break
             z = torch.randn(cur, latent_dim, device=device)
-            x = generator(z)
+            if flagged:
+                flags = torch.full((cur,), flag, dtype=torch.long, device=device)
+                x = generator(z, flags)
+            else:
+                x = generator(z)
             x = normalize_l2(x) if normalize else x
             x = x.detach().cpu().numpy()
             out.append(x)
             generated += cur
     generator.train(was_training)
     return np.concatenate(out, axis=0)[:num_samples]
+
+
+def flag_settings(
+    config: Mapping[str, Any],
+) -> tuple[int | None, int | None, int | None, float]:
+    """Read and check the body/tail flag settings.
+
+    Returns `(n_flags, kv_n_tail, kv_tail_holdout, tail_batch_share)`.
+    `model.n_flags` and `data.kv_n_tail` must be set together or not at all.
+    Without them the run is unconditioned: `data.kv_tail_holdout` and
+    `training.tail_batch_share` must then be absent, since nothing would read
+    them, and the share is returned as 0.0. With them,
+    `training.tail_batch_share` is required.
+    """
+    n_flags = config["model"].get("n_flags")
+    kv_n_tail = config["data"].get("kv_n_tail")
+    kv_tail_holdout = config["data"].get("kv_tail_holdout")
+    share = config["training"].get("tail_batch_share")
+    if (n_flags is None) != (kv_n_tail is None):
+        raise ValueError(
+            "data.kv_n_tail and model.n_flags must be set together, got "
+            f"kv_n_tail={kv_n_tail!r} and n_flags={n_flags!r}"
+        )
+    if n_flags is None:
+        for name, value in (
+            ("data.kv_tail_holdout", kv_tail_holdout),
+            ("training.tail_batch_share", share),
+        ):
+            if value is not None:
+                raise ValueError(f"{name} is set but model.n_flags is not")
+        return None, None, None, 0.0
+    if share is None:
+        raise ValueError("model.n_flags needs training.tail_batch_share")
+    # kv_tail_holdout is checked by build_training_data.
+    return (
+        int(n_flags),
+        int(kv_n_tail),
+        None if kv_tail_holdout is None else int(kv_tail_holdout),
+        float(share),
+    )
+
+
+def half_gate_stats(
+    fake: np.ndarray,
+    real_gate: Mapping[str, float | int | None],
+    *,
+    prefix: str,
+    metric: str,
+    seed: int,
+    distance_floor: float,
+) -> tuple[dict[str, Any], float]:
+    """Gate statistics and selection score for a fake sample: `(stats, score)`.
+
+    `stats` keys are `prefix` + `gate_fake_*` and `gate_real_*`. The real
+    side is passed in, computed once outside the training loop, and is not
+    wrapped: a failure there means the holdout itself is broken, which should
+    stop the run. A fake-side failure is a property of one checkpoint and must
+    not take the whole run down with it, so it is recorded under
+    `prefix + "gate_error"`, the `gate_fake_*` keys are set to None, and the
+    score is inf. The unflagged eval calls this with `prefix=""`.
+    """
+    out: dict[str, Any] = {}
+    try:
+        fake_gate = gate_statistics(
+            fake, metric=metric, seed=seed, distance_floor=distance_floor
+        )
+    except Exception as e:
+        out[f"{prefix}gate_error"] = f"{type(e).__name__}: {e}"
+        out.update({f"{prefix}gate_fake_{key}": None for key in LOGGED})
+        return out, math.inf
+    out.update(prefixed(fake_gate, f"{prefix}gate_fake_"))
+    out.update(prefixed(real_gate, f"{prefix}gate_real_"))
+    return out, selection_score(fake_gate, real_gate)
+
+
+def flagged_eval_stats(
+    generator: nn.Module,
+    holdout_by_flag: Mapping[int, np.ndarray],
+    real_gate_by_flag: Mapping[int, Mapping[str, float | int | None]],
+    *,
+    latent_dim: int,
+    batch_size: int,
+    device: torch.device,
+    normalize: bool,
+    metric: str,
+    seed: int,
+    distance_floor: float,
+) -> dict[str, Any]:
+    """Eval entry for a flag-conditioned generator.
+
+    Each flag is sampled to the size of its holdout. Body keys use the
+    unflagged eval's names; tail keys add a `tail_` prefix.
+    `selection_score` is the sum of `selection_score_body` and
+    `selection_score_tail`, and is inf if either is.
+    """
+    stats: dict[str, Any] = {}
+    scores = {}
+    for flag, prefix in ((BODY, ""), (TAIL, "tail_")):
+        holdout = holdout_by_flag[flag]
+        fake = sample_generator(
+            generator=generator,
+            num_samples=holdout.shape[0],
+            latent_dim=latent_dim,
+            batch_size=batch_size,
+            device=device,
+            normalize=normalize,
+            flag=flag,
+        )
+        half = tensor_stats(holdout, fake)
+        half.update(collapse_stats(fake))
+        stats.update(prefixed(half, prefix))
+        gate, scores[flag] = half_gate_stats(
+            fake,
+            real_gate_by_flag[flag],
+            prefix=prefix,
+            metric=metric,
+            seed=seed,
+            distance_floor=distance_floor,
+        )
+        stats.update(gate)
+    stats["selection_score_body"] = scores[BODY]
+    stats["selection_score_tail"] = scores[TAIL]
+    stats["selection_score"] = (
+        math.inf
+        if math.isinf(scores[BODY]) or math.isinf(scores[TAIL])
+        else scores[BODY] + scores[TAIL]
+    )
+    return stats
 
 
 def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
@@ -479,10 +638,12 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     data_cfg = config["data"]
+    n_flags, kv_n_tail, kv_tail_holdout, tail_batch_share = flag_settings(config)
+    flagged = n_flags is not None
     preprocess_cfg = PreprocessConfig(
         **data_cfg["preprocess"], metric=data_cfg.get("metric", "l2")
     )
-    x_train, x_holdout, preprocess_state = build_training_data(
+    loaded = build_training_data(
         descriptor_path=data_cfg["real_path"],
         file_format=data_cfg["format"],
         descriptor_dim=int(data_cfg["descriptor_dim"]),
@@ -494,7 +655,13 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
         kv_layer=data_cfg.get("kv_layer"),
         kv_books=data_cfg.get("kv_books"),
         kv_n_sink=int(data_cfg.get("kv_n_sink", 1)),
+        kv_n_tail=kv_n_tail,
+        kv_tail_holdout=kv_tail_holdout,
     )
+    if flagged:
+        x_train, x_holdout, preprocess_state, flags_train, flags_holdout = loaded
+    else:
+        x_train, x_holdout, preprocess_state = loaded
 
     model_cfg = config["model"]
     norm_out = output_normalize(model_cfg)
@@ -515,18 +682,33 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
     optim_d = torch.optim.Adam(critic.parameters(), lr=lr_d, betas=betas)
 
     bank_critic = isinstance(critic, BankNeighbourhoodCritic)
-    dataset = (
-        IndexedTensorDataset(x_train) if bank_critic else NumpyTensorDataset(x_train)
-    )
     num_workers = int(train_cfg.get("num_workers", 0))
-    loader = build_dataloader(
-        dataset,
-        batch_size=int(train_cfg["batch_size"]),
-        num_workers=num_workers,
-        seed=seed,
-        pin_memory=(device.type == "cuda"),
-    )
-    data_iter = iter(loader)
+    if flagged:
+        # A flagged run has a per-vector critic (build_critic refuses the
+        # bank critic with flags), so no dataset or row ids are needed.
+        stream = FlagBatchStream(
+            x_train,
+            flags_train,
+            batch_size=int(train_cfg["batch_size"]),
+            tail_share=tail_batch_share,
+            seed=seed,
+            num_workers=num_workers,
+            pin_memory=(device.type == "cuda"),
+        )
+    else:
+        dataset = (
+            IndexedTensorDataset(x_train)
+            if bank_critic
+            else NumpyTensorDataset(x_train)
+        )
+        loader = build_dataloader(
+            dataset,
+            batch_size=int(train_cfg["batch_size"]),
+            num_workers=num_workers,
+            seed=seed,
+            pin_memory=(device.type == "cuda"),
+        )
+        data_iter = iter(loader)
 
     # Generator EMA (stabilises samples / checkpoint). Disabled when decay <= 0.
     ema_decay = float(train_cfg.get("ema_decay", 0.0))
@@ -570,12 +752,21 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
         "gpu": gpu_meta,
         "metrics": [],
     }
+    if flagged:
+        # num_train / num_holdout above count both flags.
+        run_meta["data"]["num_train_tail"] = int(np.sum(flags_train == TAIL))
+        run_meta["data"]["num_holdout_tail"] = int(np.sum(flags_holdout == TAIL))
 
     best_cov = float("inf")
     select_on = str(train_cfg.get("select_on", "cov_fro"))
     if select_on not in SELECTORS:
         raise ValueError(
             f"training.select_on must be one of {SELECTORS}, got {select_on!r}"
+        )
+    if flagged and select_on != "gate":
+        raise ValueError(
+            f"model.n_flags needs training.select_on 'gate', got {select_on!r}; "
+            "cov_fro would select on the body covariance alone"
         )
     best_score = float("inf")
     metric = data_cfg.get("metric", "l2")
@@ -604,6 +795,14 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
             raise ValueError(
                 f"{resume} was trained with model.output_normalize={ckpt_norm_out} but "
                 f"the config says {norm_out}; a resume cannot change what the critic sees"
+            )
+        # A checkpoint without the key predates conditioning, so it is
+        # unconditioned.
+        ckpt_n_flags = ckpt.get("n_flags")
+        if ckpt_n_flags != n_flags:
+            raise ValueError(
+                f"{resume} was trained with model.n_flags={ckpt_n_flags} but the "
+                f"config says {n_flags}; a resume cannot change the conditioning"
             )
         if use_ema:
             saved = ckpt.get("ema_params") or {}
@@ -661,11 +860,23 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
     # step: computed once, repeated into every eval entry so each is
     # self-describing. Measured after the resume refusals above, so an
     # invalid --resume fails fast without paying for a ~2 s k-NN pass.
+    if flagged:
+        # One holdout and one real-side gate per flag.
+        holdout_by_flag = {f: x_holdout[flags_holdout == f] for f in (BODY, TAIL)}
+        real_gate_by_flag = {
+            f: gate_statistics(
+                holdout_by_flag[f],
+                metric=metric,
+                seed=seed,
+                distance_floor=gate_distance_floor,
+            )
+            for f in (BODY, TAIL)
+        }
     real_gate = (
         gate_statistics(
             x_holdout, metric=metric, seed=seed, distance_floor=gate_distance_floor
         )
-        if select_on == "gate"
+        if select_on == "gate" and not flagged
         else None
     )
     # Fixed latents for the linear-skip balance readout and the spherical
@@ -685,28 +896,38 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
         d_loss_val = 0.0
         gp_val = 0.0
         wasserstein_val = 0.0
+        wasserstein_flag_vals = {BODY: 0.0, TAIL: 0.0}
 
         for _ in range(n_critic):
-            try:
-                real_batch = next(data_iter)
-            except StopIteration:
-                data_iter = iter(loader)
-                real_batch = next(data_iter)
+            flags = None
+            if flagged:
+                real_batch, flags = stream.next()
+                real = real_batch.to(device)
+                flags = flags.to(device)
+                real_ids = None
+            else:
+                try:
+                    real_batch = next(data_iter)
+                except StopIteration:
+                    data_iter = iter(loader)
+                    real_batch = next(data_iter)
 
-            real_batch, real_ids = split_batch(real_batch)
-            real = real_batch.to(device)
-            real_ids = None if real_ids is None else real_ids.to(device)
+                real_batch, real_ids = split_batch(real_batch)
+                real = real_batch.to(device)
+                real_ids = None if real_ids is None else real_ids.to(device)
             batch_size = real.shape[0]
             z = torch.randn(batch_size, latent_dim, device=device)
 
             optim_d.zero_grad(set_to_none=True)
             with autocast("cuda", enabled=amp):
-                fake = generator(z).detach()
+                fake = (generator(z) if flags is None else generator(z, flags)).detach()
                 if norm_out:
                     fake = normalize_l2(fake)
-                d_real = score_population(critic, real, "real", row_ids=real_ids)
-                d_fake = score_population(critic, fake, "fake")
-                gp = gradient_penalty(critic, real, fake, device=device)
+                d_real = score_population(
+                    critic, real, "real", row_ids=real_ids, flags=flags
+                )
+                d_fake = score_population(critic, fake, "fake", flags=flags)
+                gp = gradient_penalty(critic, real, fake, device=device, flags=flags)
                 d_loss = -(d_real.mean() - d_fake.mean()) + lambda_gp * gp
 
             scaler_d.scale(d_loss).backward()
@@ -716,26 +937,37 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
             d_loss_val += float(d_loss.item())
             gp_val += float(gp.item())
             wasserstein_val += float((d_real.mean() - d_fake.mean()).item())
+            if flagged:
+                for f in (BODY, TAIL):
+                    rows = flags == f
+                    wasserstein_flag_vals[f] += float(
+                        (d_real[rows].mean() - d_fake[rows].mean()).item()
+                    )
 
         d_loss_val /= n_critic
         gp_val /= n_critic
         wasserstein_val /= n_critic
 
-        try:
-            real_batch = next(data_iter)
-        except StopIteration:
-            data_iter = iter(loader)
-            real_batch = next(data_iter)
-        real_batch, _ = split_batch(real_batch)
+        gen_flags = None
+        if flagged:
+            real_batch, gen_flags = stream.next()
+            gen_flags = gen_flags.to(device)
+        else:
+            try:
+                real_batch = next(data_iter)
+            except StopIteration:
+                data_iter = iter(loader)
+                real_batch = next(data_iter)
+            real_batch, _ = split_batch(real_batch)
         batch_size = real_batch.shape[0]
 
         optim_g.zero_grad(set_to_none=True)
         with autocast("cuda", enabled=amp):
             z = torch.randn(batch_size, latent_dim, device=device)
-            fake = generator(z)
+            fake = generator(z) if gen_flags is None else generator(z, gen_flags)
             if norm_out:
                 fake = normalize_l2(fake)
-            adv_loss = -score_population(critic, fake, "fake").mean()
+            adv_loss = -score_population(critic, fake, "fake", flags=gen_flags).mean()
             g_loss = adv_loss
             # Transferred once and shared: the regularizers all want the same
             # batch, and doing it per-branch pays for a host-to-device copy per
@@ -817,6 +1049,9 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
                 "lid_reg": float(lid_reg.item()),
                 "spectrum_reg": float(spectrum_reg.item()),
             }
+            if flagged:
+                msg["wasserstein_body"] = wasserstein_flag_vals[BODY] / n_critic
+                msg["wasserstein_tail"] = wasserstein_flag_vals[TAIL] / n_critic
             run_meta["metrics"].append(msg)
             print(json.dumps(msg))
 
@@ -826,51 +1061,56 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
             # the way out, including if the eval body raises. No-op when EMA is
             # disabled.
             with ema_weights(generator, ema_params, decay=ema_decay, ema_step=ema_step):
-                fake_holdout = sample_generator(
-                    generator=generator,
-                    num_samples=x_holdout.shape[0],
-                    latent_dim=latent_dim,
-                    batch_size=int(train_cfg["batch_size"]),
-                    device=device,
-                    normalize=norm_out,
-                )
-                stats = tensor_stats(x_holdout, fake_holdout)
-                stats.update(collapse_stats(fake_holdout))
-                if energy_probe is not None:
-                    # As with the gate block below: a failure here is a
-                    # property of this one checkpoint's diagnostics readout,
-                    # not of the run, and must not take the whole run down
-                    # with it -- run_metadata.json is only written after the
-                    # loop, so an uncaught exception here would discard every
-                    # eval entry collected so far.
-                    try:
-                        if isinstance(generator, SphericalGenerator):
-                            stats.update(generator.diagnostics(energy_probe))
-                        else:
-                            stats.update(generator.component_energies(energy_probe))
-                    except Exception as e:
-                        stats["diagnostics_error"] = f"{type(e).__name__}: {e}"
-                if select_on == "gate":
-                    # The real side is computed once outside the loop and is
-                    # not wrapped: a failure there means the holdout itself
-                    # is broken, which should stop the run. A fake-side
-                    # failure is a property of this one checkpoint and must
-                    # not take the whole run down with it.
-                    try:
-                        fake_gate = gate_statistics(
+                if flagged:
+                    stats = flagged_eval_stats(
+                        generator,
+                        holdout_by_flag,
+                        real_gate_by_flag,
+                        latent_dim=latent_dim,
+                        batch_size=int(train_cfg["batch_size"]),
+                        device=device,
+                        normalize=norm_out,
+                        metric=metric,
+                        seed=seed,
+                        distance_floor=gate_distance_floor,
+                    )
+                else:
+                    fake_holdout = sample_generator(
+                        generator=generator,
+                        num_samples=x_holdout.shape[0],
+                        latent_dim=latent_dim,
+                        batch_size=int(train_cfg["batch_size"]),
+                        device=device,
+                        normalize=norm_out,
+                    )
+                    stats = tensor_stats(x_holdout, fake_holdout)
+                    stats.update(collapse_stats(fake_holdout))
+                    if energy_probe is not None:
+                        # As with the gate block below: a failure here is a
+                        # property of this one checkpoint's diagnostics readout,
+                        # not of the run, and must not take the whole run down
+                        # with it -- run_metadata.json is only written after the
+                        # loop, so an uncaught exception here would discard every
+                        # eval entry collected so far.
+                        try:
+                            if isinstance(generator, SphericalGenerator):
+                                stats.update(generator.diagnostics(energy_probe))
+                            else:
+                                stats.update(generator.component_energies(energy_probe))
+                        except Exception as e:
+                            stats["diagnostics_error"] = f"{type(e).__name__}: {e}"
+                    if select_on == "gate":
+                        # A fake-side failure is contained; see half_gate_stats.
+                        gate, score = half_gate_stats(
                             fake_holdout,
+                            real_gate,
+                            prefix="",
                             metric=metric,
                             seed=seed,
                             distance_floor=gate_distance_floor,
                         )
-                    except Exception as e:
-                        stats["gate_error"] = f"{type(e).__name__}: {e}"
-                        stats.update({f"gate_fake_{key}": None for key in LOGGED})
-                        stats["selection_score"] = math.inf
-                    else:
-                        stats.update(prefixed(fake_gate, "gate_fake_"))
-                        stats.update(prefixed(real_gate, "gate_real_"))
-                        stats["selection_score"] = selection_score(fake_gate, real_gate)
+                        stats.update(gate)
+                        stats["selection_score"] = score
                 stats["step"] = step
                 run_meta.setdefault("eval", []).append(stats)
                 print(json.dumps({"eval": stats}))
@@ -907,6 +1147,7 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
                         select_on=select_on,
                         best_score=best_score,
                         output_normalize=norm_out,
+                        n_flags=n_flags,
                     )
                     best_checkpoint_written = True
 
@@ -927,6 +1168,7 @@ def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
                 select_on=select_on,
                 best_score=best_score,
                 output_normalize=norm_out,
+                n_flags=n_flags,
             )
 
     with (out_dir / "run_metadata.json").open("w", encoding="utf-8") as f:

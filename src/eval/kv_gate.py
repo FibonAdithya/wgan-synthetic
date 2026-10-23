@@ -315,6 +315,7 @@ def synthetic_h(
         load_preprocess_state,
     )
     from src.eval.evaluate_distribution import load_generator
+    from src.models.conditional import BODY, TAIL
     from src.train.train_wgan_gp import ema_weights, output_normalize, sample_generator
 
     run_dir = Path(run_dir)
@@ -340,18 +341,55 @@ def synthetic_h(
         )
         weights = "ema"
     torch.manual_seed(7919 * seed + layer)
+    latent_dim = int(cfg["model"]["latent_dim"])
+    batch_size = int(cfg["training"]["batch_size"])
+    normalize = output_normalize(cfg["model"])
+    state = load_preprocess_state(run_dir)
+
+    def to_h(x):
+        x = invert_samples(x, state)
+        return torch.from_numpy(np.ascontiguousarray(x, np.float32)).to(dev)
+
     with ctx:
-        x = sample_generator(
-            gen,
-            n_keys + 2 * n_tail,
-            int(cfg["model"]["latent_dim"]),
-            int(cfg["training"]["batch_size"]),
-            dev,
-            normalize=output_normalize(cfg["model"]),
+        if cfg["model"].get("n_flags") is None:
+            x = sample_generator(
+                gen,
+                n_keys + 2 * n_tail,
+                latent_dim,
+                batch_size,
+                dev,
+                normalize=normalize,
+            )
+            h = to_h(x)
+            return (
+                h[:n_keys],
+                h[n_keys : n_keys + n_tail],
+                h[n_keys + n_tail :],
+                weights,
+            )
+        # Flagged run: keys come from body samples, both query sets from tail samples.
+        xk = sample_generator(
+            gen, n_keys, latent_dim, batch_size, dev, normalize=normalize, flag=BODY
         )
-    x = invert_samples(x, load_preprocess_state(run_dir))
-    h = torch.from_numpy(np.ascontiguousarray(x, np.float32)).to(dev)
-    return h[:n_keys], h[n_keys : n_keys + n_tail], h[n_keys + n_tail :], weights
+        xt = (
+            sample_generator(
+                gen,
+                2 * n_tail,
+                latent_dim,
+                batch_size,
+                dev,
+                normalize=normalize,
+                flag=TAIL,
+            )
+            if n_tail > 0
+            else None
+        )
+    h_keys = to_h(xk)
+    if xt is None:
+        empty = h_keys[:0]
+        return h_keys, empty, empty, weights
+    h_tail = to_h(xt)
+    return h_keys, h_tail[:n_tail], h_tail[n_tail:], weights
 
 
 def measure_h_layer(

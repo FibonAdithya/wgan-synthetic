@@ -9,6 +9,7 @@ import torch
 from torch.utils.data import Dataset
 
 from src.data.kv_capture import load_kv_capture
+from src.models.conditional import BODY, TAIL
 
 
 def _load_fvecs(path: Path) -> np.ndarray:
@@ -219,6 +220,36 @@ def train_holdout_split(
     return x[train_idx], x[holdout_idx]
 
 
+def _stratified_split(
+    x: np.ndarray,
+    flags: np.ndarray,
+    holdout_fraction: float,
+    tail_holdout: int,
+    seed: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Hold out round(holdout_fraction * n_body) body rows and exactly tail_holdout tail rows."""
+    if not (0.0 < holdout_fraction < 1.0):
+        raise ValueError(f"holdout_fraction must be in (0,1), got {holdout_fraction}")
+    body_idx = np.flatnonzero(flags == BODY)
+    tail_idx = np.flatnonzero(flags == TAIL)
+    if not (1 <= tail_holdout < tail_idx.size):
+        raise ValueError(
+            f"kv_tail_holdout must satisfy 1 <= value < {tail_idx.size} tail rows, "
+            f"got {tail_holdout}"
+        )
+    n_body_holdout = max(1, int(round(body_idx.size * holdout_fraction)))
+    if n_body_holdout >= body_idx.size:
+        raise ValueError("Holdout split leaves no body training data")
+    rng = np.random.default_rng(seed)
+    body_perm = rng.permutation(body_idx)
+    tail_perm = rng.permutation(tail_idx)
+    holdout_idx = np.concatenate([body_perm[:n_body_holdout], tail_perm[:tail_holdout]])
+    train_idx = np.concatenate([body_perm[n_body_holdout:], tail_perm[tail_holdout:]])
+    rng.shuffle(holdout_idx)
+    rng.shuffle(train_idx)
+    return x[train_idx], x[holdout_idx], flags[train_idx], flags[holdout_idx]
+
+
 class NumpyTensorDataset(Dataset):
     def __init__(self, x: np.ndarray):
         self.x = torch.from_numpy(x.astype(np.float32, copy=False))
@@ -256,7 +287,25 @@ def build_training_data(
     kv_layer: int | None = None,
     kv_books: Sequence[int] | None = None,
     kv_n_sink: int = 1,
-) -> tuple[np.ndarray, np.ndarray, PreprocessState]:
+    kv_n_tail: int | None = None,
+    kv_tail_holdout: int | None = None,
+) -> (
+    tuple[np.ndarray, np.ndarray, PreprocessState]
+    | tuple[np.ndarray, np.ndarray, PreprocessState, np.ndarray, np.ndarray]
+):
+    """Load, filter, split and preprocess the training data.
+
+    With kv_n_tail=None this returns (x_train, x_holdout, state). With kv_n_tail set
+    (format kv_capture only) it also returns per-row body/tail flags for both splits;
+    the holdout then has round(holdout_fraction * n_body) body rows and exactly
+    kv_tail_holdout tail rows.
+    """
+    flags = None
+    if kv_n_tail is not None:
+        if file_format != "kv_capture" or descriptor_path is None:
+            raise ValueError("kv_n_tail needs format kv_capture and a descriptor_path")
+        if kv_tail_holdout is None:
+            raise ValueError("kv_n_tail needs kv_tail_holdout")
     if descriptor_path is None:
         if not synthetic_if_missing:
             raise ValueError(
@@ -267,7 +316,10 @@ def build_training_data(
     elif file_format == "kv_capture":
         if kv_layer is None or kv_books is None:
             raise ValueError("format kv_capture needs data.kv_layer and data.kv_books")
-        x = load_kv_capture(Path(descriptor_path), kv_layer, kv_books, kv_n_sink)
+        loaded = load_kv_capture(
+            Path(descriptor_path), kv_layer, kv_books, kv_n_sink, kv_n_tail
+        )
+        x, flags = loaded if kv_n_tail is not None else (loaded, None)
     else:
         x = load_descriptors(Path(descriptor_path), file_format=file_format)
 
@@ -280,14 +332,24 @@ def build_training_data(
         dropped_zero_rows = int(np.count_nonzero(~keep))
         if dropped_zero_rows:
             x = x[keep]
+            if flags is not None:
+                flags = flags[keep]
 
-    x_train_raw, x_holdout_raw = train_holdout_split(
-        x, holdout_fraction=holdout_fraction, seed=seed
-    )
+    if flags is None:
+        x_train_raw, x_holdout_raw = train_holdout_split(
+            x, holdout_fraction=holdout_fraction, seed=seed
+        )
+        flags_train = flags_holdout = None
+    else:
+        x_train_raw, x_holdout_raw, flags_train, flags_holdout = _stratified_split(
+            x, flags, holdout_fraction, kv_tail_holdout, seed
+        )
     state = _fit_preprocess_state(
         x_train=x_train_raw, descriptor_dim=descriptor_dim, cfg=preprocess_cfg
     )
     state.dropped_zero_rows = dropped_zero_rows
     x_train = apply_preprocess(x_train_raw, state)
     x_holdout = apply_preprocess(x_holdout_raw, state)
+    if flags is not None:
+        return x_train, x_holdout, state, flags_train, flags_holdout
     return x_train, x_holdout, state

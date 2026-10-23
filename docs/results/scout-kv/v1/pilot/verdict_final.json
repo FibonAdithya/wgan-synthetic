@@ -1,0 +1,254 @@
+{
+  "go": false,
+  "inputs": {
+    "references": [
+      "/home/fibonadithya/.herdr/worktrees/wgan-synthetic/scout-kv-v1/docs/results/scout-kv/reference/seed0.jsonl",
+      "/home/fibonadithya/.herdr/worktrees/wgan-synthetic/scout-kv-v1/docs/results/scout-kv/reference/seed1.jsonl",
+      "/home/fibonadithya/.herdr/worktrees/wgan-synthetic/scout-kv-v1/docs/results/scout-kv/reference/seed2.jsonl",
+      "/home/fibonadithya/.herdr/worktrees/wgan-synthetic/scout-kv-v1/docs/results/scout-kv/reference/seed3.jsonl",
+      "/home/fibonadithya/.herdr/worktrees/wgan-synthetic/scout-kv-v1/docs/results/scout-kv/reference/seed4.jsonl"
+    ],
+    "train_books": "/home/fibonadithya/.herdr/worktrees/wgan-synthetic/scout-kv-v1/docs/results/scout-kv/controls/train_books_real.jsonl",
+    "v0": {
+      "0": "docs/results/scout-kv/v1/pilot/v0_best_seed0.jsonl",
+      "1": "docs/results/scout-kv/v1/pilot/v0_best_seed1.jsonl"
+    },
+    "v1": {
+      "0": "docs/results/scout-kv/v1/pilot/v1_final_seed0.jsonl",
+      "1": "docs/results/scout-kv/v1/pilot/v1_final_seed1.jsonl"
+    }
+  },
+  "kind": "pilot",
+  "layers": {
+    "19": {
+      "key_side": {
+        "not_lower": true,
+        "seeds": {
+          "0": {
+            "floor": 0.95625,
+            "not_lower": true,
+            "v0": 0.958251953125,
+            "v1": 0.99990234375
+          },
+          "1": {
+            "floor": 0.958251953125,
+            "not_lower": true,
+            "v0": 0.96025390625,
+            "v1": 1.0
+          }
+        },
+        "statistic": "hnsw_recall_k10_ef176_id",
+        "v0_spread": 0.0020019531249999556
+      },
+      "statistics": {
+        "hnsw_reach_k10": {
+          "borderline": false,
+          "moves": true,
+          "reference_max": 0.875,
+          "reference_min": 0.5,
+          "seeds": {
+            "0": {
+              "borderline": false,
+              "gap_closed": 0.125,
+              "moves": true,
+              "v0": 1.0,
+              "v0_distance": 0.125,
+              "v1": 0.625,
+              "v1_distance": 0.0
+            },
+            "1": {
+              "borderline": false,
+              "gap_closed": 0.125,
+              "moves": true,
+              "v0": 1.0,
+              "v0_distance": 0.125,
+              "v1": 0.625,
+              "v1_distance": 0.0
+            }
+          },
+          "spread": 0.375,
+          "target_max": 0.875,
+          "target_min": 0.375,
+          "train_books": 0.375
+        },
+        "hnsw_recall_k10_ef176": {
+          "borderline": false,
+          "moves": true,
+          "reference_max": 0.881689453125,
+          "reference_min": 0.854306640625,
+          "seeds": {
+            "0": {
+              "borderline": false,
+              "gap_closed": 0.09054687500000003,
+              "moves": true,
+              "v0": 0.972236328125,
+              "v0_distance": 0.09054687500000003,
+              "v1": 0.8685839843750001,
+              "v1_distance": 0.0
+            },
+            "1": {
+              "borderline": false,
+              "gap_closed": 0.09405273437500006,
+              "moves": true,
+              "v0": 0.9757421875000001,
+              "v0_distance": 0.09405273437500006,
+              "v1": 0.878798828125,
+              "v1_distance": 0.0
+            }
+          },
+          "spread": 0.027382812500000075,
+          "target_max": 0.881689453125,
+          "target_min": 0.831103515625,
+          "train_books": 0.831103515625
+        },
+        "ivf_ratio_k128": {
+          "borderline": false,
+          "moves": false,
+          "reference_max": 0.17176861533699073,
+          "reference_min": 0.1330288250163598,
+          "seeds": {
+            "0": {
+              "borderline": false,
+              "gap_closed": 0.037686766748099176,
+              "moves": true,
+              "v0": 0.09534205826826062,
+              "v0_distance": 0.037686766748099176,
+              "v1": 0.2933163800605454,
+              "v1_distance": 0.0
+            },
+            "1": {
+              "borderline": false,
+              "gap_closed": 0.009958058619153637,
+              "moves": false,
+              "v0": 0.10510513684720468,
+              "v0_distance": 0.02792368816915511,
+              "v1": 0.3867105091988807,
+              "v1_distance": 0.017965629550001472
+            }
+          },
+          "spread": 0.038739790320630935,
+          "target_max": 0.36874487964887925,
+          "target_min": 0.1330288250163598,
+          "train_books": 0.36874487964887925
+        }
+      }
+    },
+    "43": {
+      "key_side": {
+        "not_lower": true,
+        "seeds": {
+          "0": {
+            "floor": 0.9625488281249999,
+            "not_lower": true,
+            "v0": 0.9671875,
+            "v1": 1.0
+          },
+          "1": {
+            "floor": 0.9671875,
+            "not_lower": true,
+            "v0": 0.9718261718750001,
+            "v1": 1.0
+          }
+        },
+        "statistic": "hnsw_recall_k10_ef176_id",
+        "v0_spread": 0.004638671875000111
+      },
+      "statistics": {
+        "hnsw_reach_k10": {
+          "borderline": false,
+          "moves": true,
+          "reference_max": 0.125,
+          "reference_min": 0.0,
+          "seeds": {
+            "0": {
+              "borderline": false,
+              "gap_closed": 0.25,
+              "moves": true,
+              "v0": 0.375,
+              "v0_distance": 0.25,
+              "v1": 0.125,
+              "v1_distance": 0.0
+            },
+            "1": {
+              "borderline": false,
+              "gap_closed": 0.5,
+              "moves": true,
+              "v0": 0.75,
+              "v0_distance": 0.625,
+              "v1": 0.25,
+              "v1_distance": 0.125
+            }
+          },
+          "spread": 0.125,
+          "target_max": 0.125,
+          "target_min": 0.0,
+          "train_books": null
+        },
+        "hnsw_recall_k10_ef176": {
+          "borderline": false,
+          "moves": true,
+          "reference_max": 0.636640625,
+          "reference_min": 0.573759765625,
+          "seeds": {
+            "0": {
+              "borderline": false,
+              "gap_closed": 0.1872656250000001,
+              "moves": true,
+              "v0": 0.8239062500000001,
+              "v0_distance": 0.1872656250000001,
+              "v1": 0.617060546875,
+              "v1_distance": 0.0
+            },
+            "1": {
+              "borderline": false,
+              "gap_closed": 0.2093359375,
+              "moves": true,
+              "v0": 0.859462890625,
+              "v0_distance": 0.22282226562500007,
+              "v1": 0.650126953125,
+              "v1_distance": 0.013486328125000058
+            }
+          },
+          "spread": 0.06288085937499999,
+          "target_max": 0.636640625,
+          "target_min": 0.573759765625,
+          "train_books": null
+        },
+        "ivf_ratio_k128": {
+          "borderline": false,
+          "moves": true,
+          "reference_max": 3.480363414759823,
+          "reference_min": 2.973797217811141,
+          "seeds": {
+            "0": {
+              "borderline": false,
+              "gap_closed": 1.9410910568477302,
+              "moves": true,
+              "v0": 0.7604211760407555,
+              "v0_distance": 2.2133760417703856,
+              "v1": 2.7015122328884855,
+              "v1_distance": 0.2722849849226554
+            },
+            "1": {
+              "borderline": false,
+              "gap_closed": 1.9074437650932148,
+              "moves": true,
+              "v0": 0.7526219073177255,
+              "v0_distance": 2.2211753104934155,
+              "v1": 2.66006567241094,
+              "v1_distance": 0.31373154540020076
+            }
+          },
+          "spread": 0.5065661969486821,
+          "target_max": 3.480363414759823,
+          "target_min": 2.973797217811141,
+          "train_books": null
+        }
+      }
+    }
+  },
+  "seeds": [
+    0,
+    1
+  ]
+}

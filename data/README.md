@@ -125,7 +125,7 @@ each file holding one tensor `h` of shape `(tokens, 5120)`. The files are read
 by `src/data/kv_capture.py` directly, without the safetensors package; BF16,
 F16 and F32 are accepted and the result is always float32.
 
-Three keys select what is loaded:
+Three keys select what is loaded (two more flag body and tail rows, below):
 
 - `data.kv_layer`: the layer to read. Must be one of the global layers
   (3, 7, ..., 47). Required.
@@ -134,3 +134,14 @@ Three keys select what is loaded:
 - `data.kv_n_sink`: leading positions dropped from each book (default 1,
   the attention sink). It is dropped per book, so the result has
   `sum(tokens_b - kv_n_sink)` rows.
+
+Two optional keys flag rows as body or tail, for a position-conditioned run
+(`model.n_flags`; see `PROJECT_DOCUMENTATION.md`). They are set together with
+that key, and `data.kv_tail_holdout` is refused without it:
+
+- `data.kv_n_tail`: the last `kv_n_tail` positions of every book are TAIL and
+  the earlier ones BODY (`src/data/kv_capture.py::kv_flags`). All books must
+  have the same length.
+- `data.kv_tail_holdout`: how many tail rows go to the holdout (exactly this
+  many, at least 1 and fewer than the tail rows available). Body rows are held
+  out by `holdout_fraction` as usual.

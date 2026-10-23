@@ -41,13 +41,16 @@ config and a documented profile waiting to be measured.
 | `glove` | 100 | `angular` | `v0`–`v1` trained (5 seeds each) | `docs/datasets/glove.md` |
 | `nytimes` | 256 | `angular` | `v0`–`v3` trained, `v3` meeting the bar | `docs/datasets/nytimes.md` |
 | `openai` | 1536 | `angular` | `v0` defined, not trained | `docs/datasets/openai.md` |
-| `scout_kv` | 5120 | `l2` (in-training selector on h); inner product (gate) | `v0` trained for 12 layers, does not meet the gate | `docs/datasets/scout_kv.md` |
+| `scout_kv` | 5120 | `l2` (in-training selector on h); inner product (gate) | `v0` and `v1` (body/tail flag) trained for 12 layers; neither meets the gate | `docs/datasets/scout_kv.md` |
 
 Variant numbers are per dataset and are comparable only within one family.
 The SIFT and DEEP ladders live in `configs/sift/` and `configs/deep/`; every
-family except SIFT, DEEP, GloVe and NYTimes has a single `v0.yaml` under its own
-directory in `configs/`; GloVe has `v0` and `v1` under `configs/glove/`, and
-NYTimes has `v0` to `v3` under `configs/nytimes/`.
+family except SIFT, DEEP, GloVe, NYTimes and scout_kv has a single `v0.yaml` under
+its own directory in `configs/`; GloVe has `v0` and `v1` under `configs/glove/`,
+NYTimes has `v0` to `v3` under `configs/nytimes/`, and scout_kv has 12 per-layer
+configs for each of `v0` and `v1` under `configs/scout_kv/v0/` and
+`configs/scout_kv/v1/`. scout_kv's gate and its v1 judge (`python -m src.kv.judge`)
+are described in `docs/datasets/scout_kv.md`.
 To see all four SIFT variants overlaid on real SIFT
 in one report:
 

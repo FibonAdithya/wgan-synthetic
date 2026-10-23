@@ -1,0 +1,12 @@
+START 2026-10-22T10:51:05Z commit=4c63eb727d4b63eda3969c80c63e8d23e2f45804 layers=03 07 11 15 23 27 31 35 39 47
+DONE L03 seconds=2847 avail_after=400G
+DONE L07 seconds=2254 avail_after=399G
+DONE L11 seconds=3532 avail_after=398G
+DONE L15 seconds=2242 avail_after=397G
+DONE L23 seconds=2032 avail_after=394G
+DONE L27 seconds=1915 avail_after=393G
+DONE L31 seconds=1913 avail_after=391G
+DONE L35 seconds=2004 avail_after=390G
+DONE L39 seconds=4751 avail_after=389G
+DONE L47 seconds=4132 avail_after=388G
+v1_full_COMPLETE 2026-10-22T18:31:35Z

@@ -6,6 +6,8 @@ from typing import Any
 import torch
 from torch import Tensor, nn
 
+from src.models.conditional import FlagConditionedCritic
+
 
 class Critic(nn.Module):
     def __init__(
@@ -391,14 +393,24 @@ def score_population(
     x: Tensor,
     population: str,
     row_ids: Tensor | None = None,
+    flags: Tensor | None = None,
 ) -> Tensor:
     """Score `x` as `population`; every critic but the bank one ignores the label.
+
+    A `FlagConditionedCritic` needs `flags` and scores `critic(x, flags)`;
+    any other critic raises ValueError if given `flags`.
 
     The trainer calls this at its three scoring sites so the loop reads the
     same for every `critic_type`. `gradient_penalty` keeps its bare
     `critic(interpolated)` call, which for the bank critic is the `mixed`
     population by default.
     """
+    if isinstance(critic, FlagConditionedCritic):
+        if flags is None:
+            raise ValueError("a flag-conditioned critic needs flags")
+        return critic(x, flags)
+    if flags is not None:
+        raise ValueError(f"{type(critic).__name__} does not take flags")
     if isinstance(critic, BankNeighbourhoodCritic):
         return critic(x, population=population, row_ids=row_ids)
     return critic(x)
@@ -505,6 +517,20 @@ def build_critic(model_cfg: Mapping[str, Any], input_dim: int) -> nn.Module:
     rather than silently training the default.
     """
     kind = str(model_cfg.get("critic_type", "per_vector"))
+    n_flags = model_cfg.get("n_flags")
+    if n_flags is not None:
+        if int(n_flags) != 2:
+            raise ValueError(f"n_flags must be 2 (body/tail), got {n_flags!r}")
+        if kind != "per_vector":
+            raise ValueError(
+                f"n_flags is supported for critic_type 'per_vector' only, got {kind!r}"
+            )
+        base = Critic(
+            input_dim=input_dim + 2,
+            hidden_dims=model_cfg["critic_hidden_dims"],
+            negative_slope=float(model_cfg["negative_slope"]),
+        )
+        return FlagConditionedCritic(base, 2)
     common = {
         "hidden_dims": model_cfg["critic_hidden_dims"],
         "negative_slope": float(model_cfg["negative_slope"]),

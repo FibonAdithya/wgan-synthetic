@@ -1,0 +1,13 @@
+3 skew 3.0 rho(pos) 0.324 rho(norm) -0.159 rho(cos) 0.274 hub bins [0.035, 0.06, 0.04, 0.075, 0.15, 0.115, 0.22, 0.305]
+7 skew 26.7 rho(pos) 0.289 rho(norm) 0.315 rho(cos) 0.359 hub bins [0.075, 0.045, 0.02, 0.03, 0.035, 0.06, 0.215, 0.52]
+11 skew 30.0 rho(pos) 0.386 rho(norm) 0.223 rho(cos) 0.384 hub bins [0.07, 0.04, 0.01, 0.005, 0.005, 0.04, 0.145, 0.685]
+15 skew 37.4 rho(pos) 0.354 rho(norm) 0.295 rho(cos) 0.402 hub bins [0.24, 0.145, 0.07, 0.025, 0.04, 0.01, 0.075, 0.395]
+19 skew 52.3 rho(pos) 0.309 rho(norm) 0.272 rho(cos) 0.322 hub bins [0.085, 0.075, 0.055, 0.02, 0.025, 0.06, 0.12, 0.56]
+23 skew 48.8 rho(pos) 0.169 rho(norm) 0.149 rho(cos) 0.146 hub bins [0.08, 0.07, 0.045, 0.025, 0.02, 0.225, 0.115, 0.42]
+27 skew 49.9 rho(pos) 0.235 rho(norm) 0.185 rho(cos) 0.23 hub bins [0.23, 0.1, 0.11, 0.09, 0.055, 0.135, 0.07, 0.21]
+31 skew 42.5 rho(pos) 0.33 rho(norm) 0.261 rho(cos) 0.308 hub bins [0.37, 0.21, 0.14, 0.12, 0.015, 0.035, 0.05, 0.06]
+35 skew 40.5 rho(pos) 0.255 rho(norm) 0.223 rho(cos) 0.253 hub bins [0.225, 0.085, 0.14, 0.195, 0.225, 0.065, 0.025, 0.04]
+39 skew 41.3 rho(pos) 0.307 rho(norm) 0.288 rho(cos) 0.32 hub bins [0.275, 0.085, 0.015, 0.205, 0.27, 0.055, 0.04, 0.055]
+43 skew 42.7 rho(pos) 0.322 rho(norm) 0.315 rho(cos) 0.343 hub bins [0.275, 0.065, 0.015, 0.15, 0.3, 0.07, 0.07, 0.055]
+47 skew 40.5 rho(pos) 0.221 rho(norm) 0.071 rho(cos) 0.242 hub bins [0.22, 0.215, 0.18, 0.165, 0.105, 0.02, 0.055, 0.04]
+DONE /workspace/kv/v1/hub_position.json

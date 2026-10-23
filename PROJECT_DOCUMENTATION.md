@@ -57,7 +57,7 @@ bands; the pages are the source of truth for anything family-specific.
 | `glove` | 100 | `angular` | dense signed word vectors, strong density gradient | `mlp` today, `spherical` not yet adopted | `docs/datasets/glove.md` |
 | `nytimes` | 256 | `angular` | dense signed document embeddings, strong topic clusters | `mlp` at v0, `linear_skip` from v1 (v1, v2, v2b and v2c trained, none meeting the bar), `spherical` from v3 (trained; meets the bar since the 2026-09-17 gate bands, set as a tolerance around real to admit it; continued to 100k without a better selection) | `docs/datasets/nytimes.md` |
 | `openai` | 1536 | `angular` | unit-norm text embeddings, very high ambient dim, low intrinsic dim | `mlp` today, `spherical` not yet adopted | `docs/datasets/openai.md` |
-| `scout_kv` | 5120 | `l2` (in-training selector on h); inner product (gate) | Llama-4-Scout attention inputs, one generator per global layer; gated on IVF/HNSW search difficulty | `mlp` at v0 (trained for all 12 layers; fails the gate on four of five statistics) | `docs/datasets/scout_kv.md` |
+| `scout_kv` | 5120 | `l2` (in-training selector on h); inner product (gate) | Llama-4-Scout attention inputs, one generator per global layer; gated on IVF/HNSW search difficulty | `mlp` at v0 (trained for all 12 layers; fails the gate on four of five statistics); `mlp` with a body/tail flag (`model.n_flags`) at v1 (trained for all 12 layers; also fails four of five, a different four) | `docs/datasets/scout_kv.md` |
 
 ### Fetching
 
@@ -357,7 +357,10 @@ Checkpoints do not record `generator_type` — the architecture is rebuilt from
 the run config at load time. A checkpoint is therefore only loadable
 alongside the `run_config.yaml` written next to it. Checkpoints do record
 `generator_weights` (`"live"` or `"ema"`), which says which weights the file
-holds, not which architecture produced them.
+holds, not which architecture produced them. The same holds for `model.n_flags`:
+it is recorded in the checkpoint so a resume that changes it is refused, but the
+flag-conditioned architecture is rebuilt from `run_config.yaml`, so a flagged
+checkpoint is no more portable without its config than any other.
 
 `gated` was called `sparse` until `b29e317`, and `sparse` is still accepted as
 a deprecated alias for it. Because the architecture is rebuilt from the run
@@ -495,7 +498,18 @@ selection_score_tail`, and is infinite if either is. Tail statistics are logged
 under the same names with a `tail_` prefix. Checkpoints record `n_flags`
 (`null` for an unconditioned run), and a resume whose config changes it is
 refused; like `output_normalize`, checkpoints written before the record existed
-are read as unconditioned.
+are read as unconditioned. The flagged evaluation does not run the
+`energy_probe` diagnostics (`component_energies`, the spherical readouts): those
+exist only for `linear_skip` and `spherical`, and a flagged run is `mlp` only.
+
+Only two samplers take a flag: `sample_generator(..., flag=)` in the trainer and
+`kv_gate.synthetic_h`, which draws keys under the body flag and queries under
+the tail flag. The other sampling entry points (`src/sample/generate.py`,
+`src/eval/evaluate_distribution.py`, `src/eval/compare_variants.py`,
+`src/eval/plot_descriptor_grid.py`) call the generator without one; pointed at a
+flagged run they stop with a `TypeError` (missing `flags`) or a `ValueError`
+from `sample_generator`, rather than emit unconditioned samples. The v1 judge,
+`python -m src.kv.judge pilot|full`, is described in `docs/datasets/scout_kv.md`.
 
 Both sides are measured with exact-zero rows dropped (`zero_rows` in the
 logged statistics is the count) -- a zero row sits at the origin rather than

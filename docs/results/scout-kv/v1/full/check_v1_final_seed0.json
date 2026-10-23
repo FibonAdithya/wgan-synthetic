@@ -1,0 +1,61 @@
+{
+  "verdict": "fail",
+  "exit_code": 1,
+  "dataset": "scout_kv",
+  "n_records": 96,
+  "ivf_ratio_k128_corpora": 96,
+  "statistics": [
+    {
+      "statistic": "hnsw_reach_k10",
+      "value": 0.7395833333333334,
+      "band": {
+        "min": 0.52,
+        "max": 0.69
+      },
+      "status": "fail",
+      "reason": "0.7395833333333334 is above the band maximum 0.69"
+    },
+    {
+      "statistic": "hnsw_recall_k10_ef176",
+      "value": 0.903564453125,
+      "band": {
+        "min": 0.78,
+        "max": 0.88
+      },
+      "status": "fail",
+      "reason": "0.903564453125 is above the band maximum 0.88"
+    },
+    {
+      "statistic": "ivf_ratio_k128",
+      "value": 0.7733836640026428,
+      "band": {
+        "min": 0.9,
+        "max": 1.15
+      },
+      "status": "fail",
+      "reason": "0.7733836640026428 is below the band minimum 0.9"
+    },
+    {
+      "statistic": "ivf_recall_k128_np24",
+      "value": 0.871051025390625,
+      "band": {
+        "min": 0.8,
+        "max": 0.865
+      },
+      "status": "fail",
+      "reason": "0.871051025390625 is above the band maximum 0.865"
+    },
+    {
+      "statistic": "hnsw_recall_k10_ef176_id",
+      "value": 1.0,
+      "band": {
+        "min": 0.99,
+        "max": null
+      },
+      "status": "pass"
+    }
+  ],
+  "reasons": [
+    "outside band or unusable: hnsw_reach_k10, hnsw_recall_k10_ef176, ivf_ratio_k128, ivf_recall_k128_np24"
+  ]
+}

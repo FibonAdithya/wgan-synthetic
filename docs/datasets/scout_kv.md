@@ -15,7 +15,7 @@ difficulty (`src/eval/kv_gate.py::evaluate`). The four intrinsic statistics of
 
 | | |
 |---|---|
-| Ladder | `v0` trained for all 12 global layers (`docs/results/scout-kv/training/`); fails the gate on four of five statistics (`docs/results/scout-kv/v0/report.html`); `v1` (v0 plus a body/tail position flag) is designed, not trained (`docs/ai/specs/2026-10-22-scout-kv-v1-position-flag-design.md`) |
+| Ladder | `v0` trained for all 12 global layers (`docs/results/scout-kv/training/`); fails the gate on four of five statistics (`docs/results/scout-kv/v0/report.html`); `v1` (v0 plus a body/tail position flag, `docs/ai/specs/2026-10-22-scout-kv-v1-position-flag-design.md`) trained for all 12 layers and measured 2026-10-22: it also fails four of five bands, a different four (key-side recall now passes at 1.000; IVF recall leaves its band at 0.870), and by the spec's rule it does not move every statistic toward real (`docs/results/scout-kv/v1/report.html`) |
 | Gate bands | **set** 2026-10-19 by the owner, as a tolerance around the five-draw real reference; see `## Gate bands` |
 | Gate question | decided 2026-10-22: position-aware `v1` (`docs/ai/specs/2026-10-22-scout-kv-v1-position-flag-design.md`). Background: real `h` split the way synthetic corpora are split is already outside the real range on v0's side (R1). See `## Controls: why v0 is too easy` |
 | Capture | lives only on the GPU box (`tig-gpu-alt` since 2026-10-19), at `/workspace/kv/capture`. It is not in the repo and not fetchable with `src/data/fetch.py` |
@@ -29,7 +29,7 @@ generator never sees keys or queries.
 
 - Global layers: `3, 7, 11, 15, 19, 23, 27, 31, 35, 39, 43, 47` (`src/data/kv_capture.py::GLOBAL_LAYERS`), 12 in all, no RoPE.
 - 8 KV heads and 40 query heads, `head_dim` 128. Query head `j` reads KV head `j // 5`.
-- One generator is trained per layer, so there are 12 `v0` configs, `configs/scout_kv/v0/L03.yaml` through `configs/scout_kv/v0/L47.yaml`. They differ only in `data.kv_layer` and `output_dir` (pinned by `tests/test_scout_kv_configs.py`). The 12 `v1` configs, `configs/scout_kv/v1/L03.yaml` through `configs/scout_kv/v1/L47.yaml`, equal v0 plus `data.kv_n_tail: 1024`, `data.kv_tail_holdout: 1024`, `model.n_flags: 2` and `training.tail_batch_share: 0.25`, with `output_dir: runs/scout_kv/v1/L{LL}`. They have not been trained.
+- One generator is trained per layer, so there are 12 `v0` configs, `configs/scout_kv/v0/L03.yaml` through `configs/scout_kv/v0/L47.yaml`. They differ only in `data.kv_layer` and `output_dir` (pinned by `tests/test_scout_kv_configs.py`). The 12 `v1` configs, `configs/scout_kv/v1/L03.yaml` through `configs/scout_kv/v1/L47.yaml`, equal v0 plus `data.kv_n_tail: 1024`, `data.kv_tail_holdout: 1024`, `model.n_flags: 2` and `training.tail_batch_share: 0.25`, with `output_dir: runs/scout_kv/v1/L{LL}`. All 12 were trained on 2026-10-22 (`docs/results/scout-kv/v1/training/`).
 - Position 0 (the attention sink) and the last 1,024 positions of a 32,768-token book are never indexed in a corpus. Training rows use positions 1 to 32,767, so 12 books give 393,204 rows per layer.
 
 ## Commands
@@ -194,9 +194,9 @@ every number in `summary.json`). All values below are MEASURED, from `summary.js
 - The plan's hard stop was: no v1 design until the gate question is settled. The question was
   settled on 2026-10-22 in favour of keeping the end-of-book reference and conditioning the
   generator on position (a body/tail flag). The design is
-  `docs/ai/specs/2026-10-22-scout-kv-v1-position-flag-design.md`; `v1` is designed, not trained.
+  `docs/ai/specs/2026-10-22-scout-kv-v1-position-flag-design.md`. `v1` was trained and measured on 2026-10-22; results in `docs/results/scout-kv/v1/report.html`.
 
 ## Not yet done
 
-- A generator that passes the gate. v0 fails it (see `## Gate bands`).
+- A generator that passes the gate. v0 and v1 each fail four of the five bands (see `## Gate bands` and `docs/results/scout-kv/v1/report.html`). v1's pilot layers (19, 43) moved every statistic toward real, but pooled over 12 layers only HNSW reach (0.875 to 0.760, still above the band) and key-side recall (0.976 to 1.000, now inside) move. Real body `h` has strong hubs at layers 7-47 (skew 26.7-52.3) that v1's body samples lack (2.6-6.4 over best and final checkpoints), as v0's did.
 - Whether the in-training selector (`select_on: gate`, LID and contrast on `h`, holdout 2% = 7,864 rows) picks good checkpoints under the search-difficulty gate. In v0 the best and final checkpoints differ only at layers 7 and 11, and both fail the gate on the same four statistics, so v0 does not settle it.

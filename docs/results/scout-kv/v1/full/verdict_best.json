@@ -1,0 +1,136 @@
+{
+  "all_bands_pass": false,
+  "all_meet": false,
+  "inputs": {
+    "gate_file": "/home/fibonadithya/.herdr/worktrees/wgan-synthetic/scout-kv-v1/gates/scout_kv.yaml",
+    "references": [
+      "/home/fibonadithya/.herdr/worktrees/wgan-synthetic/scout-kv-v1/docs/results/scout-kv/reference/seed0.jsonl",
+      "/home/fibonadithya/.herdr/worktrees/wgan-synthetic/scout-kv-v1/docs/results/scout-kv/reference/seed1.jsonl",
+      "/home/fibonadithya/.herdr/worktrees/wgan-synthetic/scout-kv-v1/docs/results/scout-kv/reference/seed2.jsonl",
+      "/home/fibonadithya/.herdr/worktrees/wgan-synthetic/scout-kv-v1/docs/results/scout-kv/reference/seed3.jsonl",
+      "/home/fibonadithya/.herdr/worktrees/wgan-synthetic/scout-kv-v1/docs/results/scout-kv/reference/seed4.jsonl"
+    ],
+    "v0": {
+      "0": "docs/results/scout-kv/v1/full/v0_best_seed0.jsonl",
+      "1": "docs/results/scout-kv/v1/full/v0_best_seed1.jsonl"
+    },
+    "v1": "docs/results/scout-kv/v1/full/v1_best_seed0.jsonl"
+  },
+  "kind": "full",
+  "statistics": {
+    "hnsw_reach_k10": {
+      "band_pass": false,
+      "borderline": true,
+      "gap_closed": 0.11458333333333337,
+      "meets": true,
+      "moves": true,
+      "reference_max": 0.625,
+      "reference_min": 0.5625,
+      "requirement": "toward",
+      "spread": 0.0625,
+      "spread_source": "reference",
+      "target_max": 0.69,
+      "target_min": 0.52,
+      "v0": 0.875,
+      "v0_by_seed": {
+        "0": 0.875,
+        "1": 0.9166666666666666
+      },
+      "v0_distance": 0.18500000000000005,
+      "v1": 0.7604166666666666,
+      "v1_distance": 0.07041666666666668
+    },
+    "hnsw_recall_k10_ef176": {
+      "band_pass": false,
+      "borderline": false,
+      "gap_closed": 0.006972656249999987,
+      "meets": false,
+      "moves": false,
+      "reference_max": 0.85259765625,
+      "reference_min": 0.798203125,
+      "requirement": "toward",
+      "spread": 0.05439453124999993,
+      "spread_source": "reference",
+      "target_max": 0.88,
+      "target_min": 0.78,
+      "v0": 0.9273828125,
+      "v0_by_seed": {
+        "0": 0.9273828125,
+        "1": 0.920517578125
+      },
+      "v0_distance": 0.04738281249999998,
+      "v1": 0.92041015625,
+      "v1_distance": 0.040410156249999996
+    },
+    "hnsw_recall_k10_ef176_id": {
+      "band_pass": true,
+      "borderline": false,
+      "gap_closed": 0.014267578125000013,
+      "meets": true,
+      "moves": true,
+      "reference_max": 1.0,
+      "reference_min": 1.0,
+      "requirement": "toward",
+      "spread": 0.0010253906250000666,
+      "spread_source": "v0 seeds",
+      "target_max": null,
+      "target_min": 0.99,
+      "v0": 0.975732421875,
+      "v0_by_seed": {
+        "0": 0.975732421875,
+        "1": 0.9767578125
+      },
+      "v0_distance": 0.014267578125000013,
+      "v1": 1.0,
+      "v1_distance": 0.0
+    },
+    "ivf_ratio_k128": {
+      "band_pass": false,
+      "borderline": false,
+      "gap_closed": 0.071275397561535,
+      "meets": false,
+      "moves": false,
+      "reference_max": 1.0760560552562126,
+      "reference_min": 0.940254231625072,
+      "requirement": "toward",
+      "spread": 0.13580182363114057,
+      "spread_source": "reference",
+      "target_max": 1.15,
+      "target_min": 0.9,
+      "v0": 0.686036357501981,
+      "v0_by_seed": {
+        "0": 0.686036357501981,
+        "1": 0.6418865352609981
+      },
+      "v0_distance": 0.21396364249801902,
+      "v1": 0.757311755063516,
+      "v1_distance": 0.14268824493648402
+    },
+    "ivf_recall_k128_np24": {
+      "band_pass": false,
+      "borderline": false,
+      "gap_closed": -0.00481048583984367,
+      "meets": false,
+      "moves": false,
+      "reference_max": 0.84315185546875,
+      "reference_min": 0.8184516906738282,
+      "requirement": "inside",
+      "spread": 0.024700164794921875,
+      "spread_source": "reference",
+      "target_max": 0.865,
+      "target_min": 0.8,
+      "v0": 0.8245880126953125,
+      "v0_by_seed": {
+        "0": 0.8245880126953125,
+        "1": 0.8236991882324218
+      },
+      "v0_distance": 0.0,
+      "v1": 0.8698104858398437,
+      "v1_distance": 0.00481048583984367
+    }
+  },
+  "v0_seeds": [
+    0,
+    1
+  ]
+}

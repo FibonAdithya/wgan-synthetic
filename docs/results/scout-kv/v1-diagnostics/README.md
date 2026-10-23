@@ -21,7 +21,7 @@ the five real reference draws at that layer.
 |---|---|---|---|---|---|---|---|---|
 | 19 | HNSW reach | 0.500–0.875 | 1.000 | 0.625 | 0.625 | 0.000 | 0.375 | yes |
 | 19 | HNSW recall | 0.854–0.882 | 0.972 | 0.880 | 0.902 | 0.022 | 0.027 | yes |
-| 19 | IVF ratio | 0.133–0.172 | 0.095 | 0.266 | 0.277 | 0.011 | 0.039 | yes |
+| 19 | IVF ratio | 0.133–0.172 | 0.095 | 0.266 | 0.277 | 0.011 | 0.039 | yes (overshoots real) |
 | 27 | HNSW reach | 0.750–1.000 | 0.750 | 0.625 | 0.625 | 0.000 | 0.250 | yes |
 | 27 | HNSW recall | 0.839–0.867 | 0.793 | 0.808 | 0.715 | 0.094 | 0.028 | **no** |
 | 27 | IVF ratio | 1.776–1.866 | 1.900 | 1.549 | 1.246 | 0.302 | 0.090 | yes (away from real) |
@@ -39,12 +39,15 @@ under 0.01. The final checkpoints give the same picture.
 What this shows:
 
 - **IVF ratio and key-side recall respond to the flag reliably.** Both seeds
-  move the same way, by more than the gap between them: toward real at L19,
-  L35 and L43, and away from real at L27 at both seeds.
+  move the same way, by more than the gap between them. The IVF ratio moves
+  toward real at L35 and L43. At L19 it rises from below the real range to
+  above it, and ends further from real than v0 (0.094–0.105 above the range
+  against v0's 0.038 below). At L27 it moves away from real at both seeds.
+  So the flag moves the IVF ratio reliably, but not always toward real.
 - **Per-layer HNSW reach and recall are dominated by training noise at L35
-  and L43.** The gap between seeds is larger than v1's move from v0, and
-  the sign flips. At L43, seed 1 is worse than v0 on both (reach 0.750,
-  recall 0.906). L19 reproduces closely.
+  and L43, and HNSW recall also at L27.** The gap between seeds is larger
+  than v1's move from v0, and the sign flips. At L43, seed 1 is worse than
+  v0 on both (reach 0.750, recall 0.906). L19 reproduces closely.
 - **The pilot's go was partly luck.** The pilot (`../v1/pilot/`) judged
   L19 and L43 at two sampling seeds of one training run, which does not
   capture training noise. Its L43 HNSW gains did not reproduce. A pilot for
@@ -80,13 +83,13 @@ rows. Results are in `hub_position.json`.
 What this shows:
 
 - **Hubs are concentrated by position at every layer**, and in every layer
-  they come from all 8 books (largest single book 16–37%).
+  they come from all 8 books (largest single book 15–37%).
 - **Where they concentrate depends on the layer.** They sit late in the body
-  at L7, L11, L19 and L23, are split between the start and the end at L15,
-  and sit early or mid-body at L31–L47 (L35–L43 also have a second
+  at L7, L11, L19 and L23, are split between the start and the end at L15
+  and L27, and sit early or mid-body at L31–L47 (L35–L43 also have a second
   concentration near the middle; see `share_hubs_by_bin`).
 - **Position is not the only correlate.** N_10 correlates with position,
-  with norm and with alignment to the mean at similar strength (0.07–0.40 at L7–L47; at L3, where there are no hubs, the norm correlation is −0.16).
+  with norm and with alignment to the mean at similar strength (0.07–0.40 at L7–L47; at L3, where hubness is low (skew 3.0), the norm correlation is −0.16).
   These three may co-vary with each other; this check does not separate them.
 
 For v2: v1's single body flag treats all of the body alike, which fits its

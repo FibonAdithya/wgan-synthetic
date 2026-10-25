@@ -1,0 +1,13 @@
+3 cos lag1/16/256/4096 [0.004, 0.01, -0.004, -0.016] rand -0.021 | h-NN same book 0.409 within16 0.006 | key-NN same book 0.123 within16 0.0 | query hits own book 0.125 within1024 0.0 (27.5 s)
+7 cos lag1/16/256/4096 [0.244, 0.135, 0.115, 0.082] rand -0.006 | h-NN same book 0.431 within16 0.012 | key-NN same book 0.125 within16 0.0 | query hits own book 0.125 within1024 0.0 (20.0 s)
+11 cos lag1/16/256/4096 [0.315, 0.138, 0.114, 0.082] rand -0.004 | h-NN same book 0.458 within16 0.016 | key-NN same book 0.144 within16 0.001 | query hits own book 0.123 within1024 0.0 (19.3 s)
+15 cos lag1/16/256/4096 [0.535, 0.329, 0.287, 0.206] rand 0.012 | h-NN same book 0.53 within16 0.061 | key-NN same book 0.219 within16 0.012 | query hits own book 0.099 within1024 0.005 (18.5 s)
+19 cos lag1/16/256/4096 [0.636, 0.429, 0.37, 0.241] rand 0.019 | h-NN same book 0.645 within16 0.143 | key-NN same book 0.327 within16 0.067 | query hits own book 0.095 within1024 0.038 (18.8 s)
+23 cos lag1/16/256/4096 [0.721, 0.564, 0.502, 0.31] rand 0.019 | h-NN same book 0.816 within16 0.263 | key-NN same book 0.487 within16 0.168 | query hits own book 0.144 within1024 0.045 (18.3 s)
+27 cos lag1/16/256/4096 [0.721, 0.567, 0.498, 0.309] rand 0.015 | h-NN same book 0.895 within16 0.308 | key-NN same book 0.653 within16 0.23 | query hits own book 0.187 within1024 0.019 (18.0 s)
+31 cos lag1/16/256/4096 [0.835, 0.749, 0.709, 0.55] rand 0.029 | h-NN same book 0.877 within16 0.302 | key-NN same book 0.62 within16 0.233 | query hits own book 0.217 within1024 0.043 (17.6 s)
+35 cos lag1/16/256/4096 [0.876, 0.809, 0.779, 0.638] rand 0.028 | h-NN same book 0.865 within16 0.286 | key-NN same book 0.612 within16 0.209 | query hits own book 0.156 within1024 0.035 (17.9 s)
+39 cos lag1/16/256/4096 [0.87, 0.806, 0.783, 0.672] rand 0.027 | h-NN same book 0.77 within16 0.185 | key-NN same book 0.354 within16 0.064 | query hits own book 0.133 within1024 0.009 (17.1 s)
+43 cos lag1/16/256/4096 [0.884, 0.831, 0.813, 0.738] rand 0.035 | h-NN same book 0.786 within16 0.154 | key-NN same book 0.269 within16 0.032 | query hits own book 0.129 within1024 0.01 (16.8 s)
+47 cos lag1/16/256/4096 [0.795, 0.715, 0.683, 0.593] rand 0.068 | h-NN same book 0.841 within16 0.119 | key-NN same book 0.154 within16 0.004 | query hits own book 0.154 within1024 0.035 (17.2 s)
+DONE /workspace/kv/locality/locality.json

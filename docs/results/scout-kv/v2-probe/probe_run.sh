@@ -2,7 +2,10 @@
 # Train, sample and score v2-probe runs one after another (one GPU card; never in parallel).
 # Each run writes 8 synthetic books, scored by the unchanged gate (measure-real),
 # locality.py, hub_position.py and probe.py intrinsic.
-# Usage: probe_run.sh STEPS LAYER:ARM:SEED [LAYER:ARM:SEED ...]
+# Usage: probe_run.sh STEPS LAYER:NAME:SEED [LAYER:NAME:SEED ...]
+# NAME is an arm (A, B, C) or an ablation of arm C:
+#   Ctok   v1's per-token critic        Cflag  tail bit as the only position input
+#   Ctail  a quarter of windows in tail Cv1    all three of the above
 set -u
 cd /workspace/repo_v1
 export PYTHONPATH=$PWD OMP_NUM_THREADS=15
@@ -13,11 +16,19 @@ STEPS=$1; shift
 echo "START $(date -u +%FT%TZ) commit=$(git rev-parse HEAD) steps=$STEPS runs=$*"
 for spec in "$@"; do
   IFS=: read -r L A S <<< "$spec"
+  case $A in
+    A|B|C) ARGS="--arm $A" ;;
+    Ctok)  ARGS="--arm C --critic token" ;;
+    Cflag) ARGS="--arm C --pos flag" ;;
+    Ctail) ARGS="--arm C --tail-share 0.25" ;;
+    Cv1)   ARGS="--arm C --critic token --pos flag --tail-share 0.25" ;;
+    *) echo "FAILED unknown name $spec"; exit 1 ;;
+  esac
   R=/workspace/kv/v2probe/L$L/${A}_s$S
   mkdir -p "$(dirname $R)"
   t0=$(date +%s)
   if [ ! -f $R/final.pt ]; then
-    $PY $P train --arm $A --layer $L --seed $S --steps $STEPS --lambda-gp 10 --capture-dir $CAP --out $R \
+    $PY $P train $ARGS --layer $L --seed $S --steps $STEPS --lambda-gp 10 --capture-dir $CAP --out $R \
       > $R.train.log 2>&1 || { echo "FAILED train $spec"; exit 1; }
   fi
   echo "TRAINED $spec seconds=$(( $(date +%s) - t0 ))"

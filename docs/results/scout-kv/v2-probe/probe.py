@@ -35,6 +35,15 @@ books named 12-19 into a capture-format directory, so the unchanged gate
     python docs/results/scout-kv/v2-probe/probe.py sample --run /workspace/kv/v2probe/L27/B_s42 \
         --capture-dir /workspace/kv/capture
     python docs/results/scout-kv/v2-probe/probe.py intrinsic --run /workspace/kv/v2probe/L27/B_s42
+
+Ablation switches (2026-10-26). Every arm lost LID against v1, so each change
+the probe made to v1 can be undone on its own:
+
+  --critic token     v1's per-token critic (x + position -> 2048-1024-512-1)
+                     instead of the window critic; tokens still come in windows
+  --pos flag         position input is the tail bit only, as v1's flag
+  --tail-share 0.25  a quarter of the windows lie inside the tail, as v1's
+                     tail_batch_share; the rest end in the body (arms B, C)
 """
 
 from __future__ import annotations
@@ -63,6 +72,7 @@ LATENT = 128
 COND = 64
 N_FREQ_POS = 8
 POS_DIM = 2 * N_FREQ_POS + 2
+CRITIC_HIDDEN = (2048, 1024, 512)  # v1's critic
 ENC = 256
 CHUNK = 8
 RING = 8192
@@ -78,10 +88,17 @@ def mlp(dims):
     return nn.Sequential(*layers)
 
 
-def pos_features(t: torch.Tensor, T: int) -> torch.Tensor:
+def pos_dim(mode: str) -> int:
+    return {"full": POS_DIM, "flag": 1}[mode]
+
+
+def pos_features(t: torch.Tensor, T: int, mode: str = "full") -> torch.Tensor:
+    tail = (t >= T - N_TAIL).float()[..., None]
+    if mode == "flag":
+        return tail
+    assert mode == "full", mode
     x = t.float() / T
     f = 2 * math.pi * x[..., None] * (2.0 ** torch.arange(N_FREQ_POS, device=t.device))
-    tail = (t >= T - N_TAIL).float()[..., None]
     return torch.cat([f.sin(), f.cos(), x[..., None], tail], -1)
 
 
@@ -119,10 +136,10 @@ class ARState(nn.Module):
 
 
 class Gen(nn.Module):
-    def __init__(self, arm, D, seed):
+    def __init__(self, arm, D, seed, pos="full"):
         super().__init__()
         self.arm = arm
-        self.dec = mlp([LATENT + (0 if arm == "C" else COND) + POS_DIM, 1024, 2048, 4096, D])
+        self.dec = mlp([LATENT + (0 if arm == "C" else COND) + pos_dim(pos), 1024, 2048, 4096, D])
         if arm == "A":
             self.ar = ARState(D)
         if arm == "B":
@@ -132,10 +149,23 @@ class Gen(nn.Module):
         return self.dec(torch.cat([z, pf] if c is None else [z, c, pf], -1))
 
 
-class WindowCritic(nn.Module):
-    def __init__(self, D):
+class TokenCritic(nn.Module):
+    """v1's critic: one score per token from (x, position). Called on windows
+    of length 1, so the gradient penalty is per token."""
+
+    def __init__(self, D, pos="full"):
         super().__init__()
-        self.tok = mlp([D + POS_DIM, 1024, 512])
+        self.net = mlp([D + pos_dim(pos), *CRITIC_HIDDEN, 1])
+
+    def forward(self, x, pf, s_idx):  # x (N,1,D)
+        assert x.shape[1] == 1, x.shape
+        return self.net(torch.cat([x[:, 0], pf[:, 0]], -1)).squeeze(-1)
+
+
+class WindowCritic(nn.Module):
+    def __init__(self, D, pos="full"):
+        super().__init__()
+        self.tok = mlp([D + pos_dim(pos), 1024, 512])
         self.tok_head = nn.Linear(512, 1)
         self.win = mlp([W * 512 + len(STRIDES), 1024, 512, 1])
 
@@ -228,14 +258,28 @@ class Streams:
         return x, pos, s_idx
 
 
-def fake_windows(gen, n, T, dev):
+def window_ends(n, T, dev, tail_share=None):
+    """(t_end, lo): uniform over the book, or with tail_share of the windows
+    wholly inside the tail and the rest ending in the body."""
+    if tail_share is None:
+        t_end = torch.randint(W, T, (n,), device=dev)
+        return t_end, torch.ones_like(t_end)
+    in_tail = torch.rand(n, device=dev) < tail_share
+    t_body = torch.randint(W, T - N_TAIL, (n,), device=dev)
+    t_tail = torch.randint(T - N_TAIL + W - 1, T, (n,), device=dev)
+    t_end = torch.where(in_tail, t_tail, t_body)
+    lo = torch.where(in_tail, torch.full_like(t_end, T - N_TAIL), torch.ones_like(t_end))
+    return t_end, lo
+
+
+def fake_windows(gen, n, T, dev, tail_share=None, pos_mode="full"):
     """Arms B and C: n windows, each from its own fresh book."""
-    t_end = torch.randint(W, T, (n,), device=dev)
-    s_idx = sample_stride(t_end, torch.ones_like(t_end))
+    t_end, lo = window_ends(n, T, dev, tail_share)
+    s_idx = sample_stride(t_end, lo)
     pos = window_positions(t_end, STRIDES_T.to(dev)[s_idx])
     z = torch.randn(n, W, LATENT, device=dev)
     c = gen.lat(gen.lat.sample_books(n, dev), pos) if gen.arm == "B" else None
-    return gen.decode(z, c, pos_features(pos, T)), pos, s_idx
+    return gen.decode(z, c, pos_features(pos, T, pos_mode)), pos, s_idx
 
 
 def gp(critic, real, fake, pf, s_idx):
@@ -252,6 +296,8 @@ def train(a):
     out = Path(a.out)
     if (out / "final.pt").exists():
         raise SystemExit(f"{out} already trained")
+    if a.arm == "A" and (a.tail_share is not None or a.pos != "full"):
+        raise SystemExit("--tail-share and --pos flag are for arms B and C only")
     out.mkdir(parents=True, exist_ok=True)
     dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     torch.manual_seed(a.seed)
@@ -259,8 +305,8 @@ def train(a):
     with claim_gpu(dev, run_dir=out, timeout_s=a.lock_timeout):
         data = RealBooks(a.capture_dir, a.layer, dev)
         T, D = data.T, data.D
-        gen = Gen(a.arm, D, a.seed).to(dev)
-        critic = WindowCritic(D).to(dev)
+        gen = Gen(a.arm, D, a.seed, a.pos).to(dev)
+        critic = (TokenCritic if a.critic == "token" else WindowCritic)(D, a.pos).to(dev)
         ema = copy.deepcopy(gen).requires_grad_(False)
         og = torch.optim.Adam(gen.parameters(), lr=1e-4, betas=(0.0, 0.9))
         oc = torch.optim.Adam(critic.parameters(), lr=1e-4, betas=(0.0, 0.9))
@@ -278,7 +324,12 @@ def train(a):
                 if streams is not None:
                     chunk, start = streams.advance(gen)
                     return streams.windows(chunk, start)
-                return fake_windows(gen, N_WIN, T, dev)
+                return fake_windows(gen, N_WIN, T, dev, a.tail_share, a.pos)
+
+        def as_tokens(x, pf, s_idx):  # token critic: each token is its own length-1 window
+            if a.critic != "token":
+                return x, pf, s_idx
+            return x.reshape(-1, 1, x.shape[-1]), pf.reshape(-1, 1, pf.shape[-1]), s_idx.repeat_interleave(W)
 
         log = open(out / "train_log.jsonl", "a")
         t0 = time.time()
@@ -286,7 +337,9 @@ def train(a):
             for _ in range(3):
                 fake, pos, s_idx = fake_batch(False)
                 real = data.windows(pos)
-                pf = pos_features(pos, T)
+                pf = pos_features(pos, T, a.pos)
+                real, _, _ = as_tokens(real, pf, s_idx)
+                fake, pf, s_idx = as_tokens(fake, pf, s_idx)
                 d_real, d_fake = critic(real, pf, s_idx), critic(fake, pf, s_idx)
                 pen = gp(critic, real, fake, pf, s_idx)
                 loss_c = d_fake.mean() - d_real.mean() + a.lambda_gp * pen
@@ -294,7 +347,7 @@ def train(a):
                 loss_c.backward()
                 oc.step()
             fake, pos, s_idx = fake_batch(True)
-            loss_g = -critic(fake, pos_features(pos, T), s_idx).mean()
+            loss_g = -critic(*as_tokens(fake, pos_features(pos, T, a.pos), s_idx)).mean()
             og.zero_grad(set_to_none=True)
             loss_g.backward()
             og.step()
@@ -320,7 +373,8 @@ def sample(a):
     cfg = json.loads((run / "config.json").read_text())
     dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     T, D = cfg["T"], cfg["D"]
-    gen = Gen(cfg["arm"], D, cfg["seed"]).to(dev)
+    pm = cfg.get("pos", "full")
+    gen = Gen(cfg["arm"], D, cfg["seed"], pm).to(dev)
     gen.load_state_dict(torch.load(run / "final.pt", map_location=dev)["ema"])
     gen.eval()
     mean = torch.from_numpy(np.load(run / "mean.npy")).to(dev)
@@ -337,7 +391,7 @@ def sample(a):
         s = gen.ar.s0(n, dev)
         for t in range(1, T):
             tt = torch.full((n,), t, device=dev)
-            x = gen.decode(torch.randn(n, LATENT, device=dev), s, pos_features(tt, T))
+            x = gen.decode(torch.randn(n, LATENT, device=dev), s, pos_features(tt, T, pm))
             s = gen.ar.step(x, s)
             h[:, t] = x
     else:
@@ -345,7 +399,7 @@ def sample(a):
         for s0 in range(1, T, 2048):
             t = torch.arange(s0, min(s0 + 2048, T), device=dev)[None].expand(n, -1)
             c = gen.lat(coef, t) if coef is not None else None
-            h[:, t[0]] = gen.decode(torch.randn(n, t.shape[1], LATENT, device=dev), c, pos_features(t, T))
+            h[:, t[0]] = gen.decode(torch.randn(n, t.shape[1], LATENT, device=dev), c, pos_features(t, T, pm))
     h += mean
     for i, b in enumerate(OUT_BOOKS):
         p = h_path(cap, b, cfg["layer"])
@@ -368,7 +422,7 @@ def intrinsic(a):
     x, flags = load_kv_capture(run / "capture", cfg["layer"], OUT_BOOKS, n_sink=1, n_tail=N_TAIL)
     for name, f in (("body", BODY), ("tail", TAIL)):
         t = time.time()
-        rec = {"layer": cfg["layer"], "source": f"{cfg['arm']}_s{cfg['seed']}", "flag": name,
+        rec = {"layer": cfg["layer"], "source": run.name, "flag": name,
                "n_rows": int((flags == f).sum())}
         rec |= summary(compute(x[flags == f], k=100, k_hub=10, nlist=256, max_rows=20000, seed=42, metric="l2"))
         rec["seconds"] = round(time.time() - t, 1)
@@ -389,6 +443,9 @@ def main():
     p.add_argument("--capture-dir", type=Path, required=True)
     p.add_argument("--out", type=Path, required=True)
     p.add_argument("--lock-timeout", type=float, default=0.0)
+    p.add_argument("--critic", choices=["window", "token"], default="window")
+    p.add_argument("--pos", choices=["full", "flag"], default="full")
+    p.add_argument("--tail-share", type=float, default=None)
     p.set_defaults(func=train)
     p = sub.add_parser("sample")
     p.add_argument("--run", type=Path, required=True)

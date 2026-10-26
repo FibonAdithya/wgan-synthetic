@@ -385,7 +385,7 @@ def main():
     p.add_argument("--layer", type=int, required=True)
     p.add_argument("--seed", type=int, required=True)
     p.add_argument("--steps", type=int, default=20000)
-    p.add_argument("--lambda-gp", type=float, default=5.0)
+    p.add_argument("--lambda-gp", type=float, default=10.0)
     p.add_argument("--capture-dir", type=Path, required=True)
     p.add_argument("--out", type=Path, required=True)
     p.add_argument("--lock-timeout", type=float, default=0.0)

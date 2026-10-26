@@ -17,7 +17,7 @@ for spec in "$@"; do
   mkdir -p "$(dirname $R)"
   t0=$(date +%s)
   if [ ! -f $R/final.pt ]; then
-    $PY $P train --arm $A --layer $L --seed $S --steps $STEPS --capture-dir $CAP --out $R \
+    $PY $P train --arm $A --layer $L --seed $S --steps $STEPS --lambda-gp 10 --capture-dir $CAP --out $R \
       > $R.train.log 2>&1 || { echo "FAILED train $spec"; exit 1; }
   fi
   echo "TRAINED $spec seconds=$(( $(date +%s) - t0 ))"

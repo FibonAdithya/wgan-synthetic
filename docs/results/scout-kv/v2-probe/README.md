@@ -66,3 +66,24 @@ Every value comes from this session (2026-10-26). The box ran commit
   v1 conditioned on an explicit body/tail flag instead. This is one of three changes from
   v1 that could explain the lower LID. The other two are the window critic
   and the position features.
+
+## Ablation: which change cost LID (2026-10-26)
+
+`ablation/report.html` covers this run. Arm C at L27 was rerun with each probe change from v1 undone:
+the per-token critic (`Ctok`), the tail bit as the only position input (`Cflag`), 25% tail windows
+(`Ctail`), and all three together (`Cv1`). Each variant used seeds 42 and 1 at commit 571cd65. v1 seed 1's
+L27 LID is in `runs/v1s1_intrinsic_L27.jsonl`. `runs/SHA256SUMS_ablation` covers the 57 copied files.
+
+| claim | value | MEASURED / ESTIMATED | source | when |
+|---|---|---|---|---|
+| body LID: real / v1 s42, s1 / C / Ctok / Cv1 | 29.96 / 25.03, 25.03 / 19.76, 19.82 / 24.73, 24.78 / 25.37, 25.35 | MEASURED | `ablation/summary.json` | 2026-10-26 |
+| body LID: Ctail / Cflag | 18.78, 18.59 / 22.93, 22.24 | MEASURED | `ablation/summary.json` | 2026-10-26 |
+| body hubness: v1 / Ctok / Cv1 / C | 5.47, 7.30 / 5.48, 6.55 / 7.72, 6.38 / 2.51, 2.27 | MEASURED | `ablation/summary.json` | 2026-10-26 |
+| cosine at lag 256: C / Ctok / real same book / real different books | 0.620, 0.616 / 0.529, 0.530 / 0.498 / 0.430 | MEASURED | `ablation/summary.json`, `control/cross_book_lag.json` | 2026-10-26 |
+| Cflag final W-distance and GP vs C | 631, 623 and 25.3, 23.2 vs 75.8, 75.1 and 2.3, 2.1 | MEASURED | `train_log.jsonl` last rows | 2026-10-26 |
+| tail LID: real / C / Ctail | 12.91 / 16.00, 15.95 / 14.86, 15.03 | MEASURED | `ablation/summary.json` | 2026-10-26 |
+
+The window critic causes the LID loss. Undoing it alone (Ctok) recovers v1's body LID, contrast and
+hubness, and undoing all three changes (Cv1) reproduces v1. The window critic differs from v1's critic
+in three ways, and the run does not separate them: a smaller per-token trunk, a gradient penalty taken
+jointly over 8 tokens, and the window head.

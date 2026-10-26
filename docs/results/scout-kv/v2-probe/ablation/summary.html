@@ -1,0 +1,33 @@
+<p>Ablation run on 2026-10-26 (commit 571cd65, tig-gpu-alt L40). Every v2-probe arm lost LID against v1. This run takes
+the position-only arm C at layer 27 and undoes, one at a time, three changes the probe made to v1. Each variant was trained
+30k steps with seeds 42 and 1, and scored like the probe arms. B, the probe's drifting-latent arm, is included for reference.
+All numbers are MEASURED. v1 seed 1's LID at L27 had never been measured and was measured in this run
+(<code>runs/v1s1_intrinsic_L27.jsonl</code>).</p>
+<ul>
+<li><b>Ctok:</b> v1's per-token critic (x + position → 2048–1024–512–1) instead of the 8-token window critic.</li>
+<li><b>Cflag:</b> the tail bit is the only position input, as v1's flag.</li>
+<li><b>Ctail:</b> a quarter of training windows lie in the tail, as v1's tail_batch_share.</li>
+<li><b>Cv1:</b> all three together. This should land on v1 if nothing else in the probe code matters.</li>
+</ul>
+<h2>Findings</h2>
+<ol>
+<li><b>The window critic causes the LID loss.</b> Body LID (real 29.96, v1 25.03 at both seeds) is 19.8 for C and
+24.7–24.8 for Ctok. Ctok also matches v1 on body contrast (1.98 vs 1.98) and body hubness (5.5–6.5 vs v1 5.5–7.3).</li>
+<li><b>The probe code reproduces v1 when all three changes are undone.</b> Cv1 has body LID 25.35–25.37, contrast 1.97 and
+hubness 6.4–7.7. Its gate statistics sit with v1's: HNSW reach 0.750 / 0.500 vs 0.625, and IVF recall 0.781 / 0.796 vs 0.768–0.775.
+So λ<sub>gp</sub> 10 vs v1's 5, and drawing each window's real tokens from a single book, do not account for the gap.</li>
+<li><b>The window critic also ties tokens to position too tightly.</b> At lag 256, C's cosine is 0.620 / 0.616 and Ctok's is
+0.529 / 0.530. Real is 0.498 within a book and 0.430 between books. Ctok is closer, but still above both. Cflag and Cv1 sit at 0 at every lag, as v1 would, because they have no position input.</li>
+<li><b>Tail share has no effect on the body.</b> Ctail's body LID is 18.6–18.8 (C 19.8). Its tail LID moves from 16.0 to
+14.9–15.0, a little closer to the real 12.9.</li>
+<li><b>Removing the position features breaks window training.</b> Cflag's critic wins outright: final W-distance 623–631
+and gradient penalty 23–25, against 75 and 2 for C. Real windows carry position-linked similarity between their tokens,
+and a generator without position input cannot produce it (Cflag's lag-1 cosine is −0.005). Its IVF ratio is 6.14 / 2.47
+against a real range of 1.78–1.87. Cflag's LID (22.2–22.9) is therefore not a usable result.</li>
+</ol>
+<h2>Reading for v2</h2>
+<p>The 8-token window critic differs from v1's critic in three ways, and this run does not separate them. Its per-token trunk is
+smaller (1024–512 vs 2048–1024–512), its gradient penalty is taken jointly over the 8 tokens, and it adds a window head.
+A per-token critic alone gives the generator no reason to make tokens of one book alike. So B's book clustering needs some
+window term. v2 should keep v1's per-token critic as the main critic and add the window term in a form that does not cost
+per-token spread.</p>

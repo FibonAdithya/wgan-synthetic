@@ -28,7 +28,13 @@ GATE_STATS = (
     ("hnsw_recall_k10_ef176_id", "key-side recall"),
 )
 LAGS = ("1", "16", "256", "1024", "4096")
-ARM_NAMES = {"A": "A token-by-token", "B": "B drifting latent", "C": "C position only"}
+ARM_NAMES = {
+    "A": "A token-by-token", "B": "B drifting latent", "C": "C position only",
+    "Ctok": "C + v1 per-token critic", "Cflag": "C + tail bit only",
+    "Ctail": "C + 25% tail windows", "Cv1": "C + all three",
+}
+ARM_COLORS = {"A": "#d95f02", "B": "#1b9e77", "C": "#7570b3", "Ctok": "#e7298a",
+              "Cflag": "#66a61e", "Ctail": "#e6ab02", "Cv1": "#a6761d"}
 
 
 def jsonl(p):
@@ -81,7 +87,7 @@ def intrinsic_of(records, layer, source):
     return out
 
 
-def collect(runs: Path, layers):
+def collect(runs: Path, layers, arms=("A", "B", "C")):
     v1full = SK / "v1" / "full"
     noise = SK / "v1-diagnostics" / "noise" / "measure"
     v1_intr = jsonl(v1full / "intrinsic.jsonl")
@@ -108,7 +114,10 @@ def collect(runs: Path, layers):
         if (noise / f"v1s1_best_L{L}.jsonl").exists():
             rows["v1 s1 best"] = {"gate": gate_of(jsonl(noise / f"v1s1_best_L{L}.jsonl"), L)}
             rows["v1 s1 final"] = {"gate": gate_of(jsonl(noise / f"v1s1_final_L{L}.jsonl"), L)}
-        for arm in "ABC":
+        v1s1_intr = runs / f"v1s1_intrinsic_L{L}.jsonl"
+        if v1s1_intr.exists() and "v1 s1 best" in rows:
+            rows["v1 s1 best"] |= intrinsic_of(jsonl(v1s1_intr), L, "v1_best")
+        for arm in arms:
             for seed in (42, 1):
                 r = runs / f"L{L:02d}" / f"{arm}_s{seed}"
                 if not (r / "intrinsic.jsonl").exists():
@@ -118,6 +127,7 @@ def collect(runs: Path, layers):
                     **locality_of(r / "locality.json", L),
                     **hubs_of(r / "hub_position.json", L),
                     **intrinsic_of(jsonl(r / "intrinsic.jsonl"), L, f"{arm}_s{seed}"),
+                    "arm": arm,
                     "train_tail": jsonl(r / "train_log.jsonl")[-1],
                 }
         out[L] = rows
@@ -177,7 +187,7 @@ DIST_KEYS = [
 ]
 
 
-def lag_figure(data):
+def lag_figure(data):  # noqa: C901
     import matplotlib
 
     matplotlib.use("Agg")
@@ -188,7 +198,6 @@ def lag_figure(data):
     cross = json.loads(cp.read_text()) if cp.exists() else None
     fig, axes = plt.subplots(1, len(layers), figsize=(5.2 * len(layers), 3.8), squeeze=False)
     lags = [int(k) for k in LAGS]
-    style = {"A": ("#d95f02", "-"), "B": ("#1b9e77", "-"), "C": ("#7570b3", "-")}
     for ax, L in zip(axes[0], layers):
         rows = data[L]
         ax.plot(lags, [rows["real"][f"cos_lag{k}"] for k in LAGS], "k-o", lw=2.5, label="real, same book", zorder=5)
@@ -197,11 +206,11 @@ def lag_figure(data):
             ax.plot(lags, [cb["cross_book"][k] for k in LAGS], color="0.45", ls=":", marker="o", lw=2,
                     label="real, different books (control)", zorder=4)
         for n, r in rows.items():
-            if n[0] in style and f"cos_lag{LAGS[0]}" in r:
-                col, _ = style[n[0]]
+            if "arm" in r and f"cos_lag{LAGS[0]}" in r:
+                col = ARM_COLORS[r["arm"]]
                 ls = "-" if n.endswith("s42") else "--"
                 ax.plot(lags, [r[f"cos_lag{k}"] for k in LAGS], color=col, ls=ls, marker=".",
-                        label=f"{ARM_NAMES[n[0]]} ({n.split()[1]})")
+                        label=f"{ARM_NAMES[r['arm']]} ({n.split()[1]})")
         ax.set_xscale("log")
         ax.set_ylim(-0.05, 1.0)
         ax.set_xlabel("lag (tokens)")
@@ -216,7 +225,7 @@ def lag_figure(data):
     return base64.b64encode(buf.getvalue()).decode()
 
 
-def report(data, path: Path):
+def report(data, path: Path, title="scout_kv v2 probe: token-by-token vs drifting latent"):
     parts = []
     for L in sorted(data):
         rows = data[L]
@@ -225,13 +234,13 @@ def report(data, path: Path):
         parts.append(plain_table(L, rows, LOC_KEYS, "sequence locality (real: books 12–19; arms: their 8 synthetic books)"))
         parts.append(plain_table(L, rows, DIST_KEYS, "distribution and hubs"))
     img = lag_figure(data)
-    doc = f"""<!doctype html><html><head><meta charset=utf-8><title>scout_kv v2 probe</title>
+    doc = f"""<!doctype html><html><head><meta charset=utf-8><title>{html.escape(title.split(":")[0])}</title>
 <style>body{{font-family:system-ui,sans-serif;max-width:1200px;margin:2em auto;padding:0 16px;color:#222}}
 table{{border-collapse:collapse;margin:1em 0;font-size:13px}}td,th{{border:1px solid #ccc;padding:3px 7px;text-align:right}}
 td:first-child,th:first-child{{text-align:left}}caption{{text-align:left;font-weight:600;margin-bottom:4px}}
 tr.real td{{background:#f2f2f2;font-weight:600}}td.in{{background:#d9f2d9}}td.out{{background:#fbe3e3}}
 img{{max-width:100%}}</style></head><body>
-<h1>scout_kv v2 probe: token-by-token vs drifting latent</h1>
+<h1>{html.escape(title)}</h1>
 {{SUMMARY}}
 <h2>Consecutive similarity</h2><img alt="lag curves" src="data:image/png;base64,{img}">
 {''.join(parts)}
@@ -245,10 +254,12 @@ def main():
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--layers", default="27,19")
     ap.add_argument("--summary-html", type=Path, default=None)
+    ap.add_argument("--arms", default="A,B,C")
+    ap.add_argument("--title", default="scout_kv v2 probe: token-by-token vs drifting latent")
     a = ap.parse_args()
-    data = collect(a.runs, [int(x) for x in a.layers.split(",")])
+    data = collect(a.runs, [int(x) for x in a.layers.split(",")], a.arms.split(","))
     (a.out / "summary.json").write_text(json.dumps(data, indent=2, default=str) + "\n")
-    report(data, a.out / "report.html")
+    report(data, a.out / "report.html", a.title)
     if a.summary_html:
         p = a.out / "report.html"
         p.write_text(p.read_text().replace("{SUMMARY}", a.summary_html.read_text()))

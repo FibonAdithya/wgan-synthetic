@@ -1,0 +1,42 @@
+{
+  "cmd": "train",
+  "arm": "C",
+  "layer": 19,
+  "seed": 42,
+  "steps": 30000,
+  "lambda_gp": 10.0,
+  "capture_dir": "/workspace/kv/capture",
+  "out": "/workspace/kv/v2probe/L19/C_s42",
+  "lock_timeout": 0.0,
+  "T": 32768,
+  "D": 5120,
+  "W": 8,
+  "strides": [
+    1,
+    4,
+    16,
+    64,
+    256,
+    1024
+  ],
+  "n_win": 64,
+  "chunk": 8,
+  "cond": 64,
+  "latent": 128,
+  "n_critic": 3,
+  "ema_decay": 0.999,
+  "train_books": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11
+  ]
+}

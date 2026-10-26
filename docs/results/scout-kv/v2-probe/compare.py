@@ -184,12 +184,18 @@ def lag_figure(data):
     import matplotlib.pyplot as plt
 
     layers = sorted(data)
+    cp = HERE / "control" / "cross_book_lag.json"
+    cross = json.loads(cp.read_text()) if cp.exists() else None
     fig, axes = plt.subplots(1, len(layers), figsize=(5.2 * len(layers), 3.8), squeeze=False)
     lags = [int(k) for k in LAGS]
     style = {"A": ("#d95f02", "-"), "B": ("#1b9e77", "-"), "C": ("#7570b3", "-")}
     for ax, L in zip(axes[0], layers):
         rows = data[L]
-        ax.plot(lags, [rows["real"][f"cos_lag{k}"] for k in LAGS], "k-o", lw=2.5, label="real", zorder=5)
+        ax.plot(lags, [rows["real"][f"cos_lag{k}"] for k in LAGS], "k-o", lw=2.5, label="real, same book", zorder=5)
+        if cross is not None:
+            (cb,) = [x for x in cross["layers"] if x["layer"] == L]
+            ax.plot(lags, [cb["cross_book"][k] for k in LAGS], color="0.45", ls=":", marker="o", lw=2,
+                    label="real, different books (control)", zorder=4)
         for n, r in rows.items():
             if n[0] in style and f"cos_lag{LAGS[0]}" in r:
                 col, _ = style[n[0]]
@@ -202,10 +208,11 @@ def lag_figure(data):
         ax.set_ylabel("median cosine of centred h")
         ax.set_title(f"Layer {L}")
         ax.grid(alpha=0.3)
-    axes[0][-1].legend(fontsize=7, loc="upper right")
+    handles, labels = axes[0][0].get_legend_handles_labels()
+    fig.legend(handles, labels, fontsize=8, loc="center left", bbox_to_anchor=(1.0, 0.5))
     fig.tight_layout()
     buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=110)
+    fig.savefig(buf, format="png", dpi=110, bbox_inches="tight")
     return base64.b64encode(buf.getvalue()).decode()
 
 

@@ -10,6 +10,7 @@
 #   Bboth  arm B                        Cboth  arm C
 #   Bflag  Bboth, tail bit as the only position input
 #   Bsmall Bboth with a 16-channel latent, length scales 2-1,024 tokens
+#   Bflag25 Bflag with a quarter of the windows inside the tail, as v1's tail_batch_share
 set -u
 cd /workspace/repo_v1
 export PYTHONPATH=$PWD OMP_NUM_THREADS=15
@@ -30,6 +31,7 @@ for spec in "$@"; do
     Cboth) ARGS="--arm C --critic both --window-weight 0.1" ;;
     Bflag) ARGS="--arm B --critic both --window-weight 0.1 --pos flag" ;;
     Bsmall) ARGS="--arm B --critic both --window-weight 0.1 --cond 16 --max-len 1024" ;;
+    Bflag25) ARGS="--arm B --critic both --window-weight 0.1 --pos flag --tail-share 0.25" ;;
     *) echo "FAILED unknown name $spec"; exit 1 ;;
   esac
   R=/workspace/kv/v2probe/L$L/${A}_s$S

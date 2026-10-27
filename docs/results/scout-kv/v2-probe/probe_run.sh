@@ -6,6 +6,8 @@
 # NAME is an arm (A, B, C) or an ablation of arm C:
 #   Ctok   v1's per-token critic        Cflag  tail bit as the only position input
 #   Ctail  a quarter of windows in tail Cv1    all three of the above
+# or a two-critic run (v1's per-token critic + the window critic at weight 0.1):
+#   Bboth  arm B                        Cboth  arm C
 set -u
 cd /workspace/repo_v1
 export PYTHONPATH=$PWD OMP_NUM_THREADS=15
@@ -22,6 +24,8 @@ for spec in "$@"; do
     Cflag) ARGS="--arm C --pos flag" ;;
     Ctail) ARGS="--arm C --tail-share 0.25" ;;
     Cv1)   ARGS="--arm C --critic token --pos flag --tail-share 0.25" ;;
+    Bboth) ARGS="--arm B --critic both --window-weight 0.1" ;;
+    Cboth) ARGS="--arm C --critic both --window-weight 0.1" ;;
     *) echo "FAILED unknown name $spec"; exit 1 ;;
   esac
   R=/workspace/kv/v2probe/L$L/${A}_s$S

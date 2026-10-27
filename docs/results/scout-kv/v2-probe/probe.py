@@ -44,6 +44,12 @@ the probe made to v1 can be undone on its own:
   --pos flag         position input is the tail bit only, as v1's flag
   --tail-share 0.25  a quarter of the windows lie inside the tail, as v1's
                      tail_batch_share; the rest end in the body (arms B, C)
+
+The ablation found the window critic costs LID and v1's per-token critic
+restores it. --critic both trains the two critics side by side, each with its
+own optimizer and gradient penalty, on the same batches. The generator loss is
+-(token score) - window_weight * (window score). At log steps the per-token
+gradient each term puts on the fake tokens is recorded (grad_tok, grad_win).
 """
 
 from __future__ import annotations
@@ -306,10 +312,15 @@ def train(a):
         data = RealBooks(a.capture_dir, a.layer, dev)
         T, D = data.T, data.D
         gen = Gen(a.arm, D, a.seed, a.pos).to(dev)
-        critic = (TokenCritic if a.critic == "token" else WindowCritic)(D, a.pos).to(dev)
+        # (name, critic, optimizer, scores single tokens, weight in the generator loss)
+        kinds = {"token": [("tok", True, 1.0)], "window": [("win", False, 1.0)],
+                 "both": [("tok", True, 1.0), ("win", False, a.window_weight)]}[a.critic]
+        critics = []
+        for name, tokens, weight in kinds:
+            c = (TokenCritic if tokens else WindowCritic)(D, a.pos).to(dev)
+            critics.append((name, c, torch.optim.Adam(c.parameters(), lr=1e-4, betas=(0.0, 0.9)), tokens, weight))
         ema = copy.deepcopy(gen).requires_grad_(False)
         og = torch.optim.Adam(gen.parameters(), lr=1e-4, betas=(0.0, 0.9))
-        oc = torch.optim.Adam(critic.parameters(), lr=1e-4, betas=(0.0, 0.9))
         streams = Streams(gen, N_WIN, T, D, dev) if a.arm == "A" else None
         cfg = {k: v for k, v in vars(a).items() if k != "func"}
         cfg |= {"T": T, "D": D, "W": W, "strides": STRIDES, "n_win": N_WIN, "chunk": CHUNK,
@@ -326,43 +337,60 @@ def train(a):
                     return streams.windows(chunk, start)
                 return fake_windows(gen, N_WIN, T, dev, a.tail_share, a.pos)
 
-        def as_tokens(x, pf, s_idx):  # token critic: each token is its own length-1 window
-            if a.critic != "token":
+        def as_tokens(x, pf, s_idx, tokens):  # token critic: each token is its own length-1 window
+            if not tokens:
                 return x, pf, s_idx
             return x.reshape(-1, 1, x.shape[-1]), pf.reshape(-1, 1, pf.shape[-1]), s_idx.repeat_interleave(W)
 
         log = open(out / "train_log.jsonl", "a")
         t0 = time.time()
         for step in range(1, a.steps + 1):
+            stats = {}
             for _ in range(3):
-                fake, pos, s_idx = fake_batch(False)
-                real = data.windows(pos)
-                pf = pos_features(pos, T, a.pos)
-                real, _, _ = as_tokens(real, pf, s_idx)
-                fake, pf, s_idx = as_tokens(fake, pf, s_idx)
-                d_real, d_fake = critic(real, pf, s_idx), critic(fake, pf, s_idx)
-                pen = gp(critic, real, fake, pf, s_idx)
-                loss_c = d_fake.mean() - d_real.mean() + a.lambda_gp * pen
-                oc.zero_grad(set_to_none=True)
-                loss_c.backward()
-                oc.step()
-            fake, pos, s_idx = fake_batch(True)
-            loss_g = -critic(*as_tokens(fake, pos_features(pos, T, a.pos), s_idx)).mean()
+                fake_w, pos, s_idx_w = fake_batch(False)
+                real_w = data.windows(pos)
+                pf_w = pos_features(pos, T, a.pos)
+                for name, critic, oc, tokens, _ in critics:
+                    real, _, _ = as_tokens(real_w, pf_w, s_idx_w, tokens)
+                    fake, pf, s_idx = as_tokens(fake_w, pf_w, s_idx_w, tokens)
+                    d_real, d_fake = critic(real, pf, s_idx), critic(fake, pf, s_idx)
+                    pen = gp(critic, real, fake, pf, s_idx)
+                    loss_c = d_fake.mean() - d_real.mean() + a.lambda_gp * pen
+                    oc.zero_grad(set_to_none=True)
+                    loss_c.backward()
+                    oc.step()
+                    stats[name] = (d_real.mean() - d_fake.mean(), pen)
+            fake_w, pos, s_idx_w = fake_batch(True)
+            pf_w = pos_features(pos, T, a.pos)
+            terms = {name: -weight * critic(*as_tokens(fake_w, pf_w, s_idx_w, tokens)).mean()
+                     for name, critic, _, tokens, weight in critics}
+            loss_g = sum(terms.values())
+            logging = step % 250 == 0 or step == 1
+            grads = {}
+            if logging and len(terms) > 1:  # per-token gradient norm each term puts on the fakes
+                for name, term in terms.items():
+                    g = torch.autograd.grad(term, fake_w, retain_graph=True)[0]
+                    grads[f"grad_{name}"] = float(g.norm(dim=-1).mean())
             og.zero_grad(set_to_none=True)
             loss_g.backward()
             og.step()
             with torch.no_grad():
                 for pe, p in zip(ema.parameters(), gen.parameters()):
                     pe.lerp_(p, 1 - 0.999)
-            if step % 250 == 0 or step == 1:
-                rec = {"step": step, "w_dist": float(d_real.mean() - d_fake.mean()),
-                       "gp": float(pen), "loss_g": float(loss_g), "seconds": round(time.time() - t0, 1)}
+            if logging:
+                (wd, pen), rec = stats[critics[0][0]], {"step": step}
+                rec |= {"w_dist": float(wd), "gp": float(pen)}
+                for name, (wd2, pen2) in list(stats.items())[1:]:
+                    rec |= {f"w_dist_{name}": float(wd2), f"gp_{name}": float(pen2)}
+                rec |= grads | {"loss_g": float(loss_g), "seconds": round(time.time() - t0, 1)}
                 log.write(json.dumps(rec) + "\n")
                 log.flush()
                 print(json.dumps(rec), flush=True)
             if step % 5000 == 0 or step == a.steps:
-                torch.save({"step": step, "gen": gen.state_dict(), "ema": ema.state_dict(),
-                            "critic": critic.state_dict()}, out / "last.pt")
+                ck = {"step": step, "gen": gen.state_dict(), "ema": ema.state_dict(),
+                      "critic": critics[0][1].state_dict()}
+                ck |= {f"critic_{c[0]}": c[1].state_dict() for c in critics[1:]}
+                torch.save(ck, out / "last.pt")
         (out / "last.pt").rename(out / "final.pt")
         print("TRAINED", out, round(time.time() - t0, 1), "s", flush=True)
 
@@ -443,7 +471,8 @@ def main():
     p.add_argument("--capture-dir", type=Path, required=True)
     p.add_argument("--out", type=Path, required=True)
     p.add_argument("--lock-timeout", type=float, default=0.0)
-    p.add_argument("--critic", choices=["window", "token"], default="window")
+    p.add_argument("--critic", choices=["window", "token", "both"], default="window")
+    p.add_argument("--window-weight", type=float, default=0.1)
     p.add_argument("--pos", choices=["full", "flag"], default="full")
     p.add_argument("--tail-share", type=float, default=None)
     p.set_defaults(func=train)

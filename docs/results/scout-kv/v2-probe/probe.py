@@ -50,6 +50,9 @@ restores it. --critic both trains the two critics side by side, each with its
 own optimizer and gradient penalty, on the same batches. The generator loss is
 -(token score) - window_weight * (window score). At log steps the per-token
 gradient each term puts on the fake tokens is recorded (grad_tok, grad_win).
+
+Latent size (2026-10-27): --cond sets arm B's latent channels (default 64)
+and --max-len its longest length scale (default 16,384 tokens).
 """
 
 from __future__ import annotations
@@ -112,14 +115,15 @@ class DriftLatent(nn.Module):
     """u_c(t) = sum_m (a_cm cos(w_cm t) + b_cm sin(w_cm t)) / sqrt(M): a smooth
     random signal per channel with length scale l_c; a, b ~ N(0,1) per book."""
 
-    def __init__(self, seed: int):
+    def __init__(self, seed: int, cond: int = COND, max_len: float = 16384.0):
         super().__init__()
+        self.cond = cond
         g = torch.Generator().manual_seed(seed)
-        ell = torch.logspace(math.log10(2.0), math.log10(16384.0), COND)
-        self.register_buffer("omega", torch.randn(COND, N_RFF, generator=g) / ell[:, None])
+        ell = torch.logspace(math.log10(2.0), math.log10(max_len), cond)
+        self.register_buffer("omega", torch.randn(cond, N_RFF, generator=g) / ell[:, None])
 
     def sample_books(self, n, dev):
-        return torch.randn(n, 2, COND, N_RFF, device=dev)
+        return torch.randn(n, 2, self.cond, N_RFF, device=dev)
 
     def forward(self, coef, t):  # coef (N,2,C,M), t (N,L) -> (N,L,C)
         ph = t.float()[..., None, None] * self.omega
@@ -142,14 +146,15 @@ class ARState(nn.Module):
 
 
 class Gen(nn.Module):
-    def __init__(self, arm, D, seed, pos="full"):
+    def __init__(self, arm, D, seed, pos="full", cond=COND, max_len=16384.0):
         super().__init__()
         self.arm = arm
-        self.dec = mlp([LATENT + (0 if arm == "C" else COND) + pos_dim(pos), 1024, 2048, 4096, D])
+        assert arm == "B" or (cond == COND and max_len == 16384.0), "--cond/--max-len are for arm B"
+        self.dec = mlp([LATENT + (0 if arm == "C" else cond) + pos_dim(pos), 1024, 2048, 4096, D])
         if arm == "A":
             self.ar = ARState(D)
         if arm == "B":
-            self.lat = DriftLatent(seed)
+            self.lat = DriftLatent(seed, cond, max_len)
 
     def decode(self, z, c, pf):
         return self.dec(torch.cat([z, pf] if c is None else [z, c, pf], -1))
@@ -311,7 +316,7 @@ def train(a):
     with claim_gpu(dev, run_dir=out, timeout_s=a.lock_timeout):
         data = RealBooks(a.capture_dir, a.layer, dev)
         T, D = data.T, data.D
-        gen = Gen(a.arm, D, a.seed, a.pos).to(dev)
+        gen = Gen(a.arm, D, a.seed, a.pos, a.cond, a.max_len).to(dev)
         # (name, critic, optimizer, scores single tokens, weight in the generator loss)
         kinds = {"token": [("tok", True, 1.0)], "window": [("win", False, 1.0)],
                  "both": [("tok", True, 1.0), ("win", False, a.window_weight)]}[a.critic]
@@ -324,7 +329,7 @@ def train(a):
         streams = Streams(gen, N_WIN, T, D, dev) if a.arm == "A" else None
         cfg = {k: v for k, v in vars(a).items() if k != "func"}
         cfg |= {"T": T, "D": D, "W": W, "strides": STRIDES, "n_win": N_WIN, "chunk": CHUNK,
-                "cond": COND, "latent": LATENT, "lambda_gp": a.lambda_gp, "n_critic": 3,
+                "cond": a.cond, "max_len": a.max_len, "latent": LATENT, "lambda_gp": a.lambda_gp, "n_critic": 3,
                 "ema_decay": 0.999, "train_books": TRAIN_BOOKS}
         (out / "config.json").write_text(json.dumps(cfg, indent=2, default=str) + "\n")
         np.save(out / "mean.npy", data.mean.cpu().numpy())
@@ -402,7 +407,7 @@ def sample(a):
     dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     T, D = cfg["T"], cfg["D"]
     pm = cfg.get("pos", "full")
-    gen = Gen(cfg["arm"], D, cfg["seed"], pm).to(dev)
+    gen = Gen(cfg["arm"], D, cfg["seed"], pm, cfg.get("cond", COND), cfg.get("max_len", 16384.0)).to(dev)
     gen.load_state_dict(torch.load(run / "final.pt", map_location=dev)["ema"])
     gen.eval()
     mean = torch.from_numpy(np.load(run / "mean.npy")).to(dev)
@@ -473,6 +478,8 @@ def main():
     p.add_argument("--lock-timeout", type=float, default=0.0)
     p.add_argument("--critic", choices=["window", "token", "both"], default="window")
     p.add_argument("--window-weight", type=float, default=0.1)
+    p.add_argument("--cond", type=int, default=COND)
+    p.add_argument("--max-len", type=float, default=16384.0)
     p.add_argument("--pos", choices=["full", "flag"], default="full")
     p.add_argument("--tail-share", type=float, default=None)
     p.set_defaults(func=train)

@@ -8,6 +8,8 @@
 #   Ctail  a quarter of windows in tail Cv1    all three of the above
 # or a two-critic run (v1's per-token critic + the window critic at weight 0.1):
 #   Bboth  arm B                        Cboth  arm C
+#   Bflag  Bboth, tail bit as the only position input
+#   Bsmall Bboth with a 16-channel latent, length scales 2-1,024 tokens
 set -u
 cd /workspace/repo_v1
 export PYTHONPATH=$PWD OMP_NUM_THREADS=15
@@ -26,6 +28,8 @@ for spec in "$@"; do
     Cv1)   ARGS="--arm C --critic token --pos flag --tail-share 0.25" ;;
     Bboth) ARGS="--arm B --critic both --window-weight 0.1" ;;
     Cboth) ARGS="--arm C --critic both --window-weight 0.1" ;;
+    Bflag) ARGS="--arm B --critic both --window-weight 0.1 --pos flag" ;;
+    Bsmall) ARGS="--arm B --critic both --window-weight 0.1 --cond 16 --max-len 1024" ;;
     *) echo "FAILED unknown name $spec"; exit 1 ;;
   esac
   R=/workspace/kv/v2probe/L$L/${A}_s$S

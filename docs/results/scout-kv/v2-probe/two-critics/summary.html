@@ -5,6 +5,10 @@ as <b>Bboth</b> and <b>Cboth</b>, at layers 27 and 19 with seeds 42 and 1, for 3
 runs. All numbers are MEASURED.</p>
 <p>At the final step, the window term's per-token gradient on the fakes is 0.35–0.50× the token term's (<code>grad_win</code> /
 <code>grad_tok</code> in <code>train_log.jsonl</code>). So the window critic still contributes, without dominating.</p>
+<p style="border:2px solid #b2182b;padding:8px"><b>Retraction (2026-10-27).</b> Finding 5 and the last section said the
+sinusoidal position features likely make L19 search too easy. The later latent/position run (<code>../latent-position/report.html</code>)
+removed them (Bflag, tail bit only) and L19 HNSW recall was still 0.989 / 0.969 against real 0.854–0.882. The position features
+are not the cause, and the cause is not identified.</p>
 <h2>Findings</h2>
 <ol>
 <li><b>With two critics, the position-only generator keeps v1's spread.</b> Cboth's body LID is 25.10 / 25.26 at L27 (v1 25.03) and

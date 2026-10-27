@@ -1,0 +1,36 @@
+<p>Run on 2026-10-27 (commit f409ae6, tig-gpu-alt L40). The two-critic run left two questions. Does the drifting latent
+have to cost 2.5–5.5 points of body LID to keep book clustering? Do the sinusoidal position features make L19 search too easy?
+Both variants below are Bboth (v1's per-token critic plus the window critic at weight 0.1) with one change each. Runs are at
+layers 27 and 19, seeds 42 and 1, for 30k steps. All numbers are MEASURED.</p>
+<ul>
+<li><b>Bflag:</b> the tail bit is the only position input, as in v1.</li>
+<li><b>Bsmall:</b> 16 latent channels instead of 64, and length scales of 2–1,024 tokens instead of 2–16,384.</li>
+</ul>
+<p>Both trained normally. At the final step the window W-distance is 43–51 for Bflag and 38–43 for Bsmall at L27 (Bboth 28–33),
+with gradient penalties of 1.1–1.5. That is far from the ablation's Cflag, whose window critic won outright (W-distance ~625).
+The window term's per-token gradient is 0.38–0.55× the token term's.</p>
+<h2>Findings</h2>
+<ol>
+<li><b>The position features do not make L19 search too easy. This retracts the two-critic report's reading.</b> Bflag's L19
+HNSW recall is 0.989 / 0.969 against a real range of 0.854–0.882, no better than Bboth (0.980 / 0.976). Every probe run has a
+window critic and is too easy at L19. v0 has no window critic and is too easy as well (0.972). v1 is the only generator near
+real (0.869–0.902). The cause is not identified.</li>
+<li><b>Removing the position features costs nothing.</b> Bflag's body LID is 21.02 / 20.35 at L27 (Bboth 19.62 / 19.04) and
+23.12 / 23.14 at L19 (Bboth 22.94 / 23.77). Its h-NN same-book share is 0.935 / 0.902 at L27 (real 0.895) and 0.761 / 0.698
+at L19 (real 0.645). The latent alone carries the book structure. Without position input, its tokens are tied to each other
+only through the latent. At L27 the seeds disagree on how tightly: lag-256 cosine 0.379 at seed 42 and 0.565 at seed 1, against
+0.498 within a real book and 0.430 between real books.</li>
+<li><b>The short latent recovers most of the LID but loses the book clustering.</b> Bsmall's body LID is 22.59 / 23.07 at L27
+and 24.54 / 25.19 at L19, 0.5–2.5 below Cboth. Its h-NN same-book share falls to 0.644 / 0.575 at L27 (real 0.895) and
+0.333 / 0.229 at L19 (real 0.645). Key-NN same-book falls with it (L27 0.347 / 0.292 vs real 0.653). Book identity lives in
+the latent's slow components, the ones longer than 1,024 tokens.</li>
+<li><b>Hubness stays far from real.</b> Real is 49.9 and 52.3. Bflag is 3.2–3.5, except one run at 8.5 (L19, seed 1). Bsmall is
+4.1–6.5, near v1's 5.5–7.3.</li>
+<li><b>No run lands inside the real range on most gate statistics.</b> At L27, Bflag seed 42 is too easy (HNSW recall 0.905,
+IVF recall 0.937) and seed 1 too hard (0.751, IVF ratio 0.656 vs real 1.776–1.866). The spread between seeds is as large as
+before.</li>
+</ol>
+<h2>Reading for v2</h2>
+<p>The trade-off is between LID and book clustering, and it sits in the latent's long length scales. A shorter latent buys LID
+by giving up the clustering. Position features are not needed: the tail bit is enough, as in v1. The too-easy L19 search
+has a cause outside both changes tested here.</p>

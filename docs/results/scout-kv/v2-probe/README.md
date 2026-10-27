@@ -107,3 +107,46 @@ are at L27 and L19, seeds 42 and 1, commit 7460b2e. `runs/SHA256SUMS_both` cover
 With two critics, the position-only generator keeps v1's LID, so the down-weighted window term costs nothing. Adding the
 drifting latent still costs 2.5–5.5 LID points against Cboth, though it keeps the book clustering. compare.py now builds the
 figure legend from every panel.
+
+**Retraction (2026-10-27, latent/position run below).** This section's report said the sinusoidal position features
+"likely make L19 recall too easy". Bflag removes them, keeping only the tail bit as v1 does, and its L19 HNSW recall is still
+0.989 / 0.969 (real 0.854–0.882). The position features are not the cause. The note is repeated in
+`two-critics/summary.html`.
+
+## Latent and position inputs (2026-10-27)
+
+`latent-position/report.html` covers this run. Both variants are Bboth with one change each, at L27 and L19, seeds 42 and 1,
+commit f409ae6 (the `START` line of `/workspace/logs/v2probe_lat.log`). `runs/SHA256SUMS_lat` covers the 56 copied files
+(`cd runs && sha256sum -c SHA256SUMS_lat` gives 56 OK).
+
+- **Bflag** (`--pos flag`): the tail bit is the only position input, as in v1.
+- **Bsmall** (`--cond 16 --max-len 1024`): 16 latent channels instead of 64, and length scales 2–1,024 instead of 2–16,384.
+
+Rebuild with:
+
+```
+PYTHONPATH=$PWD python docs/results/scout-kv/v2-probe/compare.py \
+  --runs docs/results/scout-kv/v2-probe/runs --out docs/results/scout-kv/v2-probe/latent-position \
+  --layers 27,19 --arms B,Bboth,Bflag,Bsmall,Cboth \
+  --summary-html docs/results/scout-kv/v2-probe/latent-position/summary.html \
+  --title "scout_kv v2 probe: latent and position inputs"
+```
+
+| claim | value | MEASURED / ESTIMATED | source | when |
+|---|---|---|---|---|
+| body LID L27: real / v1 / Bboth / Bflag / Bsmall / Cboth | 29.96 / 25.03, 25.03 / 19.62, 19.04 / 21.02, 20.35 / 22.59, 23.07 / 25.10, 25.26 | MEASURED | `latent-position/summary.json` | 2026-10-27 |
+| body LID L19: real / v1 s42 / Bboth / Bflag / Bsmall / Cboth | 29.25 / 25.98 / 22.94, 23.77 / 23.12, 23.14 / 24.54, 25.19 / 25.66, 25.65 | MEASURED | `latent-position/summary.json` | 2026-10-27 |
+| h-NN same-book L27: real / Bboth / Bflag / Bsmall / Cboth | 0.895 / 0.889, 0.900 / 0.935, 0.902 / 0.644, 0.575 / 0.124, 0.124 | MEASURED | `latent-position/summary.json` | 2026-10-27 |
+| h-NN same-book L19: real / Bboth / Bflag / Bsmall | 0.645 / 0.744, 0.532 / 0.761, 0.698 / 0.333, 0.229 | MEASURED | `latent-position/summary.json` | 2026-10-27 |
+| key-NN same-book L27: real / Bboth / Bflag / Bsmall | 0.653 / 0.405, 0.500 / 0.558, 0.520 / 0.347, 0.292 | MEASURED | `latent-position/summary.json` | 2026-10-27 |
+| L19 HNSW recall: real range / v1 / Bboth / Bflag / Bsmall / Cboth | 0.854–0.882 / 0.869–0.902 / 0.980, 0.976 / 0.989, 0.969 / 0.933, 0.979 / 0.941, 0.965 | MEASURED | `latent-position/summary.json` | 2026-10-27 |
+| L27 HNSW recall: real range / v1 / Bflag / Bsmall | 0.839–0.867 / 0.808, 0.715 / 0.905, 0.751 / 0.804, 0.748 | MEASURED | `latent-position/summary.json` | 2026-10-27 |
+| body hubness: real / Bflag / Bsmall (L27; L19) | 49.9; 52.3 / 3.25, 3.43; 3.51, 8.47 / 6.47, 5.57; 4.79, 4.11 | MEASURED | `latent-position/summary.json` | 2026-10-27 |
+| lag-256 cosine L27: real same-book / real cross-book / Bflag / Bboth | 0.498 / 0.430 / 0.379, 0.565 / 0.609, 0.624 | MEASURED | `latent-position/summary.json`, `control/cross_book_lag.json` | 2026-10-27 |
+| final window W-distance L27: Bboth / Bflag / Bsmall | 28.3, 33.1 / 43.4, 51.2 / 38.1, 43.4 | MEASURED | `runs/L27/*_s*/train_log.jsonl` last rows | 2026-10-27 |
+| training time, 30k steps | 2,190–2,260 s | MEASURED | `train_log.jsonl` last rows | 2026-10-27 |
+
+Removing the position features costs no LID (+1.3–1.4 at L27, unchanged at L19) and keeps the clustering, but does not fix
+L19 search. Every probe run has a window critic and makes L19 search too easy, but so does v0 (0.972), which has none.
+v1 is the only generator near real (0.869–0.902). The cause is not identified, and Ctok was not run at L19. The short latent recovers most of the LID (0.5–2.5 below Cboth) but loses most of the book clustering, so book
+identity lives in the latent's slow components.

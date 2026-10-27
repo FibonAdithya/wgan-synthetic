@@ -1,0 +1,32 @@
+<p>Run on 2026-10-27 (commit 7460b2e, tig-gpu-alt L40). The ablation found that the 8-token window critic cost LID and that v1's
+per-token critic restored it. This run trains both critics side by side, each with its own optimizer and gradient penalty.
+The generator loss is the token score plus 0.1 × the window score. Arms are B (drifting per-book latent) and C (position only), each
+as <b>Bboth</b> and <b>Cboth</b>, at layers 27 and 19 with seeds 42 and 1, for 30k steps. Rows B, C and Ctok are earlier single-critic
+runs. All numbers are MEASURED.</p>
+<p>At the final step, the window term's per-token gradient on the fakes is 0.35–0.50× the token term's (<code>grad_win</code> /
+<code>grad_tok</code> in <code>train_log.jsonl</code>). So the window critic still contributes, without dominating.</p>
+<h2>Findings</h2>
+<ol>
+<li><b>With two critics, the position-only generator keeps v1's spread.</b> Cboth's body LID is 25.10 / 25.26 at L27 (v1 25.03) and
+25.66 / 25.65 at L19 (v1 25.98). Contrast also matches: 1.98 / 1.97 against v1's 1.98 at L27, and 1.89 / 1.89 against 1.88 at L19.
+The window term at weight 0.1 therefore costs no LID.</li>
+<li><b>The drifting latent still costs LID, now on its own account.</b> Bboth's body LID is 19.62 / 19.05 at L27 and 22.94 / 23.77
+at L19. That is above B with the window critic alone (16.19 / 16.67 and 20.05 / 19.79), but 5.5 and 2.5 below Cboth, which
+differs only by the latent. Real is 29.96 and 29.25.</li>
+<li><b>Bboth keeps B's book clustering in h space.</b> Its h-NN same-book share at L27 is 0.889 / 0.900 (real 0.895, B 0.909 / 0.904).
+At L19 it is 0.744 / 0.532 (real 0.645, B 0.729 / 0.656), where the two seeds disagree. In key space it is lower than B's: 0.405 / 0.499
+at L27 (real 0.653, B 0.517 / 0.520) and 0.266 / 0.201 at L19 (real 0.327).</li>
+<li><b>Body hubness stays far from real.</b> Real is 49.9 and 52.3. Bboth is 2.7–4.0 and Cboth is 4.2–4.9, except one run,
+Cboth seed 42 at L27, at 16.8. v1 is 5.5–7.3.</li>
+<li><b>Search does not improve, and at L19 the position input looks like the problem.</b> At L19, every run with position
+features makes HNSW recall too easy. Bboth scores 0.980 / 0.976, Cboth 0.941 / 0.965, B 0.965 / 0.949 and C 0.984 / 0.979, against
+real 0.854–0.882. v1, which has only the tail flag, scores 0.869–0.902. At L27, Bboth's IVF ratio is 0.658 at seed 42 and 1.434 at
+seed 1, against real 1.776–1.866. The same spread between seeds as before.</li>
+<li><b>Tokens are still tied to position more tightly than in real books.</b> At lag 256, Cboth's cosine is 0.539 / 0.538 at L27 and
+0.438 / 0.436 at L19. Between different real books it is 0.430 and 0.329.</li>
+</ol>
+<h2>Reading for v2</h2>
+<p>v1's per-token critic plus a down-weighted window critic is a usable critic: it keeps v1's spread and still trains the window
+structure. The drifting latent as built, with 64 channels and length scales from 2 to 16,384 tokens, buys the book clustering at
+2.5–5.5 points of body LID. The sinusoidal position features likely make L19 recall too easy and overstate how much position decides a
+token. Ctok was not run at L19, so the second point rests on comparing against v1, which has no position features.</p>

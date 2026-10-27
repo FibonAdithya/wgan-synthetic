@@ -32,9 +32,11 @@ ARM_NAMES = {
     "A": "A token-by-token", "B": "B drifting latent", "C": "C position only",
     "Ctok": "C + v1 per-token critic", "Cflag": "C + tail bit only",
     "Ctail": "C + 25% tail windows", "Cv1": "C + all three",
+    "Bboth": "B, two critics", "Cboth": "C, two critics",
 }
 ARM_COLORS = {"A": "#d95f02", "B": "#1b9e77", "C": "#7570b3", "Ctok": "#e7298a",
-              "Cflag": "#66a61e", "Ctail": "#e6ab02", "Cv1": "#a6761d"}
+              "Cflag": "#66a61e", "Ctail": "#e6ab02", "Cv1": "#a6761d",
+              "Bboth": "#1f78b4", "Cboth": "#999999"}
 
 
 def jsonl(p):
@@ -217,7 +219,11 @@ def lag_figure(data):  # noqa: C901
         ax.set_ylabel("median cosine of centred h")
         ax.set_title(f"Layer {L}")
         ax.grid(alpha=0.3)
-    handles, labels = axes[0][0].get_legend_handles_labels()
+    seen = {}  # legend entries from every panel; an arm may be run at one layer only
+    for ax in axes[0]:
+        for h, lab in zip(*ax.get_legend_handles_labels()):
+            seen.setdefault(lab, h)
+    labels, handles = list(seen), list(seen.values())
     fig.legend(handles, labels, fontsize=8, loc="center left", bbox_to_anchor=(1.0, 0.5))
     fig.tight_layout()
     buf = io.BytesIO()

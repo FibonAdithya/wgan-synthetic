@@ -87,3 +87,23 @@ The window critic causes the LID loss. Undoing it alone (Ctok) recovers v1's bod
 hubness, and undoing all three changes (Cv1) reproduces v1. The window critic differs from v1's critic
 in three ways, and the run does not separate them: a smaller per-token trunk, a gradient penalty taken
 jointly over 8 tokens, and the window head.
+
+## Two critics (2026-10-27)
+
+`two-critics/report.html` covers this run. Arms B and C were trained with v1's per-token critic and the window critic side
+by side, with the generator loss = token score + 0.1 × window score (`--critic both`, names `Bboth`, `Cboth`). Runs
+are at L27 and L19, seeds 42 and 1, commit 7460b2e. `runs/SHA256SUMS_both` covers the 56 copied files.
+
+| claim | value | MEASURED / ESTIMATED | source | when |
+|---|---|---|---|---|
+| body LID L27: real / v1 / Cboth / Bboth / B | 29.96 / 25.03, 25.03 / 25.10, 25.26 / 19.62, 19.05 / 16.19, 16.67 | MEASURED | `two-critics/summary.json` | 2026-10-27 |
+| body LID L19: real / v1 s42 / Cboth / Bboth / B | 29.25 / 25.98 / 25.66, 25.65 / 22.94, 23.77 / 20.05, 19.79 | MEASURED | `two-critics/summary.json` | 2026-10-27 |
+| h-NN same-book L27, L19: real / Bboth | 0.895, 0.645 / 0.889, 0.900 and 0.744, 0.532 | MEASURED | `two-critics/summary.json` | 2026-10-27 |
+| key-NN same-book L27: real / B / Bboth | 0.653 / 0.517, 0.520 / 0.405, 0.499 | MEASURED | `two-critics/summary.json` | 2026-10-27 |
+| L19 HNSW recall: real / v1 / Bboth / Cboth | 0.854–0.882 / 0.869–0.902 / 0.980, 0.976 / 0.941, 0.965 | MEASURED | `two-critics/summary.json` | 2026-10-27 |
+| window/token per-token gradient ratio at the final step | 0.35–0.50 | MEASURED | `runs/L*/[BC]both_s*/train_log.jsonl` | 2026-10-27 |
+| two-critic training time, 30k steps | 2,200–2,290 s | MEASURED | `train_log.jsonl` last rows | 2026-10-27 |
+
+With two critics, the position-only generator keeps v1's LID, so the down-weighted window term costs nothing. Adding the
+drifting latent still costs 2.5–5.5 LID points against Cboth, though it keeps the book clustering. compare.py now builds the
+figure legend from every panel.

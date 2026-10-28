@@ -336,7 +336,7 @@ The architecture axis in the `model` config block. Five values are built by
 `spherical`. A sixth, `book_latent`, belongs to `scout_kv` v2 (designed, being
 trained): it is built by `build_book_latent` in `src/models/book_latent.py`, trained
 by `src/train/train_book_latent.py`, `build_generator` refuses it with a message
-naming `build_book_latent` and `src/sample/sample_books.py`, and `train_wgan_gp` refuses it
+naming `build_book_latent` and `src.sample.sample_books`, and `train_wgan_gp` refuses it
 with a message naming `src.train.train_book_latent`. It generates tokens from a per-book drifting latent plus a
 per-token noise vector and a body/tail flag, and is trained against a token critic
 and a window critic on windows of one book. It sits underneath the variant numbering: on SIFT, v0, v1 and
@@ -427,14 +427,14 @@ batch-dependent critic (its docstring says so).
 | `data.kv_layer` | required with `data.format: kv_capture` | The Llama 4 Scout global layer whose `h` is read (3, 7, ..., 47). See `data/README.md`. |
 | `data.kv_books` | required with `data.format: kv_capture` | Book indices to read, concatenated in the order given. `scout_kv` trains on books 0-11. |
 | `data.kv_n_sink` | `1` | Leading positions dropped from each book (the attention sink). |
-| `data.kv_n_tail` | unset | `kv_capture` only. The last `kv_n_tail` positions of every book are flagged TAIL and the rest BODY (`src/data/kv_capture.py::kv_flags`); all books must then have the same length. Set together with `model.n_flags`: one without the other is refused. |
+| `data.kv_n_tail` | unset | `kv_capture` only. The last `kv_n_tail` positions of every book are flagged TAIL and the rest BODY (`src/data/kv_capture.py::kv_flags`); all books must then have the same length. With `train_wgan_gp`, set together with `model.n_flags`: one without the other is refused. With `generator_type: book_latent`, `validate_config` in `src/train/train_book_latent.py` requires `kv_n_tail` and `kv_n_sink` to be ints of at least 1. |
 | `data.kv_tail_holdout` | unset | Number of tail rows held out exactly, with `round(holdout_fraction * n_body)` body rows held out as before (`src/data/dataset.py::build_training_data`). Must satisfy `1 <= value < number of tail rows`. Required with `data.kv_n_tail`; refused without `model.n_flags`. |
 | `model.book_latent` | required with `generator_type: book_latent` | `channels`, `n_features`, `min_length`, `max_length`: the number of latent channels, random Fourier features per channel, and the range of length scales (log-spaced across channels). |
 | `model.window_critic` | required with `generator_type: book_latent` | `window` (tokens per window), `strides` (token spacings a window may use), `token_hidden_dims`, `window_hidden_dims`. |
 | `training.n_windows` | required with `generator_type: book_latent` | Windows per batch; each has `window` tokens. |
 | `training.tail_window_share` | required with `generator_type: book_latent` | Fraction of the windows lying wholly in the tail; the count is `round(share * n_windows)` and must lie in `[1, n_windows - 1]`. |
 | `training.window_weight` | required with `generator_type: book_latent` | Weight of the window critic's score in the generator loss. |
-| `model.n_flags` | unset | Makes the generator and critic position-conditioned: a one-hot of the flag is appended to the latent (generator) and to the input (critic). Only `2` (body, tail) is accepted, only with `generator_type: mlp` and `critic_type: per_vector`. Requires `data.kv_n_tail`, `training.tail_batch_share` and `training.select_on: gate`. |
+| `model.n_flags` | unset | Makes the generator and critic position-conditioned: a one-hot of the flag is appended to the latent (generator) and to the input (critic). Only `2` (body, tail) is accepted. For `train_wgan_gp` (v0/v1): only with `generator_type: mlp` and `critic_type: per_vector`, and it requires `data.kv_n_tail`, `training.tail_batch_share` and `training.select_on: gate`. With `generator_type: book_latent`, `validate_config` requires `n_flags` to be `2` and takes the tail share from `training.tail_window_share`. |
 | `training.tail_batch_share` | unset | Fraction of each batch drawn from tail rows; the tail count is `round(share * batch_size)` and must lie in `[1, batch_size - 1]`. Required with `model.n_flags`; refused without it. |
 
 Checkpoints do not record `critic_type` either; like the generator, the

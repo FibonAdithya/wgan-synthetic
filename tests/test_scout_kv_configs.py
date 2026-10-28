@@ -15,7 +15,6 @@ def _load(version, L):
     return yaml.safe_load((CONFIGS / version / f"L{L:02d}.yaml").read_text())
 
 
-@pytest.mark.parametrize("version", VERSIONS)
 def _get(config, path):
     for key in path:
         config = config[key]

@@ -1,0 +1,36 @@
+<p>Run on 2026-10-27/28 (commit 81f5e85, tig-gpu-alt L40), layer 19 only, seeds 42 and 1, 30k steps. Every v2-probe run
+made L19 search too easy (HNSW recall 0.94–0.99 against a real range of 0.854–0.882). v1 did not (0.869–0.902). The previous run
+ruled out the sinusoidal position features as the sole cause. This run tests the remaining differences between the probe and v1.
+The gate draws its queries from each book's last 1,024 tokens (the tail) and its corpus from the rest. v1 trains on 25% tail
+tokens, and the probe runs on about 3%. All numbers are MEASURED.</p>
+<ul>
+<li><b>Cv1:</b> the probe code set up like v1 (per-token critic only, tail bit only, 25% tail). It is the control.</li>
+<li><b>Ctok:</b> per-token critic only, with the sinusoidal position features and ~3% tail. No window critic.</li>
+<li><b>Bflag25:</b> Bflag (drifting latent, two critics, tail bit only) with 25% tail.</li>
+</ul>
+<p>Bflag, Bboth and Cboth are earlier L19 runs, shown for comparison. All runs trained normally (final W-distance 6.9–7.8, gradient
+penalty 0.09–0.11).</p>
+<h2>Findings</h2>
+<ol>
+<li><b>The probe code reproduces v1's L19 search.</b> Cv1's HNSW recall is 0.890 / 0.906 (v1 0.869–0.902), IVF recall
+0.979 / 0.977 (v1 0.976–0.979) and IVF ratio 0.260 / 0.331 (v1 0.266–0.293). Body LID is 26.06 / 25.86 (v1 25.98).</li>
+<li><b>The window critic is not needed to make search too easy.</b> Ctok has no window critic and its recall is 0.942 / 0.953.</li>
+<li><b>The tail share does not fix the drifting latent.</b> Bflag25's recall is 0.969 / 0.966, against Bflag's 0.989 / 0.969. The
+25% tail does move tail LID a little toward real (14.6 / 15.5 against 13.1; Cv1 19.5 / 19.2).</li>
+<li><b>Every generator that ties tokens to each other makes L19 search too easy.</b> In Cv1, as in v1, tokens are independent
+given the tail bit: the cosine between tokens at any lag is 0.00. In Ctok and Cboth tokens share structure through position
+(lag-256 cosine 0.43–0.44). In the B runs they share it through the book latent (0.36–0.56). Real is 0.370 within a book and
+0.329 between books (tokens at the same distance in two different books), so real tokens are tied to position by about as much as Ctok's. Yet every probe generator that ties tokens together is too
+easy (0.94–0.99), and only Cv1 is near real. v0 is too easy as well (0.972) with
+independent tokens, but v0 has no tail flag, so its queries are drawn like corpus tokens.</li>
+<li><b>Lower LID does not explain it alone.</b> The B runs have body LID 22.7–23.8 and are the easiest. But Ctok (25.36) and
+Cboth (25.65) sit within 0.7 of Cv1 and are still too easy.</li>
+</ol>
+<h2>Open</h2>
+<p>Ctok differs from Cv1 in two ways: the position features and the tail share. This run does not separate them for the
+position-only arm. For the drifting latent, the tail share makes little difference (finding 3) and dropping the position features
+makes none (the latent/position run).</p>
+<h2>Reading for v2</h2>
+<p>Real books have both: tokens that are related within a book (h-NN same-book 0.645 at L19) and search as hard as v1's
+independent tokens. The token-to-token structure the probe generators produce is the wrong kind, because it makes the corpus easier
+to search. No probe generator yet gets book clustering and the right search difficulty together.</p>

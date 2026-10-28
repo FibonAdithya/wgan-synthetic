@@ -150,3 +150,30 @@ Removing the position features costs no LID (+1.3–1.4 at L27, unchanged at L19
 L19 search. Every probe run has a window critic and makes L19 search too easy, but so does v0 (0.972), which has none.
 v1 is the only generator near real (0.869–0.902). The cause is not identified, and Ctok was not run at L19. The short latent recovers most of the LID (0.5–2.5 below Cboth) but loses most of the book clustering, so book
 identity lives in the latent's slow components.
+
+## What makes L19 search too easy (2026-10-28)
+
+`l19-cause/report.html` covers this run, at L19 only, seeds 42 and 1, commit 81f5e85. `runs/SHA256SUMS_l19probe` covers the
+42 copied files. Cv1 (probe code set up like v1) is the control, Ctok drops the window critic, and Bflag25 is Bflag with v1's
+25% tail share (`--tail-share 0.25`).
+
+```
+PYTHONPATH=$PWD python docs/results/scout-kv/v2-probe/compare.py \
+  --runs docs/results/scout-kv/v2-probe/runs --out docs/results/scout-kv/v2-probe/l19-cause \
+  --layers 19 --arms Cv1,Ctok,Bboth,Bflag,Bflag25,Cboth \
+  --summary-html docs/results/scout-kv/v2-probe/l19-cause/summary.html \
+  --title "scout_kv v2 probe: what makes L19 search too easy"
+```
+
+| claim | value | MEASURED / ESTIMATED | source | when |
+|---|---|---|---|---|
+| L19 HNSW recall: real range / v1 / Cv1 / Ctok / Bflag25 / Bflag | 0.854–0.882 / 0.869–0.902 / 0.890, 0.906 / 0.942, 0.953 / 0.969, 0.966 / 0.989, 0.969 | MEASURED | `l19-cause/summary.json` | 2026-10-28 |
+| L19 IVF ratio: real range / v1 / Cv1 / Bflag25 | 0.133–0.172 / 0.266–0.293 / 0.260, 0.331 / 0.142, 0.369 | MEASURED | `l19-cause/summary.json` | 2026-10-28 |
+| L19 body LID: real / v1 s42 / Cv1 / Ctok / Bflag25 | 29.25 / 25.98 / 26.06, 25.86 / 25.36, 25.36 / 22.72, 23.67 | MEASURED | `l19-cause/summary.json` | 2026-10-28 |
+| L19 tail LID: real / Cv1 / Bflag25 / Bflag | 13.08 / 19.46, 19.22 / 14.58, 15.54 / 14.70, 17.51 | MEASURED | `l19-cause/summary.json` | 2026-10-28 |
+| L19 lag-256 cosine: real same-book / real cross-book / Cv1 / Ctok / B runs | 0.370 / 0.329 / 0.003, 0.004 / 0.432, 0.426 / 0.36–0.56 | MEASURED | `l19-cause/summary.json`, `control/cross_book_lag.json` | 2026-10-28 |
+
+Cv1 reproduces v1's L19 search, so the probe code is sound. Neither the window critic (Ctok) nor the tail share (Bflag25)
+is the cause. Every probe generator whose tokens are related to each other, through position or through the book latent, is
+too easy at L19. The two generators with independent tokens given the tail bit (v1, Cv1) are near real. Ctok vs Cv1 changes
+two things (position features and tail share) and the run does not separate them.

@@ -34,10 +34,12 @@ ARM_NAMES = {
     "Ctail": "C + 25% tail windows", "Cv1": "C + all three",
     "Bboth": "B, two critics", "Cboth": "C, two critics",
     "Bflag": "B, two critics, tail bit only", "Bsmall": "B, two critics, small latent",
+    "Bflag25": "B, two critics, tail bit only, 25% tail",
 }
 ARM_COLORS = {"A": "#d95f02", "B": "#1b9e77", "C": "#7570b3", "Ctok": "#e7298a",
               "Cflag": "#66a61e", "Ctail": "#e6ab02", "Cv1": "#a6761d",
-              "Bboth": "#1f78b4", "Cboth": "#999999", "Bflag": "#b2182b", "Bsmall": "#6a3d9a"}
+              "Bboth": "#1f78b4", "Cboth": "#999999", "Bflag": "#b2182b", "Bsmall": "#6a3d9a",
+              "Bflag25": "#ff7f00"}
 
 
 def jsonl(p):

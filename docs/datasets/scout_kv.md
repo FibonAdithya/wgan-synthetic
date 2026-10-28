@@ -48,10 +48,12 @@ python -m src.kv.judge full  --v1 v1.jsonl --v0 SEED=v0.jsonl ... --out full_bes
 python -m src.train.train_book_latent --config configs/scout_kv/v2/L19.yaml [--resume PATH]
 python -m src.sample.sample_books --run-dir R --capture-dir CAP --out-dir R/capture [--seed 0] [--checkpoint final.pt] [--book-ids 12-19]
 python -m src.eval.kv_gate measure-real --capture-dir R/capture --out v2.jsonl --source v2
+python -m src.kv.book_judge port    --runs-dir D --out port.json
+python -m src.kv.book_judge verdict --runs-dir D --v1-seed1 F [--v1-seed1 F ...] [--layers 3,19,27] --out verdict.json
 ```
 
 - `src.train.train_book_latent` trains one v2 layer and writes `last.pt`, renamed to `final.pt` at the end, beside `run_config.yaml`. `src.sample.sample_books` writes synthetic books 12-19 (or `--book-ids`) in the capture format, with the sequence length taken from the checkpoint, and refuses an existing `--out-dir`. The synthetic position 0 is the training mean. Pointing `measure-real` at that directory measures the synthetic books; `--source NAME` sets the `source` field of the records (default `real`), so v2 records are not labelled as real. `measure-run`, `src.sample.generate` and `evaluate_distribution` refuse a v2 run, because they build the generator through `build_generator` or read a v0/v1 run directory.
-- The v2 go/no-go is judged by a pure-Python module, `src.kv.book_judge`, with subcommands `port` and `verdict` (the module is being added; this line gets a code reference once it exists).
+- The v2 go/no-go is judged by a pure-Python module, `src/kv/book_judge.py` (`port_check` for the L19/L27 port check against the probe, `verdict` for the two criteria and the aim), run as `python -m src.kv.book_judge port` or `verdict`; it reads the committed JSON/JSONL results, so the call is not made by eye.
 - `measure-real` profiles the real reference. `--books` takes a range (`12-19`) or a
   list (`12,13`). One draw over the 96 corpora took 1763 to 2443 s on a 15.36-core quota
   (MEASURED, `docs/results/scout-kv/reference/README.md`).

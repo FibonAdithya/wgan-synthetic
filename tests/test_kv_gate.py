@@ -934,3 +934,46 @@ def test_flagged_sampling_happens_inside_the_ema_context(tmp_path):
             x.cpu().numpy(), y.cpu().numpy(), rtol=1e-5, atol=1e-5
         )
     assert not np.allclose(a[0].cpu().numpy(), live[0].cpu().numpy(), atol=1e-4)
+
+
+def test_synthetic_h_refuses_a_book_latent_run(tmp_path):
+    """Catches measure-run on a v2 run failing with the inversion check's 'no
+    run_metadata' message (or a load_state_dict shape error) instead of naming the
+    right tool."""
+    import yaml
+
+    (tmp_path / "run_config.yaml").write_text(
+        yaml.safe_dump({"model": {"generator_type": "book_latent"}})
+    )
+    with pytest.raises(ValueError, match="sample_books") as e:
+        kv_gate.synthetic_h(tmp_path, 3, seed=0, n_keys=10, n_tail=4)
+    assert "measure-real" in str(e.value)
+
+
+def test_measure_real_records_the_given_source(tmp_path):
+    """Catches the source label being hard-coded: source="v2" lands in every record and
+    the default stays "real"."""
+    from src.data.kv_capture import h_path, write_bf16_safetensor
+
+    rng = np.random.default_rng(0)
+    for b in (0, 1):
+        p = h_path(tmp_path, b, 3)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        write_bf16_safetensor(p, "h", rng.normal(size=(400, 16)).astype(np.float32))
+    (tmp_path / "weights").mkdir()
+    _write_multi(
+        tmp_path / "weights" / "layer03.safetensors",
+        {
+            "k_proj": rng.normal(size=(2 * 128, 16)).astype(np.float32),
+            "q_proj": rng.normal(size=(2 * 5 * 128, 16)).astype(np.float32),
+        },
+    )
+    kw = dict(
+        books=[0, 1], layers=[3], seed=0, n_sink=1, n_tail=16, nlist=4, hnsw_m=8,
+        ef_construction=16, threads=1,
+    )  # fmt: skip
+    kv_gate.measure_real(tmp_path, out=tmp_path / "a.jsonl", source="v2", **kw)
+    kv_gate.measure_real(tmp_path, out=tmp_path / "b.jsonl", **kw)
+    for name, want in (("a", "v2"), ("b", "real")):
+        lines = (tmp_path / f"{name}.jsonl").read_text().splitlines()
+        assert {json.loads(x)["source"] for x in lines} == {want}

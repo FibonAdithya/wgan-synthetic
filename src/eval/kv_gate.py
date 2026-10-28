@@ -235,6 +235,7 @@ def measure_real(
     hnsw_m=48,
     ef_construction=500,
     threads=15,
+    source="real",
 ) -> None:
     import faiss
 
@@ -267,7 +268,7 @@ def measure_real(
             rec = {
                 "layer": layer,
                 "kv_head": g,
-                "source": "real",
+                "source": source,
                 "seed": seed,
                 "books": list(books),
                 "n_keys": len(c.keys),
@@ -319,6 +320,15 @@ def synthetic_h(
     from src.train.train_wgan_gp import ema_weights, output_normalize, sample_generator
 
     run_dir = Path(run_dir)
+    run_config = run_dir / "run_config.yaml"
+    if run_config.exists():
+        run_cfg = yaml.safe_load(run_config.read_text(encoding="utf-8")) or {}
+        if run_cfg.get("model", {}).get("generator_type") == "book_latent":
+            raise ValueError(
+                f"{run_dir} is a book_latent (scout_kv v2) run; measure-run cannot "
+                "sample it. Write its books with `python -m src.sample.sample_books` "
+                "and score them with `kv_gate measure-real --source v2`"
+            )
     blocker = _inversion_blocker(run_dir / "run_config.yaml", run_dir)
     if blocker is not None:
         raise ValueError(blocker)
@@ -672,6 +682,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     pr.add_argument("--n-sink", type=int, default=1)
     pr.add_argument("--out", type=Path, required=True)
+    pr.add_argument("--source", default="real", help="label written to each record")
     _add_index_args(pr)
     pn = sub.add_parser("measure-run")
     pn.add_argument("--capture-dir", type=Path, required=True)
@@ -717,6 +728,7 @@ def main(argv: list[str] | None = None) -> int:
             hnsw_m=a.hnsw_m,
             ef_construction=a.ef_construction,
             threads=a.threads,
+            source=a.source,
         )
         return 0
     if a.cmd == "measure-run":

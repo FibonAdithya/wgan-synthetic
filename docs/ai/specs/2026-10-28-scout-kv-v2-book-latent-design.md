@@ -195,10 +195,15 @@ both training seeds. Thresholds are my calls, flagged for the owner's review.
    `docs/results/scout-kv/v1/full/intrinsic.jsonl`). v2 seed 1 is compared
    with v1 seed 1 where it exists (L19, L27, L35, L43; checkpoints on
    tig-gpu-alt under `runs/scout_kv/v1_seed1/`), and with v1 seed 42
-   elsewhere; v2 seed 42 with v1 seed 42. v1 final LID is committed at only
-   6 layers and v1 seed-1 LID only at L27, so the plan includes measuring v1
-   final at all 12 layers (seed 42) and the 4 seed-1 layers, with the same
-   intrinsic tool as v2. This needs sampling only, no training.
+   elsewhere; v2 seed 42 with v1 seed 42. v1 seed 42's final LID is on
+   record at all 12 layers: `intrinsic.jsonl` has a `v1_final` row where the
+   final checkpoint differs from the best one, and at the other 6 layers the
+   best checkpoint is step 30,000, so its `v1_best` row is the final one.
+   (Correction, 2026-10-28: the approved text said final LID was on record at
+   only 6 layers.) v1 seed-1 LID is on record only at L27, so the plan
+   measures v1 seed 1 at L19, L35 and L43 with `docs/results/scout-kv/v1/intrinsic.py`,
+   the tool that produced the seed-42 values. This needs sampling only, no
+   training.
 3. **Gate, reported not judged.** The five statistics, pooled
    (`kv_gate check` on the 12 layers' records) and per layer, against v1 at
    both seeds and the reference. L19 HNSW recall is expected too easy.

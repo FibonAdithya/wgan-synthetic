@@ -31,8 +31,12 @@ for spec in "$@"; do
       || { echo "FAILED train $R"; exit 1; }
   fi
   echo "TRAINED $R seconds=$(( $(date +%s) - t0 ))"
-  [ -d "$R/capture" ] || "$PY" -m src.sample.sample_books --run-dir "$R" --capture-dir "$CAP" \
-    --out-dir "$R/capture" --seed 0 || { echo "FAILED sample $R"; exit 1; }
+  if [ ! -d "$R/capture" ]; then
+    rm -rf "$R/capture.tmp"
+    "$PY" -m src.sample.sample_books --run-dir "$R" --capture-dir "$CAP" \
+      --out-dir "$R/capture.tmp" --seed 0 || { echo "FAILED sample $R"; exit 1; }
+    mv "$R/capture.tmp" "$R/capture"
+  fi
   if [ ! -f "$R/gate.jsonl" ]; then
     rm -f "$R/gate.jsonl.tmp"
     "$PY" -m src.eval.kv_gate measure-real --capture-dir "$R/capture" --books 12-19 --layers "$LN" \

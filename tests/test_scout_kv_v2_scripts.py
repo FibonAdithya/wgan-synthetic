@@ -30,12 +30,12 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
+if [ -n "$outdir" ]; then mkdir -p "$outdir"; touch "$outdir/partial"; fi
 if [ -n "$FAIL_ON" ]; then case "$args" in *"$FAIL_ON"*) exit 1;; esac; fi
 if [ -n "$cfg" ]; then
   d=$("$REAL_PY" -c "import sys,yaml; print(yaml.safe_load(open(sys.argv[1]))['output_dir'])" "$cfg")
   mkdir -p "$d"; echo x > "$d/final.pt"
 fi
-if [ -n "$outdir" ]; then mkdir -p "$outdir"; fi
 if [ -n "$out" ]; then echo '{}' > "$out"; fi
 exit 0
 """
@@ -147,17 +147,62 @@ def test_run_sh_pads_the_layer_and_reads_it_as_decimal(tmp_path):
 
 
 def test_run_sh_rerun_skips_finished_steps(tmp_path):
-    """Catches a rerun retraining a finished run: the second invocation calls nothing."""
+    """Catches a rerun redoing any finished step (retraining, resampling, rescoring): the second
+    invocation makes no PY call at all."""
     fake = _setup(tmp_path)
     _run(tmp_path, fake, ["19:42"])
     r, lines = _run(tmp_path, fake, ["19:42"], name="calls2.log")
     assert r.returncode == 0, r.stdout + r.stderr
-    assert not any(
-        k in ln
-        for ln in lines
-        for k in ("train_book_latent", "sample_books", "measure-real")
-    )
+    assert lines == []
     assert "V2_COMPLETE" in r.stdout
+
+
+def test_run_sh_discards_a_partial_capture_and_resamples(tmp_path):
+    """Catches sampling straight into capture/ (a killed sample leaves a partial capture that a
+    rerun treats as done): a leftover capture.tmp is removed, sampling reruns, and the end
+    state is capture/ without the leftover."""
+    fake = _setup(tmp_path)
+    R = tmp_path / "runs/L19_s42"
+    (R / "capture.tmp").mkdir(parents=True)
+    (R / "capture.tmp/stale").write_text("x")
+    r, lines = _run(tmp_path, fake, ["19:42"])
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert any("sample_books" in ln and "capture.tmp" in ln for ln in lines)
+    assert (R / "capture").is_dir() and (R / "capture/partial").exists()
+    assert not (R / "capture.tmp").exists()
+    assert not (R / "capture/stale").exists()
+
+
+def test_run_sh_failed_sample_leaves_no_capture(tmp_path):
+    """Catches a failed sampler leaving capture/ behind: FAILED sample, exit 1, no capture/,
+    no gate call."""
+    r, lines = _run(tmp_path, _setup(tmp_path), ["19:42"], fail_on="sample_books")
+    assert r.returncode == 1
+    assert "FAILED sample " + str(tmp_path / "runs/L19_s42") in r.stdout
+    assert not (tmp_path / "runs/L19_s42/capture").exists()
+    assert not any("measure-real" in ln for ln in lines)
+
+
+def test_v1_seed1_intrinsic_creates_the_output_directory(tmp_path):
+    """Catches a missing mkdir of the output's parent: the fake tool records whether the
+    directory existed when it was called (the real tool only appends and would crash)."""
+    fake = tmp_path / "fakepy"
+    fake.write_text(
+        '#!/bin/bash\nwhile [ $# -gt 0 ]; do [ "$1" = --out ] && o=$2; shift; done\n'
+        '[ -d "$(dirname "$o")" ] && echo "$o" > "$MARK"\n'
+    )
+    fake.chmod(0o755)
+    out = tmp_path / "fresh/dir/v1.jsonl"
+    env = dict(os.environ, PY=str(fake), OUT=str(out), MARK=str(tmp_path / "mark"))
+    r = subprocess.run(
+        ["bash", str(V2 / "v1_seed1_intrinsic.sh")],
+        env=env,
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+    )
+    assert r.returncode == 0, r.stderr
+    assert (tmp_path / "mark").read_text().strip() == str(out)
 
 
 def test_run_sh_stops_on_a_failed_step(tmp_path):

@@ -290,14 +290,110 @@ def test_resume_that_changes_the_model_is_refused(
     assert calls == []
 
 
-def test_resume_continues_from_the_saved_step(tmp_path):
+def test_resume_continues_from_the_saved_step(tmp_path, monkeypatch):
     """Catches a resume that restarts the EMA or the step count: as above with nothing changed,
-    B's final.pt has step 4 and ema_step 4, and B's log starts at step 3."""
+    B's final.pt has step 4 and ema_step 4, B's log starts at step 3, and B's first ema_update
+    receives A's saved ema_params (fails if the ema_params restore line is dropped, which leaves
+    ema_step at 4 but the accumulator at zero)."""
     resume = _train_a(tmp_path)
+    saved = _load(resume)["ema_params"]
     cfg = _config_b(tmp_path)
+    seen: list = []
+    real = tbl.ema_update
+
+    def spy(ema_params, model, decay):
+        seen.append({k: v.detach().clone() for k, v in ema_params.items()})
+        return real(ema_params, model, decay)
+
+    monkeypatch.setattr(tbl, "ema_update", spy)
     ckpt = _load(train(cfg, resume=str(resume)))
     assert ckpt["step"] == 4 and ckpt["ema_step"] == 4
     assert [r["step"] for r in _log(cfg["output_dir"])] == [3, 4]
+    assert len(seen) == 2 and seen[0].keys() == saved.keys()
+    assert all(torch.equal(seen[0][k], saved[k]) for k in saved)
+
+
+def test_ema_accumulates_every_step(tmp_path, monkeypatch):
+    """Catches an EMA that never updates (ema_update a no-op or its call dropped): final.pt's
+    ema_params equal the zero-initialised accumulation ema <- d*ema + (1-d)*p of the generator
+    parameters seen at each of the 4 steps, and are not the zero init."""
+    cfg = tiny_config(tmp_path)
+    params: list = []
+    real = tbl.ema_update
+
+    def spy(ema_params, model, decay):
+        params.append({n: p.detach().clone() for n, p in model.named_parameters()})
+        return real(ema_params, model, decay)
+
+    monkeypatch.setattr(tbl, "ema_update", spy)
+    ckpt = _load(train(cfg))
+    assert len(params) == 4
+    d = ckpt["ema_decay"]
+    expected = {n: torch.zeros_like(p) for n, p in params[0].items()}
+    for step_params in params:
+        for n, p in step_params.items():
+            expected[n].mul_(d).add_(p, alpha=1.0 - d)
+    ema = ckpt["ema_params"]
+    assert ema.keys() == expected.keys()
+    assert all(torch.allclose(ema[n], expected[n], rtol=0, atol=1e-7) for n in ema)
+    assert any(bool(v.abs().sum() > 0) for v in ema.values())
+
+
+class _Scale(nn.Module):
+    """d(x) = w * x with one weight, w = 1."""
+
+    def __init__(self):
+        super().__init__()
+        self.w = nn.Parameter(torch.ones(()))
+
+    def forward(self, x):
+        return self.w * x
+
+
+def test_critic_step_minimises_fake_minus_real_plus_penalty():
+    """Catches a flipped critic loss (d_real - d_fake + λ·gp) or λ·gp left out: with
+    d = w·x, real 2, fake 0, gp = w², λ 0.5 and SGD lr 0.1 from w = 1, the loss
+    mean(fake) - mean(real) + λ·gp has gradient -2 + 1 = -1, so w becomes 1.1 (flipped
+    sign: 0.7; no penalty: 1.2)."""
+    critic = _Scale()
+    optim = torch.optim.SGD(critic.parameters(), lr=0.1)
+    real, fake = torch.tensor([2.0]), torch.tensor([0.0])
+    w_dist, gp = tbl._critic_step(optim, critic(real), critic(fake), critic.w**2, 0.5)
+    assert float(critic.w.detach()) == pytest.approx(1.1)
+    assert float(w_dist) == pytest.approx(2.0) and float(gp) == pytest.approx(1.0)
+
+
+def test_token_critic_gets_a_flagged_penalty_in_its_loss(tmp_path, monkeypatch):
+    """Catches the token critic's gradient penalty dropped, zeroed, called without flags or on
+    other rows than the n_windows*W tokens: spy on the trainer's gradient_penalty; it is called
+    once per critic iteration (2 x 4 steps), with flags of 64 rows, the gradient reaching its
+    output in backward is λ_gp = 10 (so λ·gp is in the loss), and the logged gp_token is the
+    value of each step's last call."""
+    cfg = tiny_config(tmp_path)
+    calls: list = []
+    real = tbl.gradient_penalty
+
+    def spy(critic, real_x, fake_x, device, flags=None):
+        out = real(critic, real_x, fake_x, device, flags=flags)
+        rec = {
+            "rows": real_x.shape[0],
+            "flags": flags,
+            "value": float(out.detach()),
+            "grad": [],
+        }
+        out.register_hook(lambda g: rec["grad"].append(float(g)))
+        calls.append(rec)
+        return out
+
+    monkeypatch.setattr(tbl, "gradient_penalty", spy)
+    train(cfg)
+    assert len(calls) == 8
+    for c in calls:
+        assert c["rows"] == 8 * 8
+        assert c["flags"] is not None and c["flags"].shape == (64,)
+        assert c["grad"] == [pytest.approx(10.0)]
+    logged = [r["gp_token"] for r in _log(cfg["output_dir"])]
+    assert logged == pytest.approx([calls[2 * i + 1]["value"] for i in range(4)])
 
 
 def test_resume_at_the_budget_is_refused(tmp_path):

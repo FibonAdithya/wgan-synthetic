@@ -1,0 +1,58 @@
+#!/bin/bash
+# Train, sample and score v2-probe runs one after another (one GPU card; never in parallel).
+# Each run writes 8 synthetic books, scored by the unchanged gate (measure-real),
+# locality.py, hub_position.py and probe.py intrinsic.
+# Usage: probe_run.sh STEPS LAYER:NAME:SEED [LAYER:NAME:SEED ...]
+# NAME is an arm (A, B, C) or an ablation of arm C:
+#   Ctok   v1's per-token critic        Cflag  tail bit as the only position input
+#   Ctail  a quarter of windows in tail Cv1    all three of the above
+# or a two-critic run (v1's per-token critic + the window critic at weight 0.1):
+#   Bboth  arm B                        Cboth  arm C
+#   Bflag  Bboth, tail bit as the only position input
+#   Bsmall Bboth with a 16-channel latent, length scales 2-1,024 tokens
+#   Bflag25 Bflag with a quarter of the windows inside the tail, as v1's tail_batch_share
+set -u
+cd /workspace/repo_v1
+export PYTHONPATH=$PWD OMP_NUM_THREADS=15
+PY=/workspace/kvenv/bin/python
+CAP=/workspace/kv/capture
+P=docs/results/scout-kv/v2-probe/probe.py
+STEPS=$1; shift
+echo "START $(date -u +%FT%TZ) commit=$(git rev-parse HEAD) steps=$STEPS runs=$*"
+for spec in "$@"; do
+  IFS=: read -r L A S <<< "$spec"
+  case $A in
+    A|B|C) ARGS="--arm $A" ;;
+    Ctok)  ARGS="--arm C --critic token" ;;
+    Cflag) ARGS="--arm C --pos flag" ;;
+    Ctail) ARGS="--arm C --tail-share 0.25" ;;
+    Cv1)   ARGS="--arm C --critic token --pos flag --tail-share 0.25" ;;
+    Bboth) ARGS="--arm B --critic both --window-weight 0.1" ;;
+    Cboth) ARGS="--arm C --critic both --window-weight 0.1" ;;
+    Bflag) ARGS="--arm B --critic both --window-weight 0.1 --pos flag" ;;
+    Bsmall) ARGS="--arm B --critic both --window-weight 0.1 --cond 16 --max-len 1024" ;;
+    Bflag25) ARGS="--arm B --critic both --window-weight 0.1 --pos flag --tail-share 0.25" ;;
+    *) echo "FAILED unknown name $spec"; exit 1 ;;
+  esac
+  R=/workspace/kv/v2probe/L$L/${A}_s$S
+  mkdir -p "$(dirname $R)"
+  t0=$(date +%s)
+  if [ ! -f $R/final.pt ]; then
+    $PY $P train $ARGS --layer $L --seed $S --steps $STEPS --lambda-gp 10 --capture-dir $CAP --out $R \
+      > $R.train.log 2>&1 || { echo "FAILED train $spec"; exit 1; }
+  fi
+  echo "TRAINED $spec seconds=$(( $(date +%s) - t0 ))"
+  [ -d $R/capture ] || $PY $P sample --run $R --capture-dir $CAP || { echo "FAILED sample $spec"; exit 1; }
+  if [ ! -f $R/gate.jsonl ]; then
+    rm -f $R/gate.jsonl.tmp
+    $PY -m src.eval.kv_gate measure-real --capture-dir $R/capture --books 12-19 --layers $L \
+      --seed 0 --out $R/gate.jsonl.tmp && mv $R/gate.jsonl.tmp $R/gate.jsonl || { echo "FAILED gate $spec"; exit 1; }
+  fi
+  [ -f $R/locality.json ] || $PY docs/results/scout-kv/locality/locality.py --capture-dir $R/capture \
+    --layers $L --out $R/locality.json || { echo "FAILED locality $spec"; exit 1; }
+  [ -f $R/hub_position.json ] || $PY docs/results/scout-kv/v1-diagnostics/hub_position.py \
+    --capture-dir $R/capture --layers $L --out $R/hub_position.json || { echo "FAILED hubs $spec"; exit 1; }
+  [ -f $R/intrinsic.jsonl ] || $PY $P intrinsic --run $R || { echo "FAILED intrinsic $spec"; exit 1; }
+  echo "DONE $spec seconds=$(( $(date +%s) - t0 ))"
+done
+echo "PROBE_COMPLETE $(date -u +%FT%TZ)"

@@ -1,0 +1,2 @@
+{"layer": 27, "source": "C_s42", "flag": "body", "n_rows": 253944, "lid_median": 19.76386731095787, "relative_contrast_median": 2.318423994657399, "hubness_skew": 2.509293899772345, "ivf_gini": 0.3647164062499999, "lid_discarded_queries": 0, "seconds": 45.1}
+{"layer": 27, "source": "C_s42", "flag": "tail", "n_rows": 8192, "lid_median": 16.002094449438406, "relative_contrast_median": 2.0860332021663033, "hubness_skew": 1.970356199978787, "ivf_gini": 0.41803932189941406, "lid_discarded_queries": 0, "seconds": 37.1}

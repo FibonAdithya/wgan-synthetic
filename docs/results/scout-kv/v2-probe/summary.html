@@ -1,0 +1,33 @@
+<p>Probe run on 2026-10-26 (commit bbe4c28, tig-gpu-alt L40). Three generator arms share v1's decoder
+trunk and one window critic (8-token windows at strides 1–1024). Each arm was trained 30k steps at
+layers 27 and 19 with seeds 42 and 1, then 8 synthetic books were scored with the unchanged gate,
+<code>locality.py</code>, <code>hub_position.py</code> and the intrinsic statistics. All numbers are MEASURED.</p>
+<ul>
+<li><b>A, token by token:</b> h<sub>t</sub> = dec(z<sub>t</sub>, s<sub>t−1</sub>, pos<sub>t</sub>), with s a GRU state fed by an encoding of h<sub>t</sub>.</li>
+<li><b>B, drifting latent:</b> h<sub>t</sub> = dec(z<sub>t</sub>, u<sub>book</sub>(t), pos<sub>t</sub>), with u a smooth random function of position, drawn fresh per book (length scales 2–16,384 tokens).</li>
+<li><b>C, position only:</b> h<sub>t</sub> = dec(z<sub>t</sub>, pos<sub>t</sub>). This is the control.</li>
+</ul>
+<h2>Findings</h2>
+<ol>
+<li><b>B reproduces book clustering, and A only partly does.</b> The h-space nearest neighbour comes from the same book
+for real 0.895 (L27) and 0.645 (L19). B gets 0.909 / 0.904 and 0.729 / 0.656 (seed 42 / seed 1). A gets 0.615 / 0.291 and
+0.225 / 0.286. C sits at chance (0.125). In key space, B's same-book shares are 0.52 / 0.52 against real 0.653 at L27, and 0.300 / 0.249 against 0.327 at L19.</li>
+<li><b>B is also the cheaper and more stable arm.</b> It trains in 1,380–1,510 s, against 2,240–2,290 s for A. Its
+two seeds agree on every structure statistic, while A's h-NN share at L27 differs by 2× between seeds.</li>
+<li><b>No arm consistently improves search over v1.</b> At L27, B's HNSW reach (0.875 / 0.750) is inside the real
+range, where v1's is not (0.625), and B's IVF recall is inside the range at seed 1 (0.818) and 0.0001 below its lower edge at seed 42 (v1: 0.768–0.775). At L19, every arm makes HNSW recall
+too easy (0.949–0.984 against the real 0.854–0.882; v1 0.869–0.902). The IVF ratio moves by up to 2× between seeds for
+A and B at L19, so single-layer search claims stay inside the retrain noise measured in PR #68.</li>
+<li><b>All three arms tie tokens too closely to position.</b> In the position-only arm C, two tokens 256 apart
+have cosine 0.62 (L27) and 0.47 (L19). Two real tokens from <i>different</i> books at the same lag have 0.43 and 0.33
+(<code>control/cross_book_lag.json</code>). The arms' lag curves are also nearly flat from lag 1 to lag 256, while real h drops
+sharply over the first 16 tokens. Each generated token sits too near its position's average, with too little
+token-to-token variation.</li>
+<li><b>The probe's shared setup loses LID and does not fix hubness.</b> Body LID is real 30.0 / 29.2 and v1 25.0 / 26.0.
+The arms reach 16.2–20.8 at L27 and 19.8–23.7 at L19, lower than v1 even in the control C. Body hubness is real 49.9 / 52.3,
+v1 5.5 / 5.6, and the arms 1.5–5.0. Finding 4 is the likely cause: too little token-to-token variation.</li>
+</ol>
+<h2>Reading for v2</h2>
+<p>Make the dependence between tokens a per-book latent that drifts along the book (B), not a token-by-token recurrence (A).
+Before that change can be judged on search, the generator has to produce real-sized token-to-token variation at a fixed position.
+v1 managed that better than any arm here. The next lever is what the probe changed from v1: the window critic, the position features and the 3% tail share.</p>

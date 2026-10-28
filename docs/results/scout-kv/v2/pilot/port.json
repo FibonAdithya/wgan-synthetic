@@ -1,0 +1,43 @@
+{
+  "passed": true,
+  "runs": {
+    "L19_s42": {
+      "same_book_ok": true,
+      "lid_ok": true
+    },
+    "L19_s1": {
+      "same_book_ok": true,
+      "lid_ok": true
+    },
+    "L27_s42": {
+      "same_book_ok": true,
+      "lid_ok": true
+    },
+    "L27_s1": {
+      "same_book_ok": true,
+      "lid_ok": true
+    }
+  },
+  "ranges": {
+    "19": {
+      "same_book": [
+        0.6418249845504761,
+        0.8662400007247925
+      ],
+      "body_lid": [
+        21.217282946233368,
+        25.173479672753366
+      ]
+    },
+    "27": {
+      "same_book": [
+        0.8017399549484253,
+        1.0351199865341187
+      ],
+      "body_lid": [
+        18.84646943592266,
+        22.5178605409657
+      ]
+    }
+  }
+}

@@ -15,7 +15,7 @@ difficulty (`src/eval/kv_gate.py::evaluate`). The four intrinsic statistics of
 
 | | |
 |---|---|
-| Ladder | `v0` trained for all 12 global layers (`docs/results/scout-kv/training/`); fails the gate on four of five statistics (`docs/results/scout-kv/v0/report.html`); `v1` (v0 plus a body/tail position flag, `docs/ai/specs/2026-10-22-scout-kv-v1-position-flag-design.md`) trained for all 12 layers and measured 2026-10-22: it also fails four of five bands, a different four (key-side recall now passes at 1.000; IVF recall leaves its band at 0.870), and by the spec's rule it does not move every statistic toward real (`docs/results/scout-kv/v1/report.html`); a seed-1 retrain at four layers is in `docs/results/scout-kv/v1-diagnostics/` |
+| Ladder | `v0` trained for all 12 global layers (`docs/results/scout-kv/training/`); fails the gate on four of five statistics (`docs/results/scout-kv/v0/report.html`); `v1` (v0 plus a body/tail position flag, `docs/ai/specs/2026-10-22-scout-kv-v1-position-flag-design.md`) trained for all 12 layers and measured 2026-10-22: it also fails four of five bands, a different four (key-side recall now passes at 1.000; IVF recall leaves its band at 0.870), and by the spec's rule it does not move every statistic toward real (`docs/results/scout-kv/v1/report.html`); a seed-1 retrain at four layers is in `docs/results/scout-kv/v1-diagnostics/`; `v2` (v1 plus a per-book drifting latent and a window critic, `docs/ai/specs/2026-10-28-scout-kv-v2-book-latent-design.md`) is designed and being trained, with no results yet |
 | Gate bands | **set** 2026-10-19 by the owner, as a tolerance around the five-draw real reference; see `## Gate bands` |
 | Gate question | decided 2026-10-22: position-aware `v1` (`docs/ai/specs/2026-10-22-scout-kv-v1-position-flag-design.md`). Background: real `h` split the way synthetic corpora are split is already outside the real range on v0's side (R1). See `## Controls: why v0 is too easy` |
 | Capture | lives only on the GPU box (`tig-gpu-alt` since 2026-10-19), at `/workspace/kv/capture`. It is not in the repo and not fetchable with `src/data/fetch.py` |
@@ -29,7 +29,7 @@ generator never sees keys or queries.
 
 - Global layers: `3, 7, 11, 15, 19, 23, 27, 31, 35, 39, 43, 47` (`src/data/kv_capture.py::GLOBAL_LAYERS`), 12 in all, no RoPE.
 - 8 KV heads and 40 query heads, `head_dim` 128. Query head `j` reads KV head `j // 5`.
-- One generator is trained per layer, so there are 12 `v0` configs, `configs/scout_kv/v0/L03.yaml` through `configs/scout_kv/v0/L47.yaml`. They differ only in `data.kv_layer` and `output_dir` (pinned by `tests/test_scout_kv_configs.py`). The 12 `v1` configs, `configs/scout_kv/v1/L03.yaml` through `configs/scout_kv/v1/L47.yaml`, equal v0 plus `data.kv_n_tail: 1024`, `data.kv_tail_holdout: 1024`, `model.n_flags: 2` and `training.tail_batch_share: 0.25`, with `output_dir: runs/scout_kv/v1/L{LL}`. All 12 were trained on 2026-10-22 (`docs/results/scout-kv/v1/training/`).
+- One generator is trained per layer, so there are 12 `v0` configs, `configs/scout_kv/v0/L03.yaml` through `configs/scout_kv/v0/L47.yaml`. They differ only in `data.kv_layer` and `output_dir` (pinned by `tests/test_scout_kv_configs.py`). The 12 `v1` configs, `configs/scout_kv/v1/L03.yaml` through `configs/scout_kv/v1/L47.yaml`, equal v0 plus `data.kv_n_tail: 1024`, `data.kv_tail_holdout: 1024`, `model.n_flags: 2` and `training.tail_batch_share: 0.25`, with `output_dir: runs/scout_kv/v1/L{LL}`. All 12 were trained on 2026-10-22 (`docs/results/scout-kv/v1/training/`). The 12 `v2` configs, `configs/scout_kv/v2/L03.yaml` through `configs/scout_kv/v2/L47.yaml`, are designed and being trained. They set `model.generator_type: book_latent`, `model.book_latent`, `model.window_critic`, `training.n_windows`, `training.tail_window_share`, `training.window_weight` and `training.lambda_gp: 10`, keep v1's `data.kv_n_tail` and `model.n_flags`, and drop the keys only the v0/v1 trainer reads (the holdout, `tail_batch_share` and the best-checkpoint selector). `output_dir` is `runs/scout_kv/v2/L{LL}`. v2 trains on whole books with `python -m src.train.train_book_latent --config configs/scout_kv/v2/L{LL}.yaml [--resume PATH]`, and `src.train.train_wgan_gp` refuses these configs. v2 is judged on the final EMA weights only.
 - Position 0 (the attention sink) and the last 1,024 positions of a 32,768-token book are never indexed in a corpus. Training rows use positions 1 to 32,767, so 12 books give 393,204 rows per layer.
 
 ## Commands
@@ -45,8 +45,13 @@ python -m src.eval.kv_gate compare-layers --records run.jsonl [--reference ref.j
 python -m src.eval.kv_gate check --records run.jsonl [--gate-file gates/scout_kv.yaml]
 python -m src.kv.judge pilot --v1 SEED=v1.jsonl ... --v0 SEED=v0.jsonl ... --out pilot_best.json
 python -m src.kv.judge full  --v1 v1.jsonl --v0 SEED=v0.jsonl ... --out full_best.json
+python -m src.train.train_book_latent --config configs/scout_kv/v2/L19.yaml [--resume PATH]
+python -m src.sample.sample_books --run-dir R --capture-dir CAP --out-dir R/capture [--seed 0] [--checkpoint final.pt] [--book-ids 12-19]
+python -m src.eval.kv_gate measure-real --capture-dir R/capture --out v2.jsonl --source v2
 ```
 
+- `src.train.train_book_latent` trains one v2 layer and writes `last.pt`, renamed to `final.pt` at the end, beside `run_config.yaml`. `src.sample.sample_books` writes synthetic books 12-19 (or `--book-ids`) in the capture format, with the sequence length taken from the checkpoint, and refuses an existing `--out-dir`. The synthetic position 0 is the training mean. Pointing `measure-real` at that directory measures the synthetic books; `--source NAME` sets the `source` field of the records (default `real`), so v2 records are not labelled as real. `measure-run`, `src.sample.generate` and `evaluate_distribution` refuse a v2 run, because they build the generator through `build_generator` or read a v0/v1 run directory.
+- The v2 go/no-go is judged by a pure-Python module, `src.kv.book_judge`, with subcommands `port` and `verdict` (the module is being added; this line gets a code reference once it exists).
 - `measure-real` profiles the real reference. `--books` takes a range (`12-19`) or a
   list (`12,13`). One draw over the 96 corpora took 1763 to 2443 s on a 15.36-core quota
   (MEASURED, `docs/results/scout-kv/reference/README.md`).

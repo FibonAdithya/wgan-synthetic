@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import copy
 import math
+from pathlib import Path
 
 import pytest
 import torch
+import yaml
 
 from src.models.book_latent import (
     BookLatentGenerator,
@@ -18,38 +20,12 @@ from src.models.generator import build_generator
 
 
 def full_config() -> dict:
-    """The full-size v2 config; Task 5 switches this to configs/scout_kv/v2/L19.yaml."""
-    return {
-        "seed": 42,
-        "model": {
-            "latent_dim": 128,
-            "generator_hidden_dims": [1024, 2048, 4096],
-            "critic_hidden_dims": [2048, 1024, 512],
-            "negative_slope": 0.2,
-            "output_normalize": False,
-            "n_flags": 2,
-            "generator_type": "book_latent",
-            "book_latent": {
-                "channels": 64,
-                "n_features": 8,
-                "min_length": 2.0,
-                "max_length": 16384.0,
-            },
-            "window_critic": {
-                "window": 8,
-                "strides": [1, 4, 16, 64, 256, 1024],
-                "token_hidden_dims": [1024, 512],
-                "window_hidden_dims": [1024, 512],
-            },
-        },
-        "data": {
-            "descriptor_dim": 5120,
-            "kv_n_sink": 1,
-            "kv_n_tail": 1024,
-            "kv_books": list(range(12)),
-            "kv_layer": 19,
-        },
-    }
+    """The full-size v2 config, read from configs/scout_kv/v2/L19.yaml."""
+    return yaml.safe_load(
+        (
+            Path(__file__).resolve().parent.parent / "configs/scout_kv/v2/L19.yaml"
+        ).read_text()
+    )
 
 
 def small_config() -> dict:

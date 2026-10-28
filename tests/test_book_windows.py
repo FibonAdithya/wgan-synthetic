@@ -164,3 +164,24 @@ def test_real_windows_come_from_one_book_each(tmp_path):
     v = w + rb.mean
     assert (v == v[:, :1]).all()
     assert len(torch.unique(v[:, 0, 0])) >= 2
+
+
+def test_real_windows_are_centred_at_the_requested_positions():
+    """Catches RealBooks.windows dropping the `- mean` subtraction, or indexing the wrong
+    positions (e.g. offset by one). Data h[b, t, :] = 10*b + t (exact in bf16), so each value
+    identifies its book and position; the mean is nonzero (23), so a missing subtraction fails."""
+    n_books, T, D = 4, 16, 3
+    b_idx = torch.arange(n_books)[:, None, None]
+    t_idx = torch.arange(T)[None, :, None]
+    h = (10 * b_idx + t_idx).expand(n_books, T, D).to(torch.bfloat16).contiguous()
+    rb = RealBooks(h, 1)
+    assert (rb.mean != 0).all()
+    g = torch.Generator().manual_seed(1)
+    pos = torch.randint(1, 9, (64, 1), generator=g) + torch.arange(8)
+    w = rb.windows(pos, g)
+    for i in range(64):
+        v = float(w[i, 0, 0] + rb.mean[0])
+        b = round((v - int(pos[i, 0])) / 10)
+        assert 0 <= b < n_books
+        for j in range(8):
+            assert torch.equal(w[i, j], h[b, pos[i, j]].float() - rb.mean)

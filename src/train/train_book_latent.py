@@ -333,7 +333,10 @@ def _train(config, resume, device, gpu_meta, out_dir: Path) -> None:
         return window_positions(t_end, stride_t[s_idx], W), s_idx
 
     last = out_dir / "last.pt"
-    with (out_dir / "train_log.jsonl").open("a", encoding="utf-8") as log:
+    # A fresh run starts a new log (a crashed earlier run in this dir would otherwise leave
+    # its steps in front of ours); a resume continues the log it is resuming.
+    log_mode = "w" if resume is None else "a"
+    with (out_dir / "train_log.jsonl").open(log_mode, encoding="utf-8") as log:
         for step in range(start_step + 1, num_gen_steps + 1):
             for _ in range(n_critic):
                 pos, s_idx = draw_positions()

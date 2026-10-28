@@ -396,6 +396,146 @@ def test_token_critic_gets_a_flagged_penalty_in_its_loss(tmp_path, monkeypatch):
     assert logged == pytest.approx([calls[2 * i + 1]["value"] for i in range(4)])
 
 
+def test_window_critic_gets_a_penalty_in_its_loss(tmp_path, monkeypatch):
+    """Catches the window critic's gradient penalty dropped or multiplied by 0.0, called on other
+    windows than the n_windows batch, or drawn with one alpha per token instead of one per
+    window: spy on tbl.window_gradient_penalty (called 2 x 4 times, on (8, 8, 16) windows), the
+    gradient reaching its output in backward is lambda_gp = 10, torch.rand inside it is drawn
+    with shape (8, 1, 1), and the logged gp_window is each step's last call. The critic is the
+    real nonlinear WindowCritic, so the penalty value depends on the alpha draw."""
+    cfg = tiny_config(tmp_path)
+    calls: list = []
+    real = tbl.window_gradient_penalty
+    rand = torch.rand
+
+    def spy(critic, real_x, fake_x, flags, stride_idx):
+        shapes: list = []
+
+        def rec_rand(*size, **kw):
+            shapes.append(tuple(size))
+            return rand(*size, **kw)
+
+        with monkeypatch.context() as m:
+            m.setattr(torch, "rand", rec_rand)
+            out = real(critic, real_x, fake_x, flags, stride_idx)
+        rec = {
+            "shape": tuple(real_x.shape),
+            "fake_shape": tuple(fake_x.shape),
+            "rand": shapes,
+            "value": float(out.detach()),
+            "grad": [],
+        }
+        out.register_hook(lambda g: rec["grad"].append(float(g)))
+        calls.append(rec)
+        return out
+
+    monkeypatch.setattr(tbl, "window_gradient_penalty", spy)
+    train(cfg)
+    assert len(calls) == 8
+    for c in calls:
+        assert c["shape"] == c["fake_shape"] == (8, 8, 16)
+        assert c["rand"] == [(8, 1, 1)]
+        assert c["grad"] == [pytest.approx(10.0)]
+    logged = [r["gp_window"] for r in _log(cfg["output_dir"])]
+    assert logged == pytest.approx([calls[2 * i + 1]["value"] for i in range(4)])
+
+
+def test_each_critic_is_stepped_with_its_own_real_and_fake_scores(
+    tmp_path, monkeypatch
+):
+    """Catches d_real and d_fake swapped for either critic, a critic scored on the other
+    critic's inputs, and the window critic stepped by the token critic's optimizer (or the
+    reverse): spy on tbl._critic_step; at each call recompute the critic's output on the tensor
+    RealBooks.windows returned and on the fake_windows output, and require d_real and d_fake to
+    equal them (and to differ from each other), and the optimizer to own that critic's
+    parameters."""
+    cfg = tiny_config(tmp_path)
+    latest: dict = {}
+    critics: dict = {}
+    steps: list = []
+    real_windows, real_fake, real_build = (
+        RealBooks.windows,
+        tbl.fake_windows,
+        tbl.build_book_latent,
+    )
+    real_step = tbl._critic_step
+
+    def windows(self, pos, generator=None):
+        latest["real"] = real_windows(self, pos, generator)
+        return latest["real"]
+
+    def fake(gen, pos, T, n_tail):
+        latest["fake"], latest["flags"] = real_fake(gen, pos, T, n_tail)
+        return latest["fake"], latest["flags"]
+
+    def build(config):
+        gen, token, window = real_build(config)
+        critics["token"], critics["window"] = token, window
+        return gen, token, window
+
+    def score(name, x):
+        flags = latest["flags"]
+        with torch.no_grad():
+            if name == "token":
+                return critics[name](x.reshape(-1, x.shape[-1]), flags.reshape(-1))
+            return critics[name](x, flags, tbl_stride[0])
+
+    tbl_stride: list = []
+    real_sample = tbl.sample_stride
+
+    def sample(*a, **k):
+        tbl_stride.clear()
+        tbl_stride.append(real_sample(*a, **k))
+        return tbl_stride[0]
+
+    def step(optim, d_real, d_fake, gp, lambda_gp):
+        owner = [
+            n
+            for n, c in critics.items()
+            if {id(p) for p in c.parameters()}
+            == {id(p) for g in optim.param_groups for p in g["params"]}
+        ]
+        assert len(owner) == 1
+        name = owner[0]
+        steps.append(name)
+        assert torch.equal(d_real, score(name, latest["real"]))
+        assert torch.equal(d_fake, score(name, latest["fake"]))
+        assert not torch.allclose(d_real, d_fake)
+        return real_step(optim, d_real, d_fake, gp, lambda_gp)
+
+    monkeypatch.setattr(RealBooks, "windows", windows)
+    monkeypatch.setattr(tbl, "fake_windows", fake)
+    monkeypatch.setattr(tbl, "build_book_latent", build)
+    monkeypatch.setattr(tbl, "sample_stride", sample)
+    monkeypatch.setattr(tbl, "_critic_step", step)
+    train(cfg)
+    assert steps == ["token", "window"] * 8
+
+
+def test_fresh_run_into_a_crashed_run_dir_restarts_the_log(tmp_path):
+    """Catches the train log opened for append on a fresh run: a run whose final.pt is missing
+    (crashed) and is retrained into the same dir would log steps [1, 2, 3, 4, 1, 2, 3, 4];
+    it must log [1, 2, 3, 4] once."""
+    cfg = tiny_config(tmp_path)
+    final = train(cfg)
+    assert [r["step"] for r in _log(cfg["output_dir"])] == [1, 2, 3, 4]
+    final.unlink()
+    train(cfg)
+    assert [r["step"] for r in _log(cfg["output_dir"])] == [1, 2, 3, 4]
+
+
+def test_resume_into_the_same_dir_appends_to_the_log(tmp_path):
+    """Catches a resume that truncates the log it is continuing: a 4-step run is resumed from its
+    final.pt, in the same dir, to 6 steps; the log must hold steps 1-6, not 5, 6."""
+    cfg = tiny_config(tmp_path)
+    final = train(cfg)
+    assert _load(final)["step"] == 4
+    cfg["training"]["num_gen_steps"] = 6
+    final.rename(final.with_name("resume_from.pt"))
+    train(cfg, resume=str(final.with_name("resume_from.pt")))
+    assert [r["step"] for r in _log(cfg["output_dir"])] == [1, 2, 3, 4, 5, 6]
+
+
 def test_resume_at_the_budget_is_refused(tmp_path):
     """Catches a resume from a checkpoint already at num_gen_steps running zero steps and
     renaming nothing: it must be refused, naming num_gen_steps."""

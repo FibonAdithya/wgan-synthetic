@@ -63,7 +63,9 @@ each is easy to break while believing you are making progress.
    measured LID or recall against the literature. The locked pair lives in
    the family's page under `docs/datasets/`.
 4. **A checkpoint is only loadable beside its `run_config.yaml`.**
-   `generator_type` is not recorded in the checkpoint; the architecture is
+   For v0/v1 checkpoints `generator_type` is not recorded in the checkpoint
+   (a `book_latent` v2 checkpoint records it and its settings, but its
+   sampler also reads `run_config.yaml`); the architecture is
    rebuilt from the run config at load time. Moving a `.pt` file away from
    its config makes it unloadable. See `PROJECT_DOCUMENTATION.md#generator_type`.
 5. **`data/sift_base.npy` and `data/sift_250k.npy` are different corpora.**

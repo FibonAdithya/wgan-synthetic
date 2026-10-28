@@ -47,7 +47,7 @@ python -m src.kv.judge pilot --v1 SEED=v1.jsonl ... --v0 SEED=v0.jsonl ... --out
 python -m src.kv.judge full  --v1 v1.jsonl --v0 SEED=v0.jsonl ... --out full_best.json
 python -m src.train.train_book_latent --config configs/scout_kv/v2/L19.yaml [--resume PATH]
 python -m src.sample.sample_books --run-dir R --capture-dir CAP --out-dir R/capture [--seed 0] [--checkpoint final.pt] [--book-ids 12-19]
-python -m src.eval.kv_gate measure-real --capture-dir R/capture --out v2.jsonl --source v2
+python -m src.eval.kv_gate measure-real --capture-dir R/capture --books 12-19 --layers L --seed 0 --source v2 --out v2.jsonl
 python -m src.kv.book_judge port    --runs-dir D --out port.json
 python -m src.kv.book_judge verdict --runs-dir D --v1-seed1 F [--v1-seed1 F ...] [--layers 3,19,27] --out verdict.json
 ```

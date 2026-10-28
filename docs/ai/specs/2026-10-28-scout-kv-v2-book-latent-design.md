@@ -1,6 +1,6 @@
 # scout_kv v2: books with a shared latent
 
-Design, 2026-10-28. Not authoritative (see `AGENTS.md`); the code and
+Design, 2026-10-28. Approved by the owner 2026-10-28. Not authoritative (see `AGENTS.md`); the code and
 `PROJECT_DOCUMENTATION.md` win on any conflict once built. Scope: the `v2`
 rung of the `scout_kv` family. Read first:
 `docs/ai/specs/2026-10-18-kv-cache-scout-design.md` (the family, data split,

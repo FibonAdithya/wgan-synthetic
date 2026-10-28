@@ -178,6 +178,16 @@ def test_c1_boundary_is_inclusive():
     assert verdict(v, {3: 0.5}, _v1(layers=(3,)), (3,))["runs"][(3, 42)]["c1"] is False
 
 
+def test_verdict_looks_up_v1_by_its_own_seed():
+    """Catches verdict reading v1_lid[(layer, 42)] or v1_lid[(layer, 1)] for every seed."""
+    v1 = {(3, 42): 20.0, (3, 1): 30.0}
+    r = verdict(_v2(lid=20.0, layers=(3,)), _real(layers=(3,)), v1, (3,))["runs"]
+    assert r[(3, 42)]["c2"] is True
+    assert r[(3, 42)]["v1_lid"] == 20.0
+    assert r[(3, 1)]["c2"] is False  # 20 < 30 - 6
+    assert r[(3, 1)]["v1_lid"] == 30.0
+
+
 def test_c2_is_one_sided():
     """Catches c2 being two-sided (LID far above v1 must pass) or its 6.0 edge being strict."""
 

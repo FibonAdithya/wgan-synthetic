@@ -513,9 +513,11 @@ are read as unconditioned. The flagged evaluation does not run the
 `energy_probe` diagnostics (`component_energies`, the spherical readouts): those
 exist only for `linear_skip` and `spherical`, and a flagged run is `mlp` only.
 
-Only two samplers take a flag: `sample_generator(..., flag=)` in the trainer and
+Three samplers take a flag: `sample_generator(..., flag=)` in the trainer,
 `kv_gate.synthetic_h`, which draws keys under the body flag and queries under
-the tail flag. The other sampling entry points (`src/sample/generate.py`,
+the tail flag, and, for `scout_kv` v2 (`book_latent`) runs only,
+`src.sample.sample_books`, which flags the last `n_tail` positions of each book
+as tail (`src.train.book_windows.tail_flags`). The other sampling entry points (`src/sample/generate.py`,
 `src/eval/evaluate_distribution.py`, `src/eval/compare_variants.py`,
 `src/eval/plot_descriptor_grid.py`) call the generator without one; pointed at a
 flagged run they stop with a `TypeError` (missing `flags`) or a `ValueError`

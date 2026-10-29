@@ -234,6 +234,36 @@ def test_evaluate_distribution_refuses_a_v2_run(tmp_path):
         load_generator(full_config(), tmp_path / "final.pt", torch.device("cpu"))
 
 
+def test_generate_cli_refuses_a_v2_run(tmp_path, monkeypatch):
+    """Catches src.sample.generate building an mlp for a v2 config and loading its checkpoint.
+
+    The refusal must come before the checkpoint is read, so a missing file is enough.
+    """
+    from src.sample import generate
+
+    cfg = full_config()
+    cfg["device"] = "cpu"
+    cfg_path = tmp_path / "run_config.yaml"
+    cfg_path.write_text(yaml.safe_dump(cfg))
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "generate",
+            "--config",
+            str(cfg_path),
+            "--checkpoint",
+            str(tmp_path / "final.pt"),
+            "--num-samples",
+            "4",
+            "--output-path",
+            str(tmp_path / "out.npy"),
+        ],
+    )
+    with pytest.raises(ValueError, match="src.sample.sample_books"):
+        generate.main()
+    assert not (tmp_path / "out.npy").exists()
+
+
 def test_build_book_latent_rejects_other_types():
     """Catches build_book_latent accepting a v0/v1 config or a missing flag count."""
     cfg = small_config()

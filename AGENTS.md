@@ -130,7 +130,7 @@ nobody.
 | Preprocessing contract | `data/README.md`, `src/data/dataset.py` |
 | Model architectures and `generator_type` | `src/models/generator.py`, `PROJECT_DOCUMENTATION.md#model-architecture`, `PROJECT_DOCUMENTATION.md#generator_type` |
 | The variant ladder | `PROJECT_DOCUMENTATION.md#model-variants-the-per-dataset-ladder`, `configs/<family>/` |
-| Training loop and config keys | `src/train/train_wgan_gp.py` |
+| Training loop and config keys | `src/train/train_wgan_gp.py`; for scout_kv v2 (`generator_type: book_latent`), `src/train/train_book_latent.py` |
 | Evaluation and metric definitions | `src/eval/`, `PROJECT_DOCUMENTATION.md#metric-definitions` |
 | Compare SIFT variants in one report | `src/eval/compare_variants.py` |
 | The EDA report's panels and prose | `src/eval/eda/panels.py` |

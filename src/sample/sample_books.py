@@ -77,7 +77,11 @@ def sample_books(
     chunk: int = 2048,
     device="cpu",
 ) -> Tensor:
-    """`(n_books, T, D)` float32: one latent draw per book, positions n_sink.. in chunks."""
+    """`(n_books, T, D)` float32: one latent draw per book, positions n_sink.. in chunks.
+
+    Seeds the global torch RNG with `seed` (the committed v2 samples were drawn this
+    way), so a caller's own torch random state is reset.
+    """
     torch.manual_seed(seed)
     mean = mean.to(device)
     h = mean.expand(n_books, T, -1).clone()

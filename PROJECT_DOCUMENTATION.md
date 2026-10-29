@@ -548,9 +548,10 @@ raises after `run_metadata.json` and `run_config.yaml` are written.
 and `best_score`. Python's `json` module reads that back fine; it is not
 strict JSON, so a consumer that insists on the spec will choke on it.
 
-Training entrypoint:
+Training entrypoints:
 
 - `src/train/train_wgan_gp.py`
+- `src/train/train_book_latent.py`, for scout_kv v2 (`generator_type: book_latent`) only
 
 ---
 

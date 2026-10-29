@@ -52,7 +52,8 @@ box, and all of them matched the box-side sha256 (56 pilot, 163 full).
 | 47 | 0.841 | 0.929 | 0.923 | 23.30 | 14.63 | 14.62 | 18.48 |
 
 v1 seed 1 exists at L19, L27, L35 and L43 (25.51, 25.03, 23.12 and 22.07). The seed-1 runs are
-compared with those values there, and with v1 seed 42 elsewhere.
+compared with those values there. At the other 8 layers no v1 seed-1 run exists, so criterion 2 at
+seed 1 is judged against the v1 seed-42 value, as the spec states (`src/kv/book_judge.py::v1_lid_table`).
 
 - v2 clusters by book less than real at L3–L11 and more than real from L15 on. Only L3 is
   outside the tolerance.

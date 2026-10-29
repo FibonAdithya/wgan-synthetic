@@ -363,10 +363,11 @@ Checkpoints written by `train_wgan_gp` do not record `generator_type` — the
 architecture is rebuilt from the run config at load time. A checkpoint is
 therefore only loadable alongside the `run_config.yaml` written next to it.
 `book_latent` checkpoints (written by `src.train.train_book_latent`) do record
-`generator_type` and the `book_latent` settings, and `--resume` and
-`src.sample.sample_books` refuse a checkpoint whose record disagrees with
-`run_config.yaml`; the architecture is still built from `run_config.yaml`, so
-the pairing rule holds for them too. Checkpoints do record
+`generator_type` and the `book_latent` settings. `src.sample.sample_books`
+refuses a checkpoint whose record disagrees with the run directory's
+`run_config.yaml`, and `--resume` refuses one whose record disagrees with the
+`--config` it is given. The sampler still builds the architecture from
+`run_config.yaml`, so the pairing rule holds for them too. Checkpoints do record
 `generator_weights` (`"live"` or `"ema"`), which says which weights the file
 holds, not which architecture produced them. The same holds for `model.n_flags`:
 it is recorded in the checkpoint so a resume that changes it is refused, but the
@@ -516,7 +517,9 @@ under the same names with a `tail_` prefix. Checkpoints record `n_flags`
 refused; like `output_normalize`, checkpoints written before the record existed
 are read as unconditioned. The flagged evaluation does not run the
 `energy_probe` diagnostics (`component_energies`, the spherical readouts): those
-exist only for `linear_skip` and `spherical`, and a flagged run is `mlp` only.
+exist only for `linear_skip` and `spherical`, and a flagged `train_wgan_gp` run
+is `mlp` only (`book_latent` runs are also flagged but are trained and sampled
+separately; see the `generator_type` section).
 
 Three samplers take a flag: `sample_generator(..., flag=)` in the trainer,
 `kv_gate.synthetic_h`, which draws keys under the body flag and queries under

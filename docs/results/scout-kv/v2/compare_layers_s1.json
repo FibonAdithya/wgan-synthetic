@@ -1,0 +1,498 @@
+{
+  "n_reference_sets": 5,
+  "layers": {
+    "3": {
+      "n_records": 8,
+      "n_reference_sets": 5,
+      "statistics": {
+        "hnsw_reach_k10": {
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "value": 1.0,
+          "status": "inside"
+        },
+        "hnsw_recall_k10_ef176": {
+          "min": 0.9982421875,
+          "max": 0.99931640625,
+          "mean": 0.9987734375,
+          "value": 0.99896484375,
+          "status": "inside"
+        },
+        "ivf_ratio_k128": {
+          "min": 0.07387408519848607,
+          "max": 0.09034954429167358,
+          "mean": 0.07944284717905255,
+          "value": 0.0709830138759775,
+          "status": "below"
+        },
+        "ivf_recall_k128_np24": {
+          "min": 0.9190223693847657,
+          "max": 0.9504287719726563,
+          "mean": 0.9358151245117188,
+          "value": 0.9357048034667969,
+          "status": "inside"
+        },
+        "hnsw_recall_k10_ef176_id": {
+          "min": 0.9998535156249999,
+          "max": 0.999951171875,
+          "mean": 0.99990234375,
+          "value": 0.9998535156249999,
+          "status": "inside"
+        }
+      }
+    },
+    "7": {
+      "n_records": 8,
+      "n_reference_sets": 5,
+      "statistics": {
+        "hnsw_reach_k10": {
+          "min": 0.875,
+          "max": 1.0,
+          "mean": 0.975,
+          "value": 1.0,
+          "status": "inside"
+        },
+        "hnsw_recall_k10_ef176": {
+          "min": 0.9427734375,
+          "max": 0.9811230468750001,
+          "mean": 0.9606152343749998,
+          "value": 0.99759765625,
+          "status": "above"
+        },
+        "ivf_ratio_k128": {
+          "min": 1.0104861665894578,
+          "max": 1.0832618708560124,
+          "mean": 1.0529052501036884,
+          "value": 1.1542867716661487,
+          "status": "above"
+        },
+        "ivf_recall_k128_np24": {
+          "min": 0.4594230651855469,
+          "max": 0.5207145690917969,
+          "mean": 0.5033087158203126,
+          "value": 0.41217880249023436,
+          "status": "below"
+        },
+        "hnsw_recall_k10_ef176_id": {
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "value": 1.0,
+          "status": "inside"
+        }
+      }
+    },
+    "11": {
+      "n_records": 8,
+      "n_reference_sets": 5,
+      "statistics": {
+        "hnsw_reach_k10": {
+          "min": 0.5,
+          "max": 0.75,
+          "mean": 0.625,
+          "value": 1.0,
+          "status": "above"
+        },
+        "hnsw_recall_k10_ef176": {
+          "min": 0.521220703125,
+          "max": 0.718427734375,
+          "mean": 0.5952578125000001,
+          "value": 0.9481738281250001,
+          "status": "above"
+        },
+        "ivf_ratio_k128": {
+          "min": 1.2230228703998138,
+          "max": 1.3038709768343053,
+          "mean": 1.266519404368892,
+          "value": 1.2241613012088186,
+          "status": "inside"
+        },
+        "ivf_recall_k128_np24": {
+          "min": 0.5927818298339844,
+          "max": 0.6428588867187499,
+          "mean": 0.6109603881835938,
+          "value": 0.5879631042480469,
+          "status": "below"
+        },
+        "hnsw_recall_k10_ef176_id": {
+          "min": 0.99638671875,
+          "max": 0.99990234375,
+          "mean": 0.9986914062499999,
+          "value": 0.999658203125,
+          "status": "inside"
+        }
+      }
+    },
+    "15": {
+      "n_records": 8,
+      "n_reference_sets": 5,
+      "statistics": {
+        "hnsw_reach_k10": {
+          "min": 0.125,
+          "max": 0.375,
+          "mean": 0.2,
+          "value": 1.0,
+          "status": "above"
+        },
+        "hnsw_recall_k10_ef176": {
+          "min": 0.462119140625,
+          "max": 0.714755859375,
+          "mean": 0.5613476562499999,
+          "value": 0.9068945312500001,
+          "status": "above"
+        },
+        "ivf_ratio_k128": {
+          "min": 0.7236434621536718,
+          "max": 0.9026350808315731,
+          "mean": 0.7982758654737395,
+          "value": 0.7854092245760014,
+          "status": "inside"
+        },
+        "ivf_recall_k128_np24": {
+          "min": 0.915807342529297,
+          "max": 0.9400436401367187,
+          "mean": 0.9309263610839844,
+          "value": 0.9650062561035155,
+          "status": "above"
+        },
+        "hnsw_recall_k10_ef176_id": {
+          "min": 0.999951171875,
+          "max": 1.0,
+          "mean": 0.999990234375,
+          "value": 0.999267578125,
+          "status": "below"
+        }
+      }
+    },
+    "19": {
+      "n_records": 8,
+      "n_reference_sets": 5,
+      "statistics": {
+        "hnsw_reach_k10": {
+          "min": 0.5,
+          "max": 0.875,
+          "mean": 0.675,
+          "value": 0.875,
+          "status": "inside"
+        },
+        "hnsw_recall_k10_ef176": {
+          "min": 0.854306640625,
+          "max": 0.881689453125,
+          "mean": 0.868806640625,
+          "value": 0.897744140625,
+          "status": "above"
+        },
+        "ivf_ratio_k128": {
+          "min": 0.1330288250163598,
+          "max": 0.17176861533699073,
+          "mean": 0.15026070626284843,
+          "value": 1.1887036854314568,
+          "status": "above"
+        },
+        "ivf_recall_k128_np24": {
+          "min": 0.9814949035644531,
+          "max": 0.9874504089355469,
+          "mean": 0.9838719177246095,
+          "value": 0.9462181091308594,
+          "status": "below"
+        },
+        "hnsw_recall_k10_ef176_id": {
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "value": 1.0,
+          "status": "inside"
+        }
+      }
+    },
+    "23": {
+      "n_records": 8,
+      "n_reference_sets": 5,
+      "statistics": {
+        "hnsw_reach_k10": {
+          "min": 0.875,
+          "max": 1.0,
+          "mean": 0.95,
+          "value": 1.0,
+          "status": "inside"
+        },
+        "hnsw_recall_k10_ef176": {
+          "min": 0.97619140625,
+          "max": 0.991484375,
+          "mean": 0.9839921875,
+          "value": 0.972412109375,
+          "status": "below"
+        },
+        "ivf_ratio_k128": {
+          "min": 0.2328472209757204,
+          "max": 0.3318994028003017,
+          "mean": 0.27978063298594147,
+          "value": 0.3765186269811612,
+          "status": "above"
+        },
+        "ivf_recall_k128_np24": {
+          "min": 0.9885116577148437,
+          "max": 0.9988365173339844,
+          "mean": 0.9928890991210937,
+          "value": 0.9820762634277344,
+          "status": "below"
+        },
+        "hnsw_recall_k10_ef176_id": {
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "value": 0.99990234375,
+          "status": "below"
+        }
+      }
+    },
+    "27": {
+      "n_records": 8,
+      "n_reference_sets": 5,
+      "statistics": {
+        "hnsw_reach_k10": {
+          "min": 0.75,
+          "max": 1.0,
+          "mean": 0.9,
+          "value": 0.625,
+          "status": "below"
+        },
+        "hnsw_recall_k10_ef176": {
+          "min": 0.839111328125,
+          "max": 0.8670117187499999,
+          "mean": 0.8527910156249998,
+          "value": 0.831513671875,
+          "status": "below"
+        },
+        "ivf_ratio_k128": {
+          "min": 1.7756742321245773,
+          "max": 1.8660451660730701,
+          "mean": 1.8194085998944605,
+          "value": 1.4600565519163586,
+          "status": "below"
+        },
+        "ivf_recall_k128_np24": {
+          "min": 0.7895874023437499,
+          "max": 0.8244873046875,
+          "mean": 0.8094200134277344,
+          "value": 0.7729316711425782,
+          "status": "below"
+        },
+        "hnsw_recall_k10_ef176_id": {
+          "min": 0.999951171875,
+          "max": 1.0,
+          "mean": 0.999990234375,
+          "value": 1.0,
+          "status": "inside"
+        }
+      }
+    },
+    "31": {
+      "n_records": 8,
+      "n_reference_sets": 5,
+      "statistics": {
+        "hnsw_reach_k10": {
+          "min": 0.625,
+          "max": 0.875,
+          "mean": 0.725,
+          "value": 0.75,
+          "status": "inside"
+        },
+        "hnsw_recall_k10_ef176": {
+          "min": 0.8579785156249999,
+          "max": 0.918720703125,
+          "mean": 0.885515625,
+          "value": 0.862802734375,
+          "status": "inside"
+        },
+        "ivf_ratio_k128": {
+          "min": 0.940254231625072,
+          "max": 1.4576487685904234,
+          "mean": 1.1723159613955927,
+          "value": 0.8774143119992688,
+          "status": "below"
+        },
+        "ivf_recall_k128_np24": {
+          "min": 0.9030113220214844,
+          "max": 0.9394561767578125,
+          "mean": 0.9237973022460937,
+          "value": 0.9101821899414062,
+          "status": "inside"
+        },
+        "hnsw_recall_k10_ef176_id": {
+          "min": 0.9998535156249999,
+          "max": 1.0,
+          "mean": 0.99990234375,
+          "value": 0.99990234375,
+          "status": "inside"
+        }
+      }
+    },
+    "35": {
+      "n_records": 8,
+      "n_reference_sets": 5,
+      "statistics": {
+        "hnsw_reach_k10": {
+          "min": 0.125,
+          "max": 0.5,
+          "mean": 0.325,
+          "value": 0.375,
+          "status": "inside"
+        },
+        "hnsw_recall_k10_ef176": {
+          "min": 0.5669824218749999,
+          "max": 0.7286816406250001,
+          "mean": 0.637216796875,
+          "value": 0.577802734375,
+          "status": "inside"
+        },
+        "ivf_ratio_k128": {
+          "min": 1.8961188534809432,
+          "max": 2.524939115934663,
+          "mean": 2.1368970764000084,
+          "value": 1.2456920077031581,
+          "status": "below"
+        },
+        "ivf_recall_k128_np24": {
+          "min": 0.7762405395507812,
+          "max": 0.8464790344238281,
+          "mean": 0.8164482116699219,
+          "value": 0.8394309997558593,
+          "status": "inside"
+        },
+        "hnsw_recall_k10_ef176_id": {
+          "min": 0.9991699218750001,
+          "max": 0.999755859375,
+          "mean": 0.9994335937500001,
+          "value": 0.995361328125,
+          "status": "below"
+        }
+      }
+    },
+    "39": {
+      "n_records": 8,
+      "n_reference_sets": 5,
+      "statistics": {
+        "hnsw_reach_k10": {
+          "min": 0.375,
+          "max": 0.625,
+          "mean": 0.475,
+          "value": 0.75,
+          "status": "above"
+        },
+        "hnsw_recall_k10_ef176": {
+          "min": 0.7218261718750001,
+          "max": 0.9227539062500001,
+          "mean": 0.79904296875,
+          "value": 0.7476171875,
+          "status": "inside"
+        },
+        "ivf_ratio_k128": {
+          "min": 2.989328495435964,
+          "max": 3.413044395431167,
+          "mean": 3.147924248665741,
+          "value": 2.3704756324053324,
+          "status": "below"
+        },
+        "ivf_recall_k128_np24": {
+          "min": 0.4733451843261719,
+          "max": 0.5086616516113281,
+          "mean": 0.489788818359375,
+          "value": 0.5880661010742188,
+          "status": "above"
+        },
+        "hnsw_recall_k10_ef176_id": {
+          "min": 0.99990234375,
+          "max": 1.0,
+          "mean": 0.999951171875,
+          "value": 0.9996093749999999,
+          "status": "below"
+        }
+      }
+    },
+    "43": {
+      "n_records": 8,
+      "n_reference_sets": 5,
+      "statistics": {
+        "hnsw_reach_k10": {
+          "min": 0.0,
+          "max": 0.125,
+          "mean": 0.1,
+          "value": 1.0,
+          "status": "above"
+        },
+        "hnsw_recall_k10_ef176": {
+          "min": 0.573759765625,
+          "max": 0.636640625,
+          "mean": 0.6025859375,
+          "value": 0.92796875,
+          "status": "above"
+        },
+        "ivf_ratio_k128": {
+          "min": 2.973797217811141,
+          "max": 3.480363414759823,
+          "mean": 3.1971143801763033,
+          "value": 2.2433631885273457,
+          "status": "below"
+        },
+        "ivf_recall_k128_np24": {
+          "min": 0.5162788391113281,
+          "max": 0.5911041259765625,
+          "mean": 0.5657498168945313,
+          "value": 0.6725021362304687,
+          "status": "above"
+        },
+        "hnsw_recall_k10_ef176_id": {
+          "min": 0.99990234375,
+          "max": 1.0,
+          "mean": 0.9999609375,
+          "value": 1.0,
+          "status": "inside"
+        }
+      }
+    },
+    "47": {
+      "n_records": 8,
+      "n_reference_sets": 5,
+      "statistics": {
+        "hnsw_reach_k10": {
+          "min": 0.25,
+          "max": 0.375,
+          "mean": 0.3,
+          "value": 0.375,
+          "status": "inside"
+        },
+        "hnsw_recall_k10_ef176": {
+          "min": 0.7543359375,
+          "max": 0.8082031249999999,
+          "mean": 0.77333984375,
+          "value": 0.8645703124999999,
+          "status": "above"
+        },
+        "ivf_ratio_k128": {
+          "min": 0.5887525242314486,
+          "max": 1.4590939737470356,
+          "mean": 0.9897694157238552,
+          "value": 0.31432281209758517,
+          "status": "below"
+        },
+        "ivf_recall_k128_np24": {
+          "min": 0.8799888610839843,
+          "max": 0.9205253601074219,
+          "mean": 0.9011073303222655,
+          "value": 0.9102767944335937,
+          "status": "inside"
+        },
+        "hnsw_recall_k10_ef176_id": {
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "value": 1.0,
+          "status": "inside"
+        }
+      }
+    }
+  },
+  "condition_mismatches": []
+}

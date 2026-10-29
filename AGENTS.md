@@ -14,7 +14,8 @@ distribution: a synthetic set succeeds when an index finds it as hard, and
 hard in the same way, as the real set. SIFT, DEEP, GloVe and NYTimes have
 trained ladders; the other two families have a `v0` config and a documented
 profile. A seventh family, `scout_kv` (Llama 4 Scout attention inputs), has
-trained `v0` and `v1` rungs, neither of which meets its gate yet.
+trained `v0`, `v1` and `v2` rungs, none of which meets its gate yet; `v2` meets
+its own book-clustering and LID aim (`docs/results/scout-kv/v2/README.md`).
 
 ## Source of truth, in order
 
@@ -63,7 +64,9 @@ each is easy to break while believing you are making progress.
    measured LID or recall against the literature. The locked pair lives in
    the family's page under `docs/datasets/`.
 4. **A checkpoint is only loadable beside its `run_config.yaml`.**
-   `generator_type` is not recorded in the checkpoint; the architecture is
+   For v0/v1 checkpoints `generator_type` is not recorded in the checkpoint
+   (a `book_latent` v2 checkpoint records it and its settings, but its
+   sampler also reads `run_config.yaml`); the architecture is
    rebuilt from the run config at load time. Moving a `.pt` file away from
    its config makes it unloadable. See `PROJECT_DOCUMENTATION.md#generator_type`.
 5. **`data/sift_base.npy` and `data/sift_250k.npy` are different corpora.**
@@ -127,7 +130,7 @@ nobody.
 | Preprocessing contract | `data/README.md`, `src/data/dataset.py` |
 | Model architectures and `generator_type` | `src/models/generator.py`, `PROJECT_DOCUMENTATION.md#model-architecture`, `PROJECT_DOCUMENTATION.md#generator_type` |
 | The variant ladder | `PROJECT_DOCUMENTATION.md#model-variants-the-per-dataset-ladder`, `configs/<family>/` |
-| Training loop and config keys | `src/train/train_wgan_gp.py` |
+| Training loop and config keys | `src/train/train_wgan_gp.py`; for scout_kv v2 (`generator_type: book_latent`), `src/train/train_book_latent.py` |
 | Evaluation and metric definitions | `src/eval/`, `PROJECT_DOCUMENTATION.md#metric-definitions` |
 | Compare SIFT variants in one report | `src/eval/compare_variants.py` |
 | The EDA report's panels and prose | `src/eval/eda/panels.py` |

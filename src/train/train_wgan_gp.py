@@ -618,6 +618,12 @@ def flagged_eval_stats(
 
 
 def train(config: dict, resume: str | None = None) -> tuple[Path, dict]:
+    # Refused before any data is loaded: a v2 run would load every book first.
+    if config["model"].get("generator_type") == "book_latent":
+        raise ValueError(
+            "model.generator_type 'book_latent' is trained by "
+            "python -m src.train.train_book_latent, not train_wgan_gp"
+        )
     seed = int(config["seed"])
     set_seed(seed)
     device = resolve_device(config["device"], strict=True)

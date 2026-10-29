@@ -625,6 +625,12 @@ def build_generator(model_cfg: Mapping[str, Any], output_dim: int) -> nn.Module:
     """Build the configured generator, defaulting to the legacy MLP."""
     kind = model_cfg.get("generator_type", "mlp")
     kind = GENERATOR_TYPE_ALIASES.get(kind, kind)
+    if kind == "book_latent":
+        raise ValueError(
+            "generator_type 'book_latent' is built by "
+            "src.models.book_latent.build_book_latent and sampled by "
+            "src.sample.sample_books, not by build_generator"
+        )
     n_flags = model_cfg.get("n_flags")
     if n_flags is not None:
         if int(n_flags) != 2:

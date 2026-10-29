@@ -1,0 +1,15 @@
+{
+  "seed": 42,
+  "device": "cuda:0",
+  "gpu": {
+    "device": "cuda:0",
+    "name": "NVIDIA L40",
+    "uuid": "857029b4-5a1c-6ab2-fc40-e4e68dc4a0bf",
+    "memory_free_bytes": 47222947840,
+    "memory_total_bytes": 47676129280
+  },
+  "T": 32768,
+  "D": 5120,
+  "n_books": 12,
+  "seconds": 2306.2
+}

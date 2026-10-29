@@ -1,0 +1,104 @@
+START 2026-10-28T12:06:05Z commit=c5a86a2160cc0a86701f725e74fec1cfdc4ad1fc runs=19:42 27:42 3:42 19:1 27:1 3:1
+TRAINED /workspace/kv/v2/L19_s42 seconds=2290
+wrote 8 books to /workspace/kv/v2/L19_s42/capture.tmp
+19 0 15.0 s
+19 1 14.1 s
+19 2 14.2 s
+19 3 13.8 s
+19 4 16.3 s
+19 5 13.9 s
+19 6 14.6 s
+19 7 14.3 s
+19 cos lag1/16/256/4096 [0.458, 0.429, 0.39, 0.299] rand 0.154 | h-NN same book 0.735 within16 0.028 | key-NN same book 0.272 within16 0.004 | query hits own book 0.123 within1024 0.036 (28.4 s)
+DONE /workspace/kv/v2/L19_s42/locality.json
+19 skew 3.6 rho(pos) 0.12 rho(norm) -0.043 rho(cos) 0.196 hub bins [0.045, 0.125, 0.105, 0.095, 0.17, 0.16, 0.14, 0.16]
+DONE /workspace/kv/v2/L19_s42/hub_position.json
+{"layer": 19, "source": "v2_s42", "flag": "body", "n_rows": 253944, "lid_median": 23.677103279339295, "relative_contrast_median": 1.8337507788409704, "hubness_skew": 3.591769526271591, "ivf_gini": 0.444696875, "lid_discarded_queries": 0, "seconds": 51.8}
+{"layer": 19, "source": "v2_s42", "flag": "tail", "n_rows": 8192, "lid_median": 14.178067356985933, "relative_contrast_median": 2.039409469501502, "hubness_skew": 2.427206336896728, "ivf_gini": 0.4190807342529297, "lid_discarded_queries": 0, "seconds": 38.4}
+DONE /workspace/kv/v2/L19_s42 seconds=2600
+TRAINED /workspace/kv/v2/L27_s42 seconds=2287
+wrote 8 books to /workspace/kv/v2/L27_s42/capture.tmp
+27 0 15.3 s
+27 1 15.5 s
+27 2 15.0 s
+27 3 14.3 s
+27 4 15.6 s
+27 5 14.6 s
+27 6 15.3 s
+27 7 15.5 s
+27 cos lag1/16/256/4096 [0.634, 0.611, 0.57, 0.396] rand 0.248 | h-NN same book 0.926 within16 0.073 | key-NN same book 0.54 within16 0.023 | query hits own book 0.148 within1024 0.003 (30.8 s)
+DONE /workspace/kv/v2/L27_s42/locality.json
+27 skew 2.9 rho(pos) -0.052 rho(norm) -0.065 rho(cos) 0.157 hub bins [0.155, 0.17, 0.14, 0.125, 0.115, 0.1, 0.075, 0.12]
+DONE /workspace/kv/v2/L27_s42/hub_position.json
+{"layer": 27, "source": "v2_s42", "flag": "body", "n_rows": 253944, "lid_median": 20.22797950024971, "relative_contrast_median": 2.0367650859099404, "hubness_skew": 2.941905731911232, "ivf_gini": 0.4358570312500001, "lid_discarded_queries": 0, "seconds": 49.3}
+{"layer": 27, "source": "v2_s42", "flag": "tail", "n_rows": 8192, "lid_median": 11.717556519609479, "relative_contrast_median": 2.343524077757309, "hubness_skew": 1.3703218626806393, "ivf_gini": 0.3736867904663086, "lid_discarded_queries": 0, "seconds": 38.9}
+DONE /workspace/kv/v2/L27_s42 seconds=2600
+TRAINED /workspace/kv/v2/L03_s42 seconds=2282
+wrote 8 books to /workspace/kv/v2/L03_s42/capture.tmp
+3 0 13.5 s
+3 1 13.2 s
+3 2 11.9 s
+3 3 12.3 s
+3 4 12.6 s
+3 5 12.7 s
+3 6 12.4 s
+3 7 12.1 s
+3 cos lag1/16/256/4096 [0.032, 0.017, 0.007, -0.008] rand -0.014 | h-NN same book 0.21 within16 0.001 | key-NN same book 0.128 within16 0.0 | query hits own book 0.125 within1024 0.0 (22.2 s)
+DONE /workspace/kv/v2/L03_s42/locality.json
+3 skew 2.5 rho(pos) 0.018 rho(norm) -0.214 rho(cos) 0.297 hub bins [0.105, 0.155, 0.12, 0.125, 0.085, 0.16, 0.145, 0.105]
+DONE /workspace/kv/v2/L03_s42/hub_position.json
+{"layer": 3, "source": "v2_s42", "flag": "body", "n_rows": 253944, "lid_median": 13.056516742251304, "relative_contrast_median": 2.4691538220637455, "hubness_skew": 2.5180789346767853, "ivf_gini": 0.37978203125, "lid_discarded_queries": 0, "seconds": 50.3}
+{"layer": 3, "source": "v2_s42", "flag": "tail", "n_rows": 8192, "lid_median": 11.9734559150907, "relative_contrast_median": 2.5957118964876713, "hubness_skew": 2.478122424118588, "ivf_gini": 0.4429607391357422, "lid_discarded_queries": 0, "seconds": 41.1}
+DONE /workspace/kv/v2/L03_s42 seconds=2555
+TRAINED /workspace/kv/v2/L19_s1 seconds=2286
+wrote 8 books to /workspace/kv/v2/L19_s1/capture.tmp
+19 0 15.0 s
+19 1 14.2 s
+19 2 14.3 s
+19 3 14.3 s
+19 4 16.5 s
+19 5 13.9 s
+19 6 14.0 s
+19 7 14.1 s
+19 cos lag1/16/256/4096 [0.561, 0.542, 0.516, 0.475] rand 0.436 | h-NN same book 0.753 within16 0.03 | key-NN same book 0.391 within16 0.005 | query hits own book 0.179 within1024 0.029 (18.1 s)
+DONE /workspace/kv/v2/L19_s1/locality.json
+19 skew 5.0 rho(pos) 0.035 rho(norm) -0.115 rho(cos) 0.127 hub bins [0.06, 0.14, 0.06, 0.09, 0.105, 0.145, 0.235, 0.165]
+DONE /workspace/kv/v2/L19_s1/hub_position.json
+{"layer": 19, "source": "v2_s1", "flag": "body", "n_rows": 253944, "lid_median": 24.000459843091228, "relative_contrast_median": 1.94895340706248, "hubness_skew": 4.952198534266086, "ivf_gini": 0.48534999999999995, "lid_discarded_queries": 0, "seconds": 45.4}
+{"layer": 19, "source": "v2_s1", "flag": "tail", "n_rows": 8192, "lid_median": 16.564145122045424, "relative_contrast_median": 1.9001224284696785, "hubness_skew": 2.2963839023410406, "ivf_gini": 0.4534626007080078, "lid_discarded_queries": 0, "seconds": 37.3}
+DONE /workspace/kv/v2/L19_s1 seconds=2559
+TRAINED /workspace/kv/v2/L27_s1 seconds=2253
+wrote 8 books to /workspace/kv/v2/L27_s1/capture.tmp
+27 0 15.7 s
+27 1 15.4 s
+27 2 14.9 s
+27 3 13.8 s
+27 4 14.7 s
+27 5 14.3 s
+27 6 14.0 s
+27 7 14.5 s
+27 cos lag1/16/256/4096 [0.742, 0.727, 0.7, 0.617] rand 0.513 | h-NN same book 0.934 within16 0.08 | key-NN same book 0.616 within16 0.026 | query hits own book 0.122 within1024 0.002 (18.1 s)
+DONE /workspace/kv/v2/L27_s1/locality.json
+27 skew 3.4 rho(pos) 0.011 rho(norm) -0.085 rho(cos) 0.119 hub bins [0.075, 0.15, 0.105, 0.16, 0.135, 0.145, 0.115, 0.115]
+DONE /workspace/kv/v2/L27_s1/hub_position.json
+{"layer": 27, "source": "v2_s1", "flag": "body", "n_rows": 253944, "lid_median": 19.0451027299841, "relative_contrast_median": 2.3345906002645913, "hubness_skew": 3.366357922519599, "ivf_gini": 0.426380078125, "lid_discarded_queries": 0, "seconds": 44.4}
+{"layer": 27, "source": "v2_s1", "flag": "tail", "n_rows": 8192, "lid_median": 11.280456016026987, "relative_contrast_median": 2.341654544448992, "hubness_skew": 1.336010148716614, "ivf_gini": 0.3872537612915039, "lid_discarded_queries": 0, "seconds": 35.7}
+DONE /workspace/kv/v2/L27_s1 seconds=2525
+TRAINED /workspace/kv/v2/L03_s1 seconds=2256
+wrote 8 books to /workspace/kv/v2/L03_s1/capture.tmp
+3 0 12.5 s
+3 1 12.7 s
+3 2 11.9 s
+3 3 12.3 s
+3 4 12.5 s
+3 5 12.3 s
+3 6 12.0 s
+3 7 11.9 s
+3 cos lag1/16/256/4096 [0.014, 0.001, -0.008, -0.021] rand -0.022 | h-NN same book 0.184 within16 0.001 | key-NN same book 0.128 within16 0.0 | query hits own book 0.125 within1024 0.003 (18.9 s)
+DONE /workspace/kv/v2/L03_s1/locality.json
+3 skew 2.0 rho(pos) -0.035 rho(norm) -0.198 rho(cos) 0.263 hub bins [0.145, 0.115, 0.12, 0.17, 0.125, 0.125, 0.065, 0.135]
+DONE /workspace/kv/v2/L03_s1/hub_position.json
+{"layer": 3, "source": "v2_s1", "flag": "body", "n_rows": 253944, "lid_median": 12.804081858417728, "relative_contrast_median": 2.5586316046596567, "hubness_skew": 2.0044192067639552, "ivf_gini": 0.40999687500000004, "lid_discarded_queries": 0, "seconds": 46.5}
+{"layer": 3, "source": "v2_s1", "flag": "tail", "n_rows": 8192, "lid_median": 12.27271648080621, "relative_contrast_median": 2.4340501060339044, "hubness_skew": 2.7021915667232643, "ivf_gini": 0.4291839599609375, "lid_discarded_queries": 0, "seconds": 35.7}
+DONE /workspace/kv/v2/L03_s1 seconds=2512
+V2_COMPLETE 2026-10-28T16:21:56Z

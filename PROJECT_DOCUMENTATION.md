@@ -57,7 +57,7 @@ bands; the pages are the source of truth for anything family-specific.
 | `glove` | 100 | `angular` | dense signed word vectors, strong density gradient | `mlp` today, `spherical` not yet adopted | `docs/datasets/glove.md` |
 | `nytimes` | 256 | `angular` | dense signed document embeddings, strong topic clusters | `mlp` at v0, `linear_skip` from v1 (v1, v2, v2b and v2c trained, none meeting the bar), `spherical` from v3 (trained; meets the bar since the 2026-09-17 gate bands, set as a tolerance around real to admit it; continued to 100k without a better selection) | `docs/datasets/nytimes.md` |
 | `openai` | 1536 | `angular` | unit-norm text embeddings, very high ambient dim, low intrinsic dim | `mlp` today, `spherical` not yet adopted | `docs/datasets/openai.md` |
-| `scout_kv` | 5120 | `l2` (in-training selector on h); inner product (gate) | Llama-4-Scout attention inputs, one generator per global layer; gated on IVF/HNSW search difficulty | `mlp` at v0 (trained for all 12 layers; fails the gate on four of five statistics); `mlp` with a body/tail flag (`model.n_flags`) at v1 (trained for all 12 layers; also fails four of five, a different four) | `docs/datasets/scout_kv.md` |
+| `scout_kv` | 5120 | `l2` (in-training selector on h); inner product (gate) | Llama-4-Scout attention inputs, one generator per global layer; gated on IVF/HNSW search difficulty | `mlp` at v0 (trained for all 12 layers; fails the gate on four of five statistics); `mlp` with a body/tail flag (`model.n_flags`) at v1 (trained for all 12 layers; also fails four of five, a different four); `book_latent` with a window critic at v2 (trained for all 12 layers at two seeds; meets its book-clustering and LID aim, still fails the search gate) | `docs/datasets/scout_kv.md` |
 
 ### Fetching
 
@@ -331,9 +331,15 @@ both arms. Any write-up of a v4 result must lead with those.
 
 ### `generator_type`
 
-The architecture axis in the `model` config block. Five values are built:
-`mlp` (default), `gated`, `structured_gated`, `linear_skip` and
-`spherical`. It sits underneath the variant numbering: on SIFT, v0, v1 and
+The architecture axis in the `model` config block. Five values are built by
+`build_generator`: `mlp` (default), `gated`, `structured_gated`, `linear_skip` and
+`spherical`. A sixth, `book_latent`, belongs to `scout_kv` v2 (trained for all 12
+layers at two seeds): it is built by `build_book_latent` in `src/models/book_latent.py`, trained
+by `src/train/train_book_latent.py`, `build_generator` refuses it with a message
+naming `build_book_latent` and `src.sample.sample_books`, and `train_wgan_gp` refuses it
+with a message naming `src.train.train_book_latent`. It generates tokens from a per-book drifting latent plus a
+per-token noise vector and a body/tail flag, and is trained against a token critic
+and a window critic on windows of one book. It sits underneath the variant numbering: on SIFT, v0, v1 and
 v1_5 all use `mlp` and differ only in training settings.
 
 `spherical` is phase (b) of the multi-dataset design: a generator whose
@@ -353,9 +359,15 @@ logs `radius` and `direction_effective_rank` per evaluation for it. Built
 for NYTimes `v3`; `deep`, `glove` and `openai` still start their ladders on
 `mlp`, and openai's narrow cone is not handled by it.
 
-Checkpoints do not record `generator_type` — the architecture is rebuilt from
-the run config at load time. A checkpoint is therefore only loadable
-alongside the `run_config.yaml` written next to it. Checkpoints do record
+Checkpoints written by `train_wgan_gp` do not record `generator_type` — the
+architecture is rebuilt from the run config at load time. A checkpoint is
+therefore only loadable alongside the `run_config.yaml` written next to it.
+`book_latent` checkpoints (written by `src.train.train_book_latent`) do record
+`generator_type` and the `book_latent` settings. `src.sample.sample_books`
+refuses a checkpoint whose record disagrees with the run directory's
+`run_config.yaml`, and `--resume` refuses one whose record disagrees with the
+`--config` it is given. The sampler still builds the architecture from
+`run_config.yaml`, so the pairing rule holds for them too. Checkpoints do record
 `generator_weights` (`"live"` or `"ema"`), which says which weights the file
 holds, not which architecture produced them. The same holds for `model.n_flags`:
 it is recorded in the checkpoint so a resume that changes it is refused, but the
@@ -420,11 +432,16 @@ batch-dependent critic (its docstring says so).
 | `data.preprocess.drop_zero_rows` | `false` | Drop exact-zero rows at load, before the train/holdout split; count in `run_metadata.json` under `data.dropped_zero_rows`. Duplicates are never dropped. |
 | `data.kv_layer` | required with `data.format: kv_capture` | The Llama 4 Scout global layer whose `h` is read (3, 7, ..., 47). See `data/README.md`. |
 | `data.kv_books` | required with `data.format: kv_capture` | Book indices to read, concatenated in the order given. `scout_kv` trains on books 0-11. |
-| `data.kv_n_sink` | `1` | Leading positions dropped from each book (the attention sink). |
-| `data.kv_n_tail` | unset | `kv_capture` only. The last `kv_n_tail` positions of every book are flagged TAIL and the rest BODY (`src/data/kv_capture.py::kv_flags`); all books must then have the same length. Set together with `model.n_flags`: one without the other is refused. |
-| `data.kv_tail_holdout` | unset | Number of tail rows held out exactly, with `round(holdout_fraction * n_body)` body rows held out as before (`src/data/dataset.py::build_training_data`). Must satisfy `1 <= value < number of tail rows`. Required with `data.kv_n_tail`; refused without `model.n_flags`. |
-| `model.n_flags` | unset | Makes the generator and critic position-conditioned: a one-hot of the flag is appended to the latent (generator) and to the input (critic). Only `2` (body, tail) is accepted, only with `generator_type: mlp` and `critic_type: per_vector`. Requires `data.kv_n_tail`, `training.tail_batch_share` and `training.select_on: gate`. |
-| `training.tail_batch_share` | unset | Fraction of each batch drawn from tail rows; the tail count is `round(share * batch_size)` and must lie in `[1, batch_size - 1]`. Required with `model.n_flags`; refused without it. |
+| `data.kv_n_sink` | `1` | Leading positions dropped from each book (the attention sink). The default of `1` applies to `train_wgan_gp` (v0/v1). With `generator_type: book_latent` the key is required (`REQUIRED` in `src/train/train_book_latent.py`) and `validate_config` takes an int of at least 1. |
+| `data.kv_n_tail` | unset | `kv_capture` only. The last `kv_n_tail` positions of every book are flagged TAIL and the rest BODY (`src/data/kv_capture.py::kv_flags`); all books must then have the same length. With `train_wgan_gp`, set together with `model.n_flags`: one without the other is refused. With `generator_type: book_latent`, `validate_config` in `src/train/train_book_latent.py` requires `kv_n_tail` and `kv_n_sink` to be ints of at least 1. |
+| `data.kv_tail_holdout` | unset | Number of tail rows held out exactly, with `round(holdout_fraction * n_body)` body rows held out as before (`src/data/dataset.py::build_training_data`). Must satisfy `1 <= value < number of tail rows`. `train_wgan_gp` (v0/v1) only: required with `data.kv_n_tail`, refused without `model.n_flags` (`flag_settings`). `generator_type: book_latent` neither reads nor validates it, since the book_latent trainer does not hold rows out. |
+| `model.book_latent` | required with `generator_type: book_latent` | `channels`, `n_features`, `min_length`, `max_length`: the number of latent channels, random Fourier features per channel, and the range of length scales (log-spaced across channels). |
+| `model.window_critic` | required with `generator_type: book_latent` | `window` (tokens per window), `strides` (token spacings a window may use), `token_hidden_dims`, `window_hidden_dims`. |
+| `training.n_windows` | required with `generator_type: book_latent` | Windows per batch; each has `window` tokens. |
+| `training.tail_window_share` | required with `generator_type: book_latent` | Fraction of the windows lying wholly in the tail; the count is `round(share * n_windows)` and must lie in `[1, n_windows - 1]`. |
+| `training.window_weight` | required with `generator_type: book_latent` | Weight of the window critic's score in the generator loss. |
+| `model.n_flags` | unset | Makes the generator and critic position-conditioned: a one-hot of the flag is appended to the latent (generator) and to the input (critic). Only `2` (body, tail) is accepted. For `train_wgan_gp` (v0/v1): only with `generator_type: mlp` and `critic_type: per_vector`, and it requires `data.kv_n_tail`, `training.tail_batch_share` and `training.select_on: gate`. With `generator_type: book_latent`, `validate_config` requires `n_flags` to be `2` and takes the tail share from `training.tail_window_share`. |
+| `training.tail_batch_share` | unset | Fraction of each batch drawn from tail rows; the tail count is `round(share * batch_size)` and must lie in `[1, batch_size - 1]`. `train_wgan_gp` (v0/v1) only: required with `model.n_flags`, refused without it (`flag_settings`). `generator_type: book_latent` neither reads nor validates it; the tail share comes from `training.tail_window_share`. |
 
 Checkpoints do not record `critic_type` either; like the generator, the
 critic is rebuilt from `run_config.yaml`, and the per-vector, neighbourhood
@@ -500,11 +517,15 @@ under the same names with a `tail_` prefix. Checkpoints record `n_flags`
 refused; like `output_normalize`, checkpoints written before the record existed
 are read as unconditioned. The flagged evaluation does not run the
 `energy_probe` diagnostics (`component_energies`, the spherical readouts): those
-exist only for `linear_skip` and `spherical`, and a flagged run is `mlp` only.
+exist only for `linear_skip` and `spherical`, and a flagged `train_wgan_gp` run
+is `mlp` only (`book_latent` runs are also flagged but are trained and sampled
+separately; see the `generator_type` section).
 
-Only two samplers take a flag: `sample_generator(..., flag=)` in the trainer and
+Three samplers take a flag: `sample_generator(..., flag=)` in the trainer,
 `kv_gate.synthetic_h`, which draws keys under the body flag and queries under
-the tail flag. The other sampling entry points (`src/sample/generate.py`,
+the tail flag, and, for `scout_kv` v2 (`book_latent`) runs only,
+`src.sample.sample_books`, which flags the last `n_tail` positions of each book
+as tail (`src.train.book_windows.tail_flags`). The other sampling entry points (`src/sample/generate.py`,
 `src/eval/evaluate_distribution.py`, `src/eval/compare_variants.py`,
 `src/eval/plot_descriptor_grid.py`) call the generator without one; pointed at a
 flagged run they stop with a `TypeError` (missing `flags`) or a `ValueError`
@@ -530,9 +551,10 @@ raises after `run_metadata.json` and `run_config.yaml` are written.
 and `best_score`. Python's `json` module reads that back fine; it is not
 strict JSON, so a consumer that insists on the spec will choke on it.
 
-Training entrypoint:
+Training entrypoints:
 
 - `src/train/train_wgan_gp.py`
+- `src/train/train_book_latent.py`, for scout_kv v2 (`generator_type: book_latent`) only
 
 ---
 

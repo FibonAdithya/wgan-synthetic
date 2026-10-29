@@ -15,6 +15,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 import numpy as np
+import torch
 
 from src.models.conditional import BODY, TAIL
 
@@ -109,3 +110,33 @@ def load_kv_capture(
     if len(lengths) > 1:
         raise ValueError(f"books have different lengths {sorted(lengths)}")
     return x, np.concatenate([kv_flags(a.shape[0], n_sink, n_tail) for a in arrs])
+
+
+def load_kv_books(
+    capture_dir: Path,
+    layer: int,
+    books: Sequence[int],
+    dtype: torch.dtype = torch.bfloat16,
+) -> torch.Tensor:
+    """Stack whole books into a (len(books), T, D) CPU tensor, every position kept.
+
+    Books are converted one at a time, so the host holds one float32 book at once.
+    The capture stores `h` as BF16, so the default bf16 result holds it exactly;
+    `src.train.book_windows.data_mean` accumulates in float32.
+    """
+    if layer not in GLOBAL_LAYERS:
+        raise ValueError(f"layer {layer} is not a global layer {GLOBAL_LAYERS}")
+    out = None
+    for i, b in enumerate(books):
+        a = torch.from_numpy(read_safetensor(h_path(capture_dir, b, layer), "h"))
+        if out is None:
+            out = torch.empty((len(books), *a.shape), dtype=dtype)
+        elif a.shape != out.shape[1:]:
+            raise ValueError(
+                f"books have different lengths: book {books[0]} has {out.shape[1]} rows, "
+                f"book {b} has {a.shape[0]}"
+            )
+        out[i] = a.to(dtype)
+    if out is None:
+        raise ValueError("no books given")
+    return out

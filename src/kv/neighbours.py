@@ -124,10 +124,11 @@ def neighbour_positions(c: Corpus, k: int = 10) -> dict:
 
 
 def measure_neighbours(
-    capture_dir, books, layers, seed, out, *, n_sink=1, n_tail=1024
+    capture_dir, books, layers, seed, out, *, n_sink=1, n_tail=1024, source="real"
 ) -> None:
     """One record per (layer, KV head) on the same real corpus `measure_real`
-    builds for the same books, seed, n_sink and n_tail."""
+    builds for the same books, seed, n_sink and n_tail. `source` labels the
+    records, e.g. `v2_s42` for a v2 run's capture-format books."""
     out = Path(out)
     if out.exists():
         raise FileExistsError(f"{out} exists; refusing to append duplicate records")
@@ -152,7 +153,7 @@ def measure_neighbours(
             rec = {
                 "layer": layer,
                 "kv_head": g,
-                "source": "real",
+                "source": source,
                 "seed": seed,
                 "books": list(books),
                 "n_keys": len(c.keys),

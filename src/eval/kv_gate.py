@@ -248,46 +248,85 @@ def measure_real(
         h_books = [h.to(dev).float() for h in load_books(capture_dir, layer, books)]
         w = load_layer_weights(capture_dir, layer)
         wk, wq = w["k_proj"].to(dev).float(), w["q_proj"].to(dev).float()
-        n_keys, n_q, n_id = real_sizes(h_books[0].shape[0], len(books), n_sink, n_tail)
-        for g in range(wk.shape[0] // HEAD_DIM):
-            t0 = time.time()
-            s = corpus_seed(layer, g, seed)
-            c = mixed_real_corpus(
-                h_books, wk, wq, g, n_sink=n_sink, n_tail=n_tail, seed=s
-            )
-            prof = profile_corpus(
-                c.keys,
-                c.q_ood,
-                c.q_id,
-                nlist=nlist,
-                hnsw_m=hnsw_m,
-                ef_construction=ef_construction,
-                seed=s,
-                target=TARGET,
-            )
-            rec = {
-                "layer": layer,
-                "kv_head": g,
-                "source": source,
-                "seed": seed,
-                "books": list(books),
-                "n_keys": len(c.keys),
-                "n_q_ood": len(c.q_ood),
-                "n_q_id": len(c.q_id),
-                "n_sink": n_sink,
-                "n_tail": n_tail,
-                "conditions": conditions(nlist, hnsw_m, ef_construction, TARGET),
-                "own_book_share_top10": _own_book_share_top10(c),
-                **prof,
-                "seconds": round(time.time() - t0, 1),
-            }
-            assert (rec["n_keys"], rec["n_q_ood"], rec["n_q_id"]) == (
-                n_keys,
-                n_q * (wq.shape[0] // wk.shape[0]),
-                n_id,
-            )
+        for rec in real_layer_records(
+            h_books,
+            wk,
+            wq,
+            layer,
+            books,
+            seed,
+            n_sink=n_sink,
+            n_tail=n_tail,
+            nlist=nlist,
+            hnsw_m=hnsw_m,
+            ef_construction=ef_construction,
+            source=source,
+        ):
             _append(out, rec)
-            print(layer, g, rec["seconds"], "s", flush=True)
+            print(layer, rec["kv_head"], rec["seconds"], "s", flush=True)
+
+
+def real_layer_records(
+    h_books,
+    wk,
+    wq,
+    layer,
+    books,
+    seed,
+    *,
+    n_sink,
+    n_tail,
+    nlist,
+    hnsw_m,
+    ef_construction,
+    source="real",
+    extra_fn=None,
+):
+    """Yield one gate record per KV head for full-length books split the real way.
+
+    `measure_real` uses it on the capture; other callers pass transformed books.
+    `extra_fn(corpus)`, if given, returns fields merged into the record.
+    Callers set the faiss thread count.
+    """
+    n_keys, n_q, n_id = real_sizes(h_books[0].shape[0], len(books), n_sink, n_tail)
+    for g in range(wk.shape[0] // HEAD_DIM):
+        t0 = time.time()
+        s = corpus_seed(layer, g, seed)
+        c = mixed_real_corpus(h_books, wk, wq, g, n_sink=n_sink, n_tail=n_tail, seed=s)
+        prof = profile_corpus(
+            c.keys,
+            c.q_ood,
+            c.q_id,
+            nlist=nlist,
+            hnsw_m=hnsw_m,
+            ef_construction=ef_construction,
+            seed=s,
+            target=TARGET,
+        )
+        rec = {
+            "layer": layer,
+            "kv_head": g,
+            "source": source,
+            "seed": seed,
+            "books": list(books),
+            "n_keys": len(c.keys),
+            "n_q_ood": len(c.q_ood),
+            "n_q_id": len(c.q_id),
+            "n_sink": n_sink,
+            "n_tail": n_tail,
+            "conditions": conditions(nlist, hnsw_m, ef_construction, TARGET),
+            "own_book_share_top10": _own_book_share_top10(c),
+            **prof,
+        }
+        if extra_fn is not None:
+            rec.update(extra_fn(c))
+        rec["seconds"] = round(time.time() - t0, 1)
+        assert (rec["n_keys"], rec["n_q_ood"], rec["n_q_id"]) == (
+            n_keys,
+            n_q * (wq.shape[0] // wk.shape[0]),
+            n_id,
+        )
+        yield rec
 
 
 def synthetic_h(

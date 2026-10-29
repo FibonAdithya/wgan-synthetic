@@ -223,6 +223,17 @@ def test_build_generator_refuses_book_latent():
     assert "src.sample.sample_books" in str(exc.value)
 
 
+def test_evaluate_distribution_refuses_a_v2_run(tmp_path):
+    """Catches evaluate_distribution building an mlp for a v2 config and loading its checkpoint.
+
+    The refusal must come before the checkpoint is read, so a missing file is enough.
+    """
+    from src.eval.evaluate_distribution import load_generator
+
+    with pytest.raises(ValueError, match="src.sample.sample_books"):
+        load_generator(full_config(), tmp_path / "final.pt", torch.device("cpu"))
+
+
 def test_build_book_latent_rejects_other_types():
     """Catches build_book_latent accepting a v0/v1 config or a missing flag count."""
     cfg = small_config()

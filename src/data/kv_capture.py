@@ -121,6 +121,8 @@ def load_kv_books(
     """Stack whole books into a (len(books), T, D) CPU tensor, every position kept.
 
     Books are converted one at a time, so the host holds one float32 book at once.
+    The capture stores `h` as BF16, so the default bf16 result holds it exactly;
+    `src.train.book_windows.data_mean` accumulates in float32.
     """
     if layer not in GLOBAL_LAYERS:
         raise ValueError(f"layer {layer} is not a global layer {GLOBAL_LAYERS}")

@@ -145,3 +145,10 @@ that key, and `data.kv_tail_holdout` is refused without it:
 - `data.kv_tail_holdout`: how many tail rows go to the holdout (exactly this
   many, at least 1 and fewer than the tail rows available). Body rows are held
   out by `holdout_fraction` as usual.
+
+The defaults and pairings above are those of `train_wgan_gp` (v0/v1). scout_kv v2
+(`model.generator_type: book_latent`, trained by `src.train.train_book_latent`)
+reads whole books with `src/data/kv_capture.py::load_kv_books`. It requires both
+`data.kv_n_sink` and `data.kv_n_tail` as integers of at least 1, with no default
+(`REQUIRED` and `validate_config` in `src/train/train_book_latent.py`), and it has
+no holdout, so it does not read `data.kv_tail_holdout`.

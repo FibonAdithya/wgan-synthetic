@@ -12,7 +12,9 @@ on the n*W tokens and a window critic on the windows. The generator loss is
     python -m src.train.train_book_latent --config PATH [--resume PATH]
 
 `last.pt` is overwritten every `save_every` steps and renamed to `final.pt`
-after the last step. There is no holdout and no checkpoint selector; v2 is
+after the last step. `--resume` restores the weights, optimizers and EMA but not
+the random-number state (it re-seeds from the config, as `train_wgan_gp` does),
+so a resumed run is not bit-identical to an uninterrupted one. There is no holdout and no checkpoint selector; v2 is
 judged on the final EMA weights (`src.sample.sample_books`).
 """
 

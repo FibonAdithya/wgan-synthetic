@@ -359,9 +359,14 @@ logs `radius` and `direction_effective_rank` per evaluation for it. Built
 for NYTimes `v3`; `deep`, `glove` and `openai` still start their ladders on
 `mlp`, and openai's narrow cone is not handled by it.
 
-Checkpoints do not record `generator_type` — the architecture is rebuilt from
-the run config at load time. A checkpoint is therefore only loadable
-alongside the `run_config.yaml` written next to it. Checkpoints do record
+Checkpoints written by `train_wgan_gp` do not record `generator_type` — the
+architecture is rebuilt from the run config at load time. A checkpoint is
+therefore only loadable alongside the `run_config.yaml` written next to it.
+`book_latent` checkpoints (written by `src.train.train_book_latent`) do record
+`generator_type` and the `book_latent` settings, and `--resume` and
+`src.sample.sample_books` refuse a checkpoint whose record disagrees with
+`run_config.yaml`; the architecture is still built from `run_config.yaml`, so
+the pairing rule holds for them too. Checkpoints do record
 `generator_weights` (`"live"` or `"ema"`), which says which weights the file
 holds, not which architecture produced them. The same holds for `model.n_flags`:
 it is recorded in the checkpoint so a resume that changes it is refused, but the

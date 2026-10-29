@@ -1,7 +1,11 @@
 # scout_kv v3 real-data test: what makes real search hard
 
-Status: design and decision rule, fixed on 2026-10-29 before the box run. Results will be
-added below this section; the rule is not edited after the run.
+Status: done. The design and decision rule below were fixed on 2026-10-29 before the box run
+and were not edited after it; the results follow in "Results (2026-10-29)".
+
+This is a diagnostic on real data, run to inform the design of the next scout_kv generator
+(called v3 in discussion). It is not a ladder rung and trains nothing; no `configs/scout_kv/v3/`
+exists, and what a v3 rung is remains to be designed and approved.
 
 ## Why
 
@@ -148,6 +152,8 @@ for v3. This is co-occurrence, not proof that hubs alone cause the hardness: the
 was read after the run, and the transforms that remove hubs also change LID and the rest of the
 joint structure. Removing the within-token joint structure removes the hubs; matching each
 component's distribution or the leading 256 components does not keep them at L11 and L15.
+The gate stays the HNSW/IVF search-difficulty gate (`src/eval/kv_gate.py`); hubness is a
+diagnostic here and, at most, a candidate training or selection signal for a generator.
 Hubness skew can be measured on a batch, so it can serve as a training signal or a selection
 statistic. Open question: whether the components past rank 256 that matter at L11 and L15 are
 the directions `W_k` reads most, since the key projection is not ordered by h variance.

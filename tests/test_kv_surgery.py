@@ -1,4 +1,4 @@
-"""Tests for src.kv.surgery: real h with one property removed (scout_kv v3 test)."""
+"""Tests for src.kv.surgery: real h with one property removed (a scout_kv diagnostic)."""
 
 import json
 

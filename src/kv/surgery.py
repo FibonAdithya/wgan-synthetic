@@ -1,4 +1,6 @@
-"""Real h with one property removed, to find what makes real search hard (scout_kv v3 test).
+"""Real h with one property removed, to find what makes real search hard.
+
+A scout_kv diagnostic run before designing the next generator; not a ladder rung.
 
 Each set maps the reference books (full length, sink row included) to books of the
 same shape, which are then measured through the gate's real split

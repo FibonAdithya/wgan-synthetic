@@ -28,7 +28,8 @@ which the v1 diagnostics already put down to retrain noise. So one generated cas
 and it did not reproduce. Body hubs are the measured property that tracks the hardness, so they are the candidate
 target for v3. The test shows that hubs and hardness go together, not that hubs alone cause it: the split was read
 after the run, and the transforms that remove hubs change other things too.</p>
-<p class="muted">Measured on tig-gpu-alt (L40) at commit <code>ab3d171</code> on 2026-10-29; every number
+<p class="muted">A diagnostic on real data, run to inform the design of the next scout_kv generator; it is not a
+ladder rung and trains nothing. Measured on tig-gpu-alt (L40) at commit <code>ab3d171</code> on 2026-10-29; every number
 is MEASURED and computed by <code>summarise.py</code> and <code>make_report.py</code> from the committed files.
 The decision rule was committed before the run (README.md).</p>
 
@@ -82,8 +83,9 @@ At 8 of those 8 layers, v2's hub keys sit more than 1,000 positions earlier at b
 each component's distribution (heavy tails) or the top 256 components does not keep the hardness at L11 and L15.</li>
 <li>Removing the within-token joint structure removes the hubs, so a loss or critic that sees whole tokens is needed
 to reward them; a per-component or low-rank target cannot.</li>
-<li>Hubness skew is directly measurable on a batch, so it can be a training signal or a selection statistic, as LID
-and spectrum regularisers were for the earlier families.</li>
+<li>Hubness skew is directly measurable on a batch, so it can be a candidate training signal or selection statistic,
+as LID and spectrum regularisers were for the earlier families. It is not the objective: the scout_kv gate stays the
+HNSW/IVF search-difficulty gate.</li>
 <li>Open: whether the components past rank 256 that matter at L11 and L15 are the directions W_k reads most; the key
 projection is not ordered by h variance.</li>
 </ul>

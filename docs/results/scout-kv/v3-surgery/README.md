@@ -143,8 +143,11 @@ The joint structure that matters is not confined to the top 256 components at L1
 
 ### For v3
 
-v3 has to produce body hubs, and hubs come from the joint structure of whole tokens. Matching
-each component's distribution or the leading 256 components does not produce them at L11 and L15.
+Body hubs are the measured property that tracks the hardness, so they are the candidate target
+for v3. This is co-occurrence, not proof that hubs alone cause the hardness: the hubness split
+was read after the run, and the transforms that remove hubs also change LID and the rest of the
+joint structure. Removing the within-token joint structure removes the hubs; matching each
+component's distribution or the leading 256 components does not keep them at L11 and L15.
 Hubness skew can be measured on a batch, so it can serve as a training signal or a selection
 statistic. Open question: whether the components past rank 256 that matter at L11 and L15 are
 the directions `W_k` reads most, since the key projection is not ordered by h variance.

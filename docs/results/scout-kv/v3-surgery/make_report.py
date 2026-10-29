@@ -555,7 +555,7 @@ img{max-width:100%;height:auto}.muted{color:var(--muted)}
     body = f"""
 <h1>scout_kv v3 real-data test: what makes real search hard</h1>
 <p>Real h is hard to search at L11, L15 and L43 because of how its components vary together within
-each token, and that joint structure is what produces the body hubs. Shuffling each principal component
+each token, and removing that joint structure also removes the body hubs. Shuffling each principal component
 on its own across the tokens of a block (<code>s0</code>), which keeps every component's values, the
 covariance and the block means, makes real search as easy as generated search at all three layers. Mapping
 every component to Gaussian quantiles by rank (<code>gz</code>), which removes heavy tails but keeps the
@@ -568,8 +568,9 @@ real is {min(real_hub):.1f}–{max(real_hub):.1f}). This split was read off the 
 at both seeds (recall at least {v2_min_rec:.3f}). v1 is easy at L11 and L15. At L43, v1 at seed 42 is inside the real range
 ({v1_43:.3f}) with hubness {v1_43_hub:.1f}, but v1 retrained at seed 1 is easy there ({v1s1_43:.3f}, hubness {v1s1_43_hub:.1f}),
 which the v1 diagnostics already put down to retrain noise. So one generated case reached real difficulty without hubs,
-and it did not reproduce. The target for v3 is the body hub structure, which comes from dependence between
-components rather than from any single component's values.</p>
+and it did not reproduce. Body hubs are the measured property that tracks the hardness, so they are the candidate
+target for v3. The test shows that hubs and hardness go together, not that hubs alone cause it: the split was read
+after the run, and the transforms that remove hubs change other things too.</p>
 <p class="muted">Measured on tig-gpu-alt (L40) at commit <code>{d["commit"][:7]}</code> on 2026-10-29; every number
 is MEASURED and computed by <code>summarise.py</code> and <code>make_report.py</code> from the committed files.
 The decision rule was committed before the run (README.md).</p>
@@ -594,8 +595,8 @@ recall does not order with their hubness.</p>
 <p>The test does not separate hubness from LID: the shuffles that remove the hardness also raise body LID by more
 than 3 at every layer (L11 real {lid[(11, "real")]:.1f}, <code>s0</code> {lid[(11, "s0")]:.1f}). v1 and v2 separate
 them at L11, where their body LID ({gen_lid[("v1", 11)]:.1f} and {gen_lid[("v2_s42", 11)]:.1f}) is within 2.5 of real
-({lid[(11, "real")]:.1f}) while their hubness is near 3 and their search is easy. So at L11 the missing property is the
-hubs, not the dimensionality.</p>
+({lid[(11, "real")]:.1f}) while their hubness is near 3 and their search is easy. So at L11, of these two properties,
+the generators miss the hubs and not the dimensionality.</p>
 {table(["layer", "generator", "recall", "body hubness", "body LID"], grows)}
 
 <h2>Intrinsic statistics per set</h2>
@@ -620,10 +621,10 @@ At {len(late_pos)} of those {len(late_real)} layers, v2's hub keys sit more than
 
 <h2>What this means for v3</h2>
 <ul>
-<li>The generator has to produce body hubs: a small set of tokens that many others have as near neighbours. Matching
-each component's distribution (heavy tails) or the top 256 components is not enough at L11 and L15.</li>
-<li>Hubs come from how components vary together within a token, so a loss or critic that sees whole tokens has to
-reward them; a per-component or low-rank target cannot.</li>
+<li>The candidate target is body hubs: a small set of tokens that many others have as near neighbours. Matching
+each component's distribution (heavy tails) or the top 256 components does not keep the hardness at L11 and L15.</li>
+<li>Removing the within-token joint structure removes the hubs, so a loss or critic that sees whole tokens is needed
+to reward them; a per-component or low-rank target cannot.</li>
 <li>Hubness skew is directly measurable on a batch, so it can be a training signal or a selection statistic, as LID
 and spectrum regularisers were for the earlier families.</li>
 <li>Open: whether the components past rank 256 that matter at L11 and L15 are the directions W_k reads most; the key

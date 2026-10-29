@@ -57,7 +57,7 @@ bands; the pages are the source of truth for anything family-specific.
 | `glove` | 100 | `angular` | dense signed word vectors, strong density gradient | `mlp` today, `spherical` not yet adopted | `docs/datasets/glove.md` |
 | `nytimes` | 256 | `angular` | dense signed document embeddings, strong topic clusters | `mlp` at v0, `linear_skip` from v1 (v1, v2, v2b and v2c trained, none meeting the bar), `spherical` from v3 (trained; meets the bar since the 2026-09-17 gate bands, set as a tolerance around real to admit it; continued to 100k without a better selection) | `docs/datasets/nytimes.md` |
 | `openai` | 1536 | `angular` | unit-norm text embeddings, very high ambient dim, low intrinsic dim | `mlp` today, `spherical` not yet adopted | `docs/datasets/openai.md` |
-| `scout_kv` | 5120 | `l2` (in-training selector on h); inner product (gate) | Llama-4-Scout attention inputs, one generator per global layer; gated on IVF/HNSW search difficulty | `mlp` at v0 (trained for all 12 layers; fails the gate on four of five statistics); `mlp` with a body/tail flag (`model.n_flags`) at v1 (trained for all 12 layers; also fails four of five, a different four); `book_latent` with a window critic at v2 (designed, being trained) | `docs/datasets/scout_kv.md` |
+| `scout_kv` | 5120 | `l2` (in-training selector on h); inner product (gate) | Llama-4-Scout attention inputs, one generator per global layer; gated on IVF/HNSW search difficulty | `mlp` at v0 (trained for all 12 layers; fails the gate on four of five statistics); `mlp` with a body/tail flag (`model.n_flags`) at v1 (trained for all 12 layers; also fails four of five, a different four); `book_latent` with a window critic at v2 (trained for all 12 layers at two seeds; meets its book-clustering and LID aim, still fails the search gate) | `docs/datasets/scout_kv.md` |
 
 ### Fetching
 
@@ -333,8 +333,8 @@ both arms. Any write-up of a v4 result must lead with those.
 
 The architecture axis in the `model` config block. Five values are built by
 `build_generator`: `mlp` (default), `gated`, `structured_gated`, `linear_skip` and
-`spherical`. A sixth, `book_latent`, belongs to `scout_kv` v2 (designed, being
-trained): it is built by `build_book_latent` in `src/models/book_latent.py`, trained
+`spherical`. A sixth, `book_latent`, belongs to `scout_kv` v2 (trained for all 12
+layers at two seeds): it is built by `build_book_latent` in `src/models/book_latent.py`, trained
 by `src/train/train_book_latent.py`, `build_generator` refuses it with a message
 naming `build_book_latent` and `src.sample.sample_books`, and `train_wgan_gp` refuses it
 with a message naming `src.train.train_book_latent`. It generates tokens from a per-book drifting latent plus a

@@ -14,7 +14,8 @@ distribution: a synthetic set succeeds when an index finds it as hard, and
 hard in the same way, as the real set. SIFT, DEEP, GloVe and NYTimes have
 trained ladders; the other two families have a `v0` config and a documented
 profile. A seventh family, `scout_kv` (Llama 4 Scout attention inputs), has
-trained `v0` and `v1` rungs, neither of which meets its gate yet.
+trained `v0`, `v1` and `v2` rungs, none of which meets its gate yet; `v2` meets
+its own book-clustering and LID aim (`docs/results/scout-kv/v2/README.md`).
 
 ## Source of truth, in order
 

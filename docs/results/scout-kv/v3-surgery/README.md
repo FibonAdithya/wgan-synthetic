@@ -157,3 +157,25 @@ diagnostic here and, at most, a candidate training or selection signal for a gen
 Hubness skew can be measured on a batch, so it can serve as a training signal or a selection
 statistic. Open question: whether the components past rank 256 that matter at L11 and L15 are
 the directions `W_k` reads most, since the key projection is not ordered by h variance.
+
+## Key-projection check (design fixed before the run, 2026-11-02)
+
+Open question from the results: are the components past rank 256 that matter at L11 and L15
+directions that `W_k` reads? `key_projection.py` measures, for every KV head (k = W_k h) and
+query head (q = W_q h) at all 12 layers, the share of that head's variance carried by the top r
+principal components of h (books 12-19, the PCA `surgery.fit_pca` used in the run). Because
+`s256` permutes each component past rank 256 independently, the key variance it disturbs is the
+share outside the top 256, `out256 = 1 - key_share[256]`. Statistic: median of `out256` over the
+8 KV heads per layer. Code: `surgery.projected_variance_share` (3 tests, 6 of 6 mutations
+caught).
+
+Reading, fixed before the run:
+
+- **(a) keys read the shuffled components:** `out256` at L11 and at L15 are each at least twice
+  `out256` at L43. That matches `s256` removing the hardness at L11 and L15 and only partly at L43.
+- **(b) not explained by key variance:** `out256` at L11 or at L15 is no larger than at L43. Then
+  the different `s256` outcome at L43 does not come from how much shuffled variance the keys see.
+- **(c) small directions matter:** `out256` is below 0.01 at both L11 and L15. Then the shuffle
+  changed under 2% of the key variance there and still removed the hardness, so search depends
+  on low-variance key directions. This can hold together with (a) or (b).
+- Anything between (a) and (b) is reported as found.

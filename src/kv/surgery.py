@@ -97,6 +97,24 @@ def fit_pca(books, n_sink: int) -> PCA:
     )
 
 
+def projected_variance_share(pca: PCA, w, head_dim: int) -> torch.Tensor:
+    """Cumulative share of each head's projected variance carried by the leading
+    principal components of h.
+
+    `w` stacks heads of `head_dim` rows (k_proj or q_proj). For head g with rows W_g,
+    component j contributes var_j * ||W_g v_j||^2 to trace(W_g Cov(h) W_g^T).
+    Returns (n_heads, D): entry [g, r - 1] is the share of the top r components.
+    """
+    if w.shape[0] % head_dim:
+        raise ValueError(
+            f"{w.shape[0]} rows is not a whole number of {head_dim}-row heads"
+        )
+    proj = w.to(pca.basis.dtype) @ pca.basis  # column j is W v_j
+    per = (proj**2).reshape(-1, head_dim, proj.shape[1]).sum(1) * pca.var
+    per = per.double()
+    return per.cumsum(1) / per.sum(1, keepdim=True)
+
+
 def _restore_sink(out, book, n_sink):
     out[:n_sink] = book[:n_sink]
     return out

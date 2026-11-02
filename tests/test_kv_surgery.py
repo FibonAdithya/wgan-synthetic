@@ -174,6 +174,52 @@ def test_transform_dispatches_every_set_and_rounds_to_bf16():
         surgery.transform("nope", books, pca, **kw)
 
 
+def _axis_pca(var):
+    var = torch.tensor(var, dtype=torch.float32)
+    return surgery.PCA(torch.zeros(len(var)), torch.eye(len(var)), var)
+
+
+def test_projected_variance_share_on_axis_aligned_components():
+    """Catches the variance left out (shares of ||W v_j||^2 alone), the standard deviation
+    used in place of the variance, and an off-by-one in the cumulative index: with
+    components on the axes, variances 4, 1, 1 and a head reading axes 0 and 2 with weights
+    1 and 2, the contributions are 4 and 4, so the top-1 share is 0.5 and top-2 is 0.5."""
+    pca = _axis_pca([4.0, 1.0, 1.0])
+    w = torch.tensor([[1.0, 0.0, 0.0], [0.0, 0.0, 2.0]])
+    share = surgery.projected_variance_share(pca, w, head_dim=2)
+    torch.testing.assert_close(
+        share, torch.tensor([[0.5, 0.5, 1.0]], dtype=torch.float64)
+    )
+
+
+def test_projected_variance_share_is_per_head():
+    """Catches the heads summed together: a head reading only axis 0 and a head reading
+    only axis 1 get shares [1, 1] and [0, 1], not one pooled row."""
+    pca = _axis_pca([3.0, 1.0])
+    w = torch.tensor([[1.0, 0.0], [0.0, 1.0]])
+    share = surgery.projected_variance_share(pca, w, head_dim=1)
+    torch.testing.assert_close(
+        share, torch.tensor([[1.0, 1.0], [0.0, 1.0]], dtype=torch.float64)
+    )
+    with pytest.raises(ValueError, match="whole number"):
+        surgery.projected_variance_share(pca, w, head_dim=3)
+
+
+def test_projected_variance_share_uses_the_rotated_basis():
+    """Catches W applied to the raw axes instead of the principal directions, and the basis
+    used transposed. Components are a cyclic permutation of the axes (v0 = e1, v1 = e2,
+    v2 = e0), which is not its own transpose, so a head reading axis 0 reads component 2
+    only; with the transpose it would read component 1."""
+    basis = torch.tensor([[0.0, 0.0, 1.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+    pca = surgery.PCA(torch.zeros(3), basis, torch.tensor([5.0, 2.0, 1.0]))
+    share = surgery.projected_variance_share(
+        pca, torch.tensor([[1.0, 0.0, 0.0]]), head_dim=1
+    )
+    torch.testing.assert_close(
+        share, torch.tensor([[0.0, 0.0, 1.0]], dtype=torch.float64)
+    )
+
+
 def test_keep_counts_cover_the_shuffle_sets():
     """Catches a shuffle set whose kept-component count drifts from its name."""
     assert surgery.KEEP == {"s0": 0, "s32": 32, "s256": 256}
